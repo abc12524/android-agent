@@ -4,25 +4,6 @@ plugins {
     id("com.google.devtools.ksp")
 }
 
-// 从 Git tag 读取版本号（如 v1.0.0），fallback 到 0.0.1
-val gitVersion: String = try {
-    val proc = ProcessBuilder("git", "describe", "--tags", "--abbrev=0")
-        .directory(project.rootDir)
-        .redirectErrorStream(true)
-        .start()
-    val raw = proc.inputStream.bufferedReader().readText().trim().removePrefix("v")
-    if (raw.isBlank()) "0.0.1" else raw
-} catch (_: Exception) {
-    "0.0.1"
-}
-
-// versionCode: 主版本*10000 + 次版本*100 + 补丁，最小为 1
-val parts = gitVersion.split(".").map { it.toIntOrNull() ?: 0 }
-val major = parts.getOrElse(0) { 0 }
-val minor = parts.getOrElse(1) { 0 }
-val patch = parts.getOrElse(2) { 0 }
-val autoVersionCode = maxOf(major * 10000 + minor * 100 + patch, 1)
-
 kotlin {
     jvmToolchain(17)
 }
@@ -35,8 +16,8 @@ android {
         applicationId = "com.androidagent"
         minSdk = 26
         targetSdk = 34
-        versionCode = autoVersionCode
-        versionName = gitVersion
+        versionCode = 1
+        versionName = "1.0.0"
     }
 
     buildTypes {

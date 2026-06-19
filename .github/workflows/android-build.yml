@@ -1,14 +1,17 @@
-name: Android Build & Release
+name: Build APK
 
 on:
   push:
-    branches: [ main, master ]
-    tags: [ 'v*' ]
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
   workflow_dispatch:
+
+permissions:
+  contents: write   # 需要写权限才能创建 Release
 
 jobs:
   build:
-    name: Build APK
     runs-on: ubuntu-latest
 
     steps:
@@ -18,90 +21,51 @@ jobs:
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
-          java-version: 17
           distribution: temurin
+          java-version: '17'
 
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v3
+        uses: gradle/actions/setup-gradle@v4
 
-      - name: Generate Gradle Wrapper
-        run: gradle wrapper --gradle-version 8.5
-
-      - name: Grant execute permission
+      - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      # ==== Debug build (every push) ====
       - name: Build Debug APK
-        run: ./gradlew assembleDebug
+        run: ./gradlew assembleDebug --no-daemon --stacktrace
 
-      - name: Upload Debug APK (artifact)
+      - name: Rename APK with build metadata
+        id: rename
+        run: |
+          mkdir -p release-assets
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          DATE=$(date +%Y%m%d-%H%M%S)
+          SRC=$(ls app/build/outputs/apk/debug/*.apk | head -1)
+          DEST="release-assets/android-agent-debug-${DATE}-${SHORT_SHA}.apk"
+          cp "$SRC" "$DEST"
+          echo "apk_path=$DEST" >> "$GITHUB_OUTPUT"
+          echo "short_sha=$SHORT_SHA" >> "$GITHUB_OUTPUT"
+          echo "date=$DATE" >> "$GITHUB_OUTPUT"
+          echo "tag=build-${DATE}-${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload Debug APK as artifact
         uses: actions/upload-artifact@v4
         with:
           name: android-agent-debug
-          path: app/build/outputs/apk/debug/app-debug.apk
-          retention-days: 30
+          path: ${{ steps.rename.outputs.apk_path }}
+          if-no-files-found: error
 
-      # ==== Release build (tag push only) ====
-      - name: Build Release APK
-        if: startsWith(github.ref, 'refs/tags/v')
-        run: ./gradlew assembleRelease
-
-      - name: Sign & Align Release APK
-        if: startsWith(github.ref, 'refs/tags/v')
-        continue-on-error: true
-        uses: ilharp/sign-android-release@v1
-        with:
-          releaseDir: app/build/outputs/apk/release
-          signingKey: ${{ secrets.ANDROID_SIGNING_KEY }}
-          keyAlias: ${{ secrets.ANDROID_KEY_ALIAS }}
-          keyStorePassword: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          keyPassword: ${{ secrets.ANDROID_KEY_PASSWORD }}
-          buildToolsVersion: '34.0.0'
-
-      - name: Prepare Release APK
-        if: startsWith(github.ref, 'refs/tags/v')
-        run: |
-          VERSION=${GITHUB_REF#refs/tags/v}
-          # 尝试带签名的 APK，失败则用未签名的
-          if [ -f app/build/outputs/apk/release/app-release-signed.apk ]; then
-            cp app/build/outputs/apk/release/app-release-signed.apk android-agent-v$VERSION.apk
-          elif [ -f app/build/outputs/apk/release/app-release-unsigned.apk ]; then
-            cp app/build/outputs/apk/release/app-release-unsigned.apk android-agent-v$VERSION.apk
-            echo "⚠️ 未签名 APK — 安装前需手动签名或使用 debug 版" >> $GITHUB_STEP_SUMMARY
-          else
-            # fallback: 找任意 apk
-            for f in app/build/outputs/apk/release/*.apk; do
-              [ -f "$f" ] && cp "$f" android-agent-v$VERSION.apk && break
-            done
-          fi
-          ls -lh android-agent-v$VERSION.apk 2>/dev/null || echo "❌ APK 未生成"
-
-      - name: Create Release
-        if: startsWith(github.ref, 'refs/tags/v')
+      - name: Create GitHub Release
+        # 仅在 push 到 main/master 或手动触发时发布，PR 不发
+        if: github.event_name != 'pull_request'
         uses: softprops/action-gh-release@v2
         with:
-          name: Android Agent ${{ github.ref_name }}
-          body_path: CHANGELOG.md
-          draft: false
-          prerelease: false
-          files: android-agent-v*.apk
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          tag_name: ${{ steps.rename.outputs.tag }}
+          name: Debug Build ${{ steps.rename.outputs.date }}
+          body: |
+            自动构建的 Debug APK。
 
-      # ==== Summary ====
-      - name: Build Summary
-        run: |
-          echo "## ✅ 构建完成" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| 构建类型 | 状态 |" >> $GITHUB_STEP_SUMMARY
-          echo "|---------|------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Debug APK | ✅ (Artifacts 可下载) |" >> $GITHUB_STEP_SUMMARY
-          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
-            echo "| Release APK | ✅ (已发布到 Release) |" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "| Release APK | ⏭️ (仅推送 tag 时触发) |" >> $GITHUB_STEP_SUMMARY
-          fi
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### 📦 下载方式" >> $GITHUB_STEP_SUMMARY
-          echo "- **每次推送** → Actions 页面 Artifacts 下载 debug APK" >> $GITHUB_STEP_SUMMARY
-          echo "- **推送 tag v* → 自动创建 Release** 并附加 APK" >> $GITHUB_STEP_SUMMARY
+            - Commit: `${{ github.sha }}`
+            - 触发: `${{ github.event_name }}`
+            - 分支: `${{ github.ref_name }}`
+          prerelease: true
+          files: ${{ steps.rename.outputs.apk_path }}
