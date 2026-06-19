@@ -8,8 +8,10 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.androidagent.data.AppPreferences
 import com.androidagent.data.db.AppDatabase
+import com.androidagent.data.model.ChatSession
 import com.androidagent.data.model.Message
 import com.androidagent.engine.ChatEngine
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
@@ -19,7 +21,8 @@ data class ChatUiState(
     val error: String? = null,
     val sessionTitle: String = "新对话",
     val promptTokens: Int = 0,
-    val completionTokens: Int = 0
+    val completionTokens: Int = 0,
+    val allSessions: List<ChatSession> = emptyList()
 )
 
 class ChatViewModel(application: Application) : AndroidViewModel(application) {
@@ -31,24 +34,57 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         private set
 
     private var currentSessionId: String = ""
+    private var loadJob: Job? = null
+    private var isSessionReady = false
 
-    /**
-     * 初始化会话（加载已有或创建新会话）
-     */
+    init {
+        // 收集所有会话列表
+        viewModelScope.launch {
+            db.sessionDao().getAllSessions().collect { sessions ->
+                uiState = uiState.copy(allSessions = sessions)
+            }
+        }
+    }
+
     fun initSession(sessionId: String) {
         currentSessionId = sessionId
+        isSessionReady = false
         if (sessionId == "new") {
             viewModelScope.launch {
                 currentSessionId = engine.createSession()
+                isSessionReady = true
                 loadMessages()
             }
         } else {
+            isSessionReady = true
+            loadMessages()
+        }
+    }
+
+    /** 切换到指定会话 */
+    fun switchToSession(sessionId: String) {
+        if (sessionId == currentSessionId || uiState.isLoading) return
+        currentSessionId = sessionId
+        isSessionReady = true
+        uiState = ChatUiState(allSessions = uiState.allSessions)
+        loadMessages()
+    }
+
+    /** 创建新对话 */
+    fun startNewSession() {
+        if (uiState.isLoading) return
+        viewModelScope.launch {
+            val newId = engine.createSession()
+            currentSessionId = newId
+            isSessionReady = true
+            uiState = ChatUiState(allSessions = uiState.allSessions)
             loadMessages()
         }
     }
 
     private fun loadMessages() {
-        viewModelScope.launch {
+        loadJob?.cancel()
+        loadJob = viewModelScope.launch {
             db.messageDao().getMessagesBySession(currentSessionId).collect { messages ->
                 val session = db.sessionDao().getSession(currentSessionId)
                 uiState = uiState.copy(
@@ -61,14 +97,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /**
-     * 发送消息
-     */
     fun sendMessage(text: String) {
         if (text.isBlank() || uiState.isLoading) return
-
         uiState = uiState.copy(isLoading = true, error = null)
-
         viewModelScope.launch {
             try {
                 val result = engine.sendMessage(currentSessionId, text)
@@ -86,15 +117,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /**
-     * 清除错误
-     */
     fun clearError() {
         uiState = uiState.copy(error = null)
     }
 
-    /**
-     * 获取当前会话 ID
-     */
     fun getSessionId(): String = currentSessionId
 }
