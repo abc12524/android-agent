@@ -22,6 +22,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.androidagent.data.api.DeepSeekClient
 import com.androidagent.data.model.ChatSession
 import com.androidagent.data.model.Message
 import com.androidagent.ui.theme.*
@@ -39,15 +40,12 @@ fun ChatScreen(
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
 
-    LaunchedEffect(sessionId) {
-        viewModel.initSession(sessionId)
-    }
+    LaunchedEffect(sessionId) { viewModel.initSession(sessionId) }
 
     val state = viewModel.uiState
     var inputText by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
 
-    // 自动滚到底部（仅在非加载状态时）
     LaunchedEffect(state.messages.size) {
         if (state.messages.isNotEmpty() && !state.isLoading) {
             listState.animateScrollToItem(state.messages.size - 1)
@@ -55,34 +53,19 @@ fun ChatScreen(
     }
 
     ModalNavigationDrawer(
-        drawerState = drawerState,
-        gesturesEnabled = true,
+        drawerState = drawerState, gesturesEnabled = true,
         drawerContent = {
-            SessionDrawer(
-                sessions = state.allSessions,
-                currentId = viewModel.getSessionId(),
-                onSelect = { id ->
-                    scope.launch { drawerState.close() }
-                    viewModel.switchToSession(id)
-                },
-                onNew = {
-                    scope.launch { drawerState.close() }
-                    viewModel.startNewSession()
-                }
-            )
+            SessionDrawer(state.allSessions, viewModel.getSessionId(),
+                onSelect = { scope.launch { drawerState.close() }; viewModel.switchToSession(it) },
+                onNew = { scope.launch { drawerState.close() }; viewModel.startNewSession() })
         }
     ) {
         Scaffold(
             topBar = {
                 TopAppBar(
                     title = {
-                        Text(
-                            text = state.sessionTitle,
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Medium,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
+                        Text(state.sessionTitle, fontSize = 16.sp, fontWeight = FontWeight.Medium,
+                            maxLines = 1, overflow = TextOverflow.Ellipsis)
                     },
                     navigationIcon = {
                         IconButton(onClick = { scope.launch { drawerState.open() } }) {
@@ -101,27 +84,16 @@ fun ChatScreen(
             },
             bottomBar = {
                 Surface(shadowElevation = 8.dp, color = MaterialTheme.colorScheme.surface) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        OutlinedTextField(
-                            value = inputText,
-                            onValueChange = { inputText = it },
-                            modifier = Modifier.weight(1f),
-                            placeholder = { Text("输入消息...") },
-                            shape = RoundedCornerShape(24.dp),
-                            maxLines = 4,
-                            enabled = !state.isLoading
-                        )
+                        OutlinedTextField(value = inputText, onValueChange = { inputText = it },
+                            modifier = Modifier.weight(1f), placeholder = { Text("输入消息...") },
+                            shape = RoundedCornerShape(24.dp), maxLines = 4,
+                            enabled = !state.isLoading)
                         Spacer(Modifier.width(8.dp))
                         FilledIconButton(
-                            onClick = {
-                                if (inputText.isNotBlank()) {
-                                    viewModel.sendMessage(inputText.trim())
-                                    inputText = ""
-                                }
-                            },
+                            onClick = { if (inputText.isNotBlank()) { viewModel.sendMessage(inputText.trim()); inputText = "" } },
                             enabled = inputText.isNotBlank() && !state.isLoading,
                             modifier = Modifier.size(48.dp)
                         ) { Icon(Icons.Default.Send, contentDescription = "发送") }
@@ -129,9 +101,8 @@ fun ChatScreen(
                 }
             }
         ) { padding ->
-            Box(modifier = Modifier.fillMaxSize().padding(padding)) {
+            Box(Modifier.fillMaxSize().padding(padding)) {
                 if (state.messages.isEmpty() && !state.isLoading) {
-                    // 干净主页
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text("Android Agent", fontSize = 28.sp, fontWeight = FontWeight.Light,
@@ -142,21 +113,25 @@ fun ChatScreen(
                         }
                     }
                 } else {
-                    // 消息列表
                     LazyColumn(
                         state = listState,
                         modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp),
-                        contentPadding = PaddingValues(vertical = 8.dp)
+                        contentPadding = PaddingValues(top = 8.dp, bottom = 72.dp)
                     ) {
-                        items(
-                            items = state.messages.filter { it.role != "system" },
-                            key = { it.id }
-                        ) { msg -> MessageBubble(msg) }
+                        items(state.messages.filter { it.role != "system" }, key = { it.id }) { msg ->
+                            MessageBubble(msg)
+                        }
+                        // 底部 token 统计
+                        if (state.lastUsage != null) {
+                            item(key = "token_footer") {
+                                TokenFooter(state.lastUsage!!, state.promptTokens, state.completionTokens)
+                            }
+                        }
                     }
                 }
 
-                // 加载指示器（overlay，不插入列表，不会导致跳动）
+                // loading overlay
                 if (state.isLoading) {
                     Surface(
                         modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 8.dp),
@@ -164,21 +139,19 @@ fun ChatScreen(
                         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f),
                         tonalElevation = 4.dp
                     ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        Row(Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                            CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
                             Spacer(Modifier.width(8.dp))
-                            if (state.messages.isNotEmpty()) {
+                            if (state.messages.isNotEmpty())
                                 Text("AI 思考中...", fontSize = 13.sp,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
                         }
                     }
                 }
 
-                // 错误提示
+                // error
                 if (state.error != null) {
                     Snackbar(
                         modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp),
@@ -190,25 +163,44 @@ fun ChatScreen(
     }
 }
 
-// ==================== 侧边栏：历史会话 ====================
+// ==================== Token 统计底部 ====================
+
+@Composable
+private fun TokenFooter(usage: DeepSeekClient.Usage, totalIn: Int, totalOut: Int) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(8.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+    ) {
+        Column(Modifier.padding(12.dp)) {
+            Text("📊 Token 消耗", fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.height(4.dp))
+            Text("  输入: ${usage.promptTokens}  |  输出: ${usage.completionTokens}  |  总计: ${usage.totalTokens}",
+                fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
+            if (usage.promptCacheHitTokens > 0 || usage.promptCacheMissTokens > 0) {
+                Text("  缓存命中: ${usage.promptCacheHitTokens}  |  缓存未命中: ${usage.promptCacheMissTokens}",
+                    fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
+            }
+            Text("  会话累计: 输入 $totalIn  |  输出 $totalOut",
+                fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
+        }
+    }
+}
+
+// ==================== 侧边栏会话列表 ====================
 
 @Composable
 private fun SessionDrawer(
-    sessions: List<ChatSession>,
-    currentId: String,
-    onSelect: (String) -> Unit,
-    onNew: () -> Unit
+    sessions: List<ChatSession>, currentId: String,
+    onSelect: (String) -> Unit, onNew: () -> Unit
 ) {
     val groups = groupSessions(sessions)
-
-    ModalDrawerSheet(modifier = Modifier.width(300.dp)) {
-        // 顶部新对话按钮
-        Surface(
-            modifier = Modifier.fillMaxWidth().clickable { onNew() },
+    ModalDrawerSheet(Modifier.width(300.dp)) {
+        Surface(Modifier.fillMaxWidth().clickable { onNew() },
             color = MaterialTheme.colorScheme.primaryContainer
         ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
+            Row(Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(Icons.Default.Add, contentDescription = null,
@@ -219,42 +211,31 @@ private fun SessionDrawer(
             }
         }
         HorizontalDivider()
-
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(vertical = 8.dp)) {
             groups.forEach { (label, list) ->
                 item {
-                    Text(
-                        text = label,
-                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+                    Text(label, Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
                         fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 items(list, key = { it.id }) { session ->
                     val active = session.id == currentId
                     Surface(
-                        modifier = Modifier.fillMaxWidth()
-                            .padding(horizontal = 8.dp, vertical = 2.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .clickable { onSelect(session.id) },
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp)
+                            .clip(RoundedCornerShape(12.dp)).clickable { onSelect(session.id) },
                         color = if (active) MaterialTheme.colorScheme.secondaryContainer
                                 else MaterialTheme.colorScheme.surface
                     ) {
                         Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
-                            Text(
-                                text = session.title.ifBlank { "新对话" },
-                                fontSize = 14.sp,
+                            Text(session.title.ifBlank { "新对话" }, fontSize = 14.sp,
                                 fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
                                 color = if (active) MaterialTheme.colorScheme.onSecondaryContainer
                                         else MaterialTheme.colorScheme.onSurface,
-                                maxLines = 1, overflow = TextOverflow.Ellipsis
-                            )
-                            Text(
-                                text = "${session.messageCount} 条 · ${fmtSessionTime(session.createdAt)}",
+                                maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text("${session.messageCount} 条 · ${fmtSessionTime(session.createdAt)}",
                                 fontSize = 11.sp,
                                 color = if (active) MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.6f)
-                                        else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                            )
+                                        else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
                         }
                     }
                 }
@@ -272,33 +253,28 @@ fun MessageBubble(msg: Message) {
     val bc = when { isUser -> BubbleUser; isTool -> BubbleTool; else -> BubbleAssistant }
     val tc = when { isUser -> BubbleUserText; isTool -> BubbleToolText; else -> BubbleAssistantText }
 
-    Column(
-        modifier = Modifier.fillMaxWidth(),
+    Column(Modifier.fillMaxWidth(),
         horizontalAlignment = if (isUser) Alignment.End else Alignment.Start
     ) {
-        if (isTool && msg.toolName != null) {
+        if (isTool && msg.toolName != null)
             Text("🔧 ${msg.toolName}", fontSize = 11.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp))
-        }
         if (msg.reasoningContent != null && msg.reasoningContent.isNotBlank()) {
-            Surface(
-                modifier = Modifier.padding(bottom = 4.dp).widthIn(max = 320.dp),
+            Surface(Modifier.padding(bottom = 4.dp).widthIn(max = 320.dp),
                 shape = RoundedCornerShape(8.dp),
                 color = MaterialTheme.colorScheme.surfaceVariant
             ) {
-                Text("💭 ${msg.reasoningContent}", Modifier.padding(8.dp),
-                    fontSize = 12.sp, fontFamily = FontFamily.Monospace,
+                Text("💭 ${msg.reasoningContent}", Modifier.padding(8.dp), fontSize = 12.sp,
+                    fontFamily = FontFamily.Monospace,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
         Surface(
             modifier = Modifier.widthIn(max = 320.dp),
-            shape = RoundedCornerShape(
-                topStart = 16.dp, topEnd = 16.dp,
+            shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp,
                 bottomStart = if (isUser) 16.dp else 4.dp,
-                bottomEnd = if (isUser) 4.dp else 16.dp
-            ),
+                bottomEnd = if (isUser) 4.dp else 16.dp),
             color = bc
         ) {
             if (isTool) {
@@ -317,7 +293,7 @@ fun MessageBubble(msg: Message) {
 
 // ==================== 工具函数 ====================
 
-private fun fmtTime(ms: Long): String =
+private fun fmtTime(ms: Long) =
     SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(ms))
 
 private fun fmtSessionTime(ms: Long): String {

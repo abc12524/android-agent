@@ -8,6 +8,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.androidagent.data.AppPreferences
 import com.androidagent.data.db.AppDatabase
+import com.androidagent.data.api.DeepSeekClient
 import com.androidagent.data.model.ChatSession
 import com.androidagent.data.model.Message
 import com.androidagent.engine.ChatEngine
@@ -22,6 +23,7 @@ data class ChatUiState(
     val sessionTitle: String = "新对话",
     val promptTokens: Int = 0,
     val completionTokens: Int = 0,
+    val lastUsage: DeepSeekClient.Usage? = null,
     val allSessions: List<ChatSession> = emptyList()
 )
 
@@ -104,8 +106,12 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 val result = engine.sendMessage(currentSessionId, text)
                 result.fold(
-                    onSuccess = {
-                        uiState = uiState.copy(isLoading = false, error = null)
+                    onSuccess = { chatResult ->
+                        uiState = uiState.copy(
+                            isLoading = false,
+                            error = null,
+                            lastUsage = chatResult.usage
+                        )
                     },
                     onFailure = { e ->
                         uiState = uiState.copy(isLoading = false, error = e.message ?: "未知错误")
