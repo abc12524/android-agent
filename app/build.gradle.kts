@@ -10,17 +10,22 @@ val gitVersion: String = try {
         .directory(project.rootDir)
         .redirectErrorStream(true)
         .start()
-    proc.inputStream.bufferedReader().readText().trim().removePrefix("v")
+    val raw = proc.inputStream.bufferedReader().readText().trim().removePrefix("v")
+    if (raw.isBlank()) "0.0.1" else raw
 } catch (_: Exception) {
     "0.0.1"
 }
 
-// versionCode: 主版本*10000 + 次版本*100 + 补丁
+// versionCode: 主版本*10000 + 次版本*100 + 补丁，最小为 1
 val parts = gitVersion.split(".").map { it.toIntOrNull() ?: 0 }
 val major = parts.getOrElse(0) { 0 }
 val minor = parts.getOrElse(1) { 0 }
 val patch = parts.getOrElse(2) { 0 }
-val autoVersionCode = major * 10000 + minor * 100 + patch
+val autoVersionCode = maxOf(major * 10000 + minor * 100 + patch, 1)
+
+kotlin {
+    jvmToolchain(17)
+}
 
 android {
     namespace = "com.androidagent"
@@ -47,10 +52,6 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
-    }
-
-    kotlinOptions {
-        jvmTarget = "17"
     }
 
     buildFeatures {
