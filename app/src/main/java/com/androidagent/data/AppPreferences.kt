@@ -47,6 +47,6 @@ object AppPreferences {
         set(value) = prefs.edit().putInt("max_tool_rounds", value).apply()
 
     var sessionTimeoutMinutes: Int
-        get() = prefs.getInt("session_timeout_minutes", 30)
+        get() = prefs.getInt("session_timeout_minutes", 15)
         set(value) = prefs.edit().putInt("session_timeout_minutes", value).apply()
 }

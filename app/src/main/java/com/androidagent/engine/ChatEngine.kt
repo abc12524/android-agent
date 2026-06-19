@@ -49,8 +49,15 @@ class ChatEngine(private val context: Context) {
         }
 
         try {
-            // 1. 加载历史消息
-            val history = db.messageDao().getMessagesBySessionSync(sessionId)
+            // 1. 加载历史消息（超时后只保留 system prompt）
+            val timeoutMs = AppPreferences.sessionTimeoutMinutes * 60 * 1000L
+            val session = db.sessionDao().getSession(sessionId)
+            val isExpired = session != null && (System.currentTimeMillis() - session.createdAt) > timeoutMs
+            val history = if (isExpired) {
+                db.messageDao().getMessagesBySessionSync(sessionId).filter { it.role == "system" }
+            } else {
+                db.messageDao().getMessagesBySessionSync(sessionId)
+            }
             val messages = history.map { it.toApiMessage() }.toMutableList()
 
             // 2. 加载 OpenViking 上下文（可选）
