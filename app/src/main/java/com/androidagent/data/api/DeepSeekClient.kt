@@ -126,6 +126,7 @@ class DeepSeekClient {
                 val obj = choiceObj.asJsonObject
                 val msg = obj.getAsJsonObject("message")
                 val finishReason = obj.get("finish_reason")?.asString
+                val choiceIndex = obj.get("index")?.asInt ?: 0
 
                 // 解析 tool_calls
                 val toolCalls = msg.getAsJsonArray("tool_calls")?.map { tc ->
@@ -143,11 +144,15 @@ class DeepSeekClient {
                 // 提取 reasoning_content
                 val reasoning = msg.get("reasoning_content")?.asString
 
-                ChatMessage(
-                    role = msg.get("role").asString,
-                    content = msg.get("content")?.asString ?: "",
-                    toolCalls = toolCalls,
-                    name = reasoning // 暂存 reasoning_content
+                Choice(
+                    index = choiceIndex,
+                    message = ChatMessage(
+                        role = msg.get("role").asString,
+                        content = msg.get("content")?.asString ?: "",
+                        toolCalls = toolCalls,
+                        name = reasoning
+                    ),
+                    finishReason = finishReason
                 )
             }?.toList() ?: emptyList()
 

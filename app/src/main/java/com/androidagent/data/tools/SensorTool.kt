@@ -121,7 +121,7 @@ class SensorTool(private val context: Context) : Tool {
                         Sensor.TYPE_ROTATION_VECTOR -> {
                             listOf("x", "y", "z", "cos(θ/2)", "accuracy")
                         }
-                        else -> values.indices.map { "value_$it" }
+                        else -> event.values.indices.map { "value_$it" }
                     }.getOrElse(i) { "value_$i" }
                 }.let { labels ->
                     event.values.mapIndexed { i, v ->

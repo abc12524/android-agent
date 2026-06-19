@@ -35,7 +35,7 @@ class SystemInfoTool : Tool {
             "board" to Build.BOARD,
             "hardware" to Build.HARDWARE,
             "display" to Build.DISPLAY,
-            "java_version" to System.getProperty("java.version") ?: "unknown"
+            "java_version" to (System.getProperty("java.version") ?: "unknown")
         )
         return gson.toJson(info)
     }
