@@ -26,8 +26,16 @@ class MainActivity : ComponentActivity() {
                     val navController = rememberNavController()
                     NavHost(
                         navController = navController,
-                        startDestination = "chat/{sessionId}"
+                        startDestination = "chat"
                     ) {
+                        composable("chat") {
+                            ChatScreen(
+                                sessionId = "new",
+                                onNavigateToSettings = {
+                                    navController.navigate("settings")
+                                }
+                            )
+                        }
                         composable("chat/{sessionId}") { backStackEntry ->
                             val sessionId = backStackEntry.arguments?.getString("sessionId") ?: "new"
                             ChatScreen(

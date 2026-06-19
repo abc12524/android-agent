@@ -90,7 +90,8 @@ class ChatEngine(private val context: Context) {
                 )
 
                 if (result.isFailure) {
-                    return@withContext Result.failure(result.exceptionOrNull()!!)
+                    val err = result.exceptionOrNull()
+                    return@withContext Result.failure(err ?: Exception("未知 API 错误"))
                 }
 
                 val response = result.getOrThrow()

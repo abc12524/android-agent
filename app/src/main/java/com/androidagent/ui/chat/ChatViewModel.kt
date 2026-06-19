@@ -70,22 +70,19 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         uiState = uiState.copy(isLoading = true, error = null)
 
         viewModelScope.launch {
-            val result = engine.sendMessage(currentSessionId, text)
-            result.fold(
-                onSuccess = { chatResult ->
-                    uiState = uiState.copy(
-                        isLoading = false,
-                        error = null
-                    )
-                    // 消息通过 Flow 自动更新
-                },
-                onFailure = { e ->
-                    uiState = uiState.copy(
-                        isLoading = false,
-                        error = e.message ?: "未知错误"
-                    )
-                }
-            )
+            try {
+                val result = engine.sendMessage(currentSessionId, text)
+                result.fold(
+                    onSuccess = {
+                        uiState = uiState.copy(isLoading = false, error = null)
+                    },
+                    onFailure = { e ->
+                        uiState = uiState.copy(isLoading = false, error = e.message ?: "未知错误")
+                    }
+                )
+            } catch (e: Throwable) {
+                uiState = uiState.copy(isLoading = false, error = "发送失败: ${e.message}")
+            }
         }
     }
 
