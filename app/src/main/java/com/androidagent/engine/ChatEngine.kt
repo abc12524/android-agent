@@ -49,9 +49,9 @@ class ChatEngine(private val context: Context) {
         }
 
         try {
-            // 1. 加载历史消息
+            // 1. 加载历史消息（过滤掉 tool 消息，避免孤立 tool_call_id 报错）
             val history = db.messageDao().getMessagesBySessionSync(sessionId)
-            val messages = history.map { it.toApiMessage() }.toMutableList()
+            val messages = history.filter { it.role != "tool" }.map { it.toApiMessage() }.toMutableList()
 
             // 2. 加载 OpenViking 上下文（可选）
             val ovContext = openViking.loadContext(userMessage)
