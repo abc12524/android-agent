@@ -35,6 +35,7 @@ class ToolRegistry(context: Context) {
         // 注册所有工具
         register(SystemInfoTool())
         register(ShellTool())
+        register(GPSTool(context))
         register(BaiDuSearchTool(QianFanClient()))
         register(BaiKeTool(QianFanClient()))
         register(OpenVikingSearchTool(OpenVikingClient()))
