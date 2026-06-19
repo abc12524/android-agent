@@ -10,6 +10,8 @@ import com.androidagent.data.AppPreferences
 import com.androidagent.data.db.AppDatabase
 import com.androidagent.data.model.Message
 import com.androidagent.engine.ChatEngine
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
@@ -31,6 +33,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         private set
 
     private var currentSessionId: String = ""
+    private var loadMessagesJob: Job? = null
 
     /**
      * 初始化会话（加载已有或创建新会话）
@@ -47,8 +50,23 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private fun loadMessages() {
+    /**
+     * 开始新对话 — 创建新会话并清空当前消息
+     */
+    fun startNewSession() {
+        if (uiState.isLoading) return
         viewModelScope.launch {
+            val newId = engine.createSession()
+            currentSessionId = newId
+            uiState = ChatUiState()
+            loadMessages()
+        }
+    }
+
+    private fun loadMessages() {
+        // 取消旧的收集协程
+        loadMessagesJob?.cancel()
+        loadMessagesJob = viewModelScope.launch {
             db.messageDao().getMessagesBySession(currentSessionId).collect { messages ->
                 val session = db.sessionDao().getSession(currentSessionId)
                 uiState = uiState.copy(
@@ -92,9 +110,3 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     fun clearError() {
         uiState = uiState.copy(error = null)
     }
-
-    /**
-     * 获取当前会话 ID
-     */
-    fun getSessionId(): String = currentSessionId
-}
