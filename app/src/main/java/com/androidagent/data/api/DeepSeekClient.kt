@@ -2,6 +2,7 @@ package com.androidagent.data.api
 
 import com.androidagent.data.AppPreferences
 import com.google.gson.Gson
+import com.google.gson.annotations.SerializedName
 import com.google.gson.JsonParser
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -29,7 +30,9 @@ class DeepSeekClient {
     data class ChatMessage(
         val role: String,       // "system" / "user" / "assistant" / "tool"
         val content: String = "",
+        @SerializedName("tool_call_id")
         val toolCallId: String? = null,
+        @SerializedName("tool_calls")
         val toolCalls: List<ToolCall>? = null,
         val name: String? = null
     )
@@ -61,6 +64,7 @@ class DeepSeekClient {
         val messages: List<ChatMessage>,
         val tools: List<ToolDefinition>? = null,
         val temperature: Double = 0.7,
+        @SerializedName("max_tokens")
         val maxTokens: Int = 4096,
         val stream: Boolean = false
     )
