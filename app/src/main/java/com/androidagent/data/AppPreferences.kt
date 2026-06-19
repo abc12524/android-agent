@@ -30,7 +30,7 @@ object AppPreferences {
 
     // OpenViking
     var openVikingUrl: String
-        get() = prefs.getString("openviking_url", "http://192.168.30.181:1933") ?: "http://192.168.30.181:1933"
+        get() = prefs.getString("openviking_url", "") ?: ""
         set(value) = prefs.edit().putString("openviking_url", value).apply()
 
     var openVikingKey: String

@@ -237,13 +237,24 @@ fun MessageBubble(message: Message) {
             ),
             color = bubbleColor
         ) {
-            Text(
-                text = message.content.ifBlank { "(空)" },
-                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                color = textColor,
-                fontSize = 15.sp,
-                lineHeight = 22.sp
-            )
+            if (isTool) {
+                // 工具消息用等宽字体
+                Text(
+                    text = message.content.ifBlank { "(空)" },
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                    color = textColor,
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 13.sp,
+                    lineHeight = 18.sp
+                )
+            } else {
+                // 用户/AI 消息渲染 Markdown
+                MarkdownText(
+                    markdown = message.content.ifBlank { "(空)" },
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                    baseColor = textColor
+                )
+            }
         }
 
         // 时间戳
