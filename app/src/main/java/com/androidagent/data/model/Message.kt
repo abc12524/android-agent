@@ -4,16 +4,6 @@ import androidx.room.Entity
 import androidx.room.PrimaryKey
 
 /**
- * 消息角色
- */
-enum class MessageRole {
-    USER,
-    ASSISTANT,
-    SYSTEM,
-    TOOL
-}
-
-/**
  * 单条对话消息
  */
 @Entity(tableName = "messages")
@@ -29,6 +19,7 @@ data class Message(
     val toolArgs: String? = null,     // 工具参数 (JSON)
     val toolResult: String? = null,   // 工具执行结果
     val reasoningContent: String? = null, // DeepSeek 推理内容
+    val toolCalls: String? = null,    // assistant 消息的 tool_calls (JSON)
     val promptTokens: Int = 0,
     val completionTokens: Int = 0
 )

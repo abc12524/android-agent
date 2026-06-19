@@ -49,9 +49,9 @@ class ChatEngine(private val context: Context) {
         }
 
         try {
-            // 1. 加载历史消息（过滤掉 tool 消息，避免孤立 tool_call_id 报错）
+            // 1. 加载历史消息
             val history = db.messageDao().getMessagesBySessionSync(sessionId)
-            val messages = history.filter { it.role != "tool" }.map { it.toApiMessage() }.toMutableList()
+            val messages = history.map { it.toApiMessage() }.toMutableList()
 
             // 2. 加载 OpenViking 上下文（可选）
             val ovContext = openViking.loadContext(userMessage)
@@ -109,13 +109,17 @@ class ChatEngine(private val context: Context) {
                     db.sessionDao().addTokens(sessionId, usage.promptTokens, usage.completionTokens)
                 }
 
-                // 保存 assistant 消息
+                // 保存 assistant 消息（含 tool_calls）
                 val reasoning = assistantMsg.name  // 暂存在 name 字段
+                val toolCallsJson = if (assistantMsg.toolCalls != null) {
+                    gson.toJson(assistantMsg.toolCalls)
+                } else null
                 val assistantEntity = Message(
                     sessionId = sessionId,
                     role = "assistant",
                     content = assistantMsg.content,
                     reasoningContent = reasoning,
+                    toolCalls = toolCallsJson,
                     promptTokens = usage?.promptTokens ?: 0,
                     completionTokens = usage?.completionTokens ?: 0
                 )
@@ -235,6 +239,19 @@ class ChatEngine(private val context: Context) {
                 toolCallId = toolCallId,
                 name = toolName
             )
+            "assistant" -> {
+                val tc = if (toolCalls != null) {
+                    try {
+                        val type = object : com.google.gson.reflect.TypeToken<List<DeepSeekClient.ToolCall>>() {}.type
+                        gson.fromJson<List<DeepSeekClient.ToolCall>>(toolCalls, type)
+                    } catch (_: Exception) { null }
+                } else null
+                DeepSeekClient.ChatMessage(
+                    role = role,
+                    content = content,
+                    toolCalls = tc
+                )
+            }
             else -> DeepSeekClient.ChatMessage(
                 role = role,
                 content = content
