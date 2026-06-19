@@ -26,7 +26,8 @@ import com.androidagent.ui.theme.*
 fun ChatScreen(
     sessionId: String,
     onNavigateToSettings: () -> Unit,
-    viewModel: ChatViewModel = viewModel() {
+    viewModel: ChatViewModel = viewModel()
+) {
     LaunchedEffect(sessionId) {
         viewModel.initSession(sessionId)
     }
