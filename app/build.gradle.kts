@@ -5,15 +5,6 @@ plugins {
     id("com.chaquo.python")
 }
 
-// Chaquopy: 嵌入 Python 3 运行时
-python {
-    buildPython("/usr/bin/python3")
-    pip {
-        // 清华源在运行时由 Python 代码设置
-        install("requests")
-    }
-}
-
 kotlin {
     jvmToolchain(17)
 }
@@ -28,6 +19,14 @@ android {
         targetSdk = 34
         versionCode = 1
         versionName = "1.0.0"
+
+        // Chaquopy: 嵌入 Python 3 运行时
+        python {
+            buildPython("/usr/bin/python3")
+            pip {
+                install("requests")
+            }
+        }
     }
 
     buildTypes {
