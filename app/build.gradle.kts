@@ -74,9 +74,6 @@ dependencies {
     // SSH (JSch)
     implementation("com.jcraft:jsch:0.1.55")
 
-    // Tar.gz 解压 (Python 嵌入式)
-    implementation("org.apache.commons:commons-compress:1.26.0")
-
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
 }

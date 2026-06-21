@@ -8,6 +8,8 @@ import com.google.gson.Gson
  * Python 代码执行工具
  * 通过嵌入式 Termux Python 二进制在 Android 本地运行 Python 代码。
  *
+ * Python 环境在 App 启动时后台解压，首次调用 execute_python 会等待解压完成。
+ *
  * 支持:
  * - code:  执行 Python 代码片段
  * - script: 运行 Python 脚本文件
@@ -51,13 +53,14 @@ class PythonTool : Tool {
     override suspend fun execute(args: Map<String, Any>): String {
         val action = args["action"] as? String ?: return """{"error": "缺少 action 参数"}"""
 
-        // 首次使用需初始化 Python 环境（解压 tarball）
-        val context = AndroidAgentApp.instance
+        // 等待 Python 环境初始化（最多等 60 秒）
         if (!PythonManager.isReady()) {
-            try {
-                PythonManager.initialize(context)
-            } catch (e: Exception) {
-                return """{"error": "Python 环境初始化失败: ${e.message}"}"""
+            if (PythonManager.status == PythonManager.InitStatus.FAILED) {
+                return """{"error": "Python 环境初始化失败: ${PythonManager.getInitError()}，请重启 App 重试"}"""
+            }
+            val ready = PythonManager.waitForInit(60000)
+            if (!ready) {
+                return """{"error": "Python 环境初始化失败: ${PythonManager.getInitError()}"}"""
             }
         }
 

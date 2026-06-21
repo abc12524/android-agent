@@ -6,6 +6,7 @@ import android.os.Environment
 import android.provider.MediaStore
 import com.androidagent.data.AppPreferences
 import com.androidagent.data.db.AppDatabase
+import com.androidagent.data.tools.PythonManager
 import java.io.File
 import java.io.FileWriter
 import java.text.SimpleDateFormat
@@ -23,6 +24,9 @@ class AndroidAgentApp : Application() {
         database = AppDatabase.getInstance(this)
 
         setupCrashHandler()
+
+        // 后台解压 Python 环境（首次启动耗时约 10-30 秒）
+        PythonManager.initAsync(this)
     }
 
     private fun setupCrashHandler() {
