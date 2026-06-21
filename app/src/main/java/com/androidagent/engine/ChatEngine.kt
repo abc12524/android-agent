@@ -61,14 +61,13 @@ class ChatEngine(private val context: Context) {
             }
             val messages = history.map { it.toApiMessage() }.toMutableList()
 
-            // 2. 加载 OpenViking 上下文（直接追加到 system prompt，保持前缀一致以命中缓存）
+            // 2. 搜索 OpenViking 记忆，以"系统提示"用户消息注入（不修改 system prompt）
             val ovContext = openViking.loadContext(userMessage)
             if (ovContext.isNotBlank()) {
-                val systemMsgIdx = messages.indexOfFirst { it.role == "system" }
-                if (systemMsgIdx >= 0) {
-                    val orig = messages[systemMsgIdx]
-                    messages[systemMsgIdx] = orig.copy(content = "${orig.content}\n\n## 相关记忆\n$ovContext")
-                }
+                messages.add(DeepSeekClient.ChatMessage(
+                    role = "user",
+                    content = "系统提示：\n$ovContext"
+                ))
             }
 
             // 3. 添加用户消息
