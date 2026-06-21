@@ -43,7 +43,9 @@ jobs:
           tar xf assets/python-env.bin -O usr/bin/python3.13 | od -A x -t x1z -N 64
 
       - name: Build Debug APK
-        run: ./gradlew clean assembleDebug --no-daemon --stacktrace --no-build-cache
+        run: |
+          rm -rf ~/.gradle
+          ./gradlew clean assembleDebug --no-daemon --stacktrace --no-build-cache
 
       - name: Validate APK content
         run: |
