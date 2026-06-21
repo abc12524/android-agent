@@ -81,10 +81,9 @@ object PythonManager {
         pythonBin = File(pythonHome, "bin/python3.13").absolutePath
         libPath = File(pythonHome, "lib").absolutePath
 
-        // 已解压过，直接复用
-        if (File(pythonBin).exists()) {
-            status = InitStatus.READY
-            return
+        // 先清理旧提取（APK 更新后 assets 中的 tar 可能已变化）
+        if (baseDir.exists()) {
+            baseDir.deleteRecursively()
         }
 
         try {
