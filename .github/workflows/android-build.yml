@@ -43,6 +43,16 @@ jobs:
       - name: Build Debug APK
         run: ./gradlew clean assembleDebug --no-daemon --stacktrace --no-build-cache
 
+      - name: Validate APK content
+        run: |
+          APK=$(ls app/build/outputs/apk/debug/*.apk | head -1)
+          echo "=== APK size ==="
+          ls -lh "$APK"
+          echo "=== APK tar md5 ==="
+          unzip -p "$APK" assets/python-arm64.tar | md5sum
+          echo "=== APK Python binary ==="
+          unzip -p "$APK" assets/python-arm64.tar | tar xf - -O usr/bin/python3.13 | od -A x -t x1z -N 64
+
       - name: Rename APK with build metadata
         id: rename
         run: |
