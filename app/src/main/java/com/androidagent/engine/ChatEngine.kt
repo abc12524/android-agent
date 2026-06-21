@@ -279,7 +279,7 @@ class ChatEngine(private val context: Context) {
     /**
      * 回滚本轮写入的消息
      */
-    private fun rollbackMessages(db: AppDatabase, ids: List<Long>) {
+    private suspend fun rollbackMessages(db: AppDatabase, ids: List<Long>) {
         if (ids.isEmpty()) return
         for (id in ids) {
             try {
