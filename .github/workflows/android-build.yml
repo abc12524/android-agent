@@ -37,10 +37,10 @@ jobs:
       - name: Validate Python asset
         run: |
           echo "=== Tar info ==="
-          ls -la assets/python-arm64.tar
-          md5sum assets/python-arm64.tar
+          ls -la assets/python-env.bin
+          md5sum assets/python-env.bin
           echo "=== Python binary ELF header ==="
-          tar xf assets/python-arm64.tar -O usr/bin/python3.13 | od -A x -t x1z -N 64
+          tar xf assets/python-env.bin -O usr/bin/python3.13 | od -A x -t x1z -N 64
 
       - name: Build Debug APK
         run: ./gradlew clean assembleDebug --no-daemon --stacktrace --no-build-cache
@@ -51,9 +51,9 @@ jobs:
           echo "=== APK size ==="
           ls -lh "$APK"
           echo "=== APK tar md5 ==="
-          unzip -p "$APK" assets/python-arm64.tar | md5sum
+          unzip -p "$APK" assets/python-env.bin | md5sum
           echo "=== APK Python binary ==="
-          unzip -p "$APK" assets/python-arm64.tar | tar xf - -O usr/bin/python3.13 | od -A x -t x1z -N 64
+          unzip -p "$APK" assets/python-env.bin | tar xf - -O usr/bin/python3.13 | od -A x -t x1z -N 64
 
       - name: Rename APK with build metadata
         id: rename
