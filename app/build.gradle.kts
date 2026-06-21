@@ -2,6 +2,7 @@ plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("com.google.devtools.ksp")
+    id("com.chaquo.python")
 }
 
 kotlin {
@@ -39,6 +40,17 @@ android {
         compose = true
     }
 
+    // Chaquopy: 嵌入 Python 3 运行时
+    python {
+        buildPython("/usr/bin/python3")
+        pip {
+            // 使用清华镜像源（中国大陆加速）
+            options = listOf("--index-url", "https://pypi.tuna.tsinghua.edu.cn/simple",
+                             "--trusted-host", "pypi.tuna.tsinghua.edu.cn")
+            install("requests")
+        }
+    }
+
     composeOptions {
         kotlinCompilerExtensionVersion = "1.5.14"
     }
@@ -70,6 +82,9 @@ dependencies {
     // Network
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.google.code.gson:gson:2.10.1")
+
+    // SSH (JSch)
+    implementation("com.jcraft:jsch:0.1.55")
 
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")

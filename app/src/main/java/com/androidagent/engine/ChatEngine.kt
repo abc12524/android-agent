@@ -16,8 +16,6 @@ import java.util.*
 
 /**
  * 对话引擎 — 管理多轮对话 + Function Calling 工具调用
- *
- * 对应 Python 版 deepseek.py 的 chat_completion_with_tools() 和 main() 主循环
  */
 class ChatEngine(private val context: Context) {
 
@@ -32,12 +30,12 @@ class ChatEngine(private val context: Context) {
         val toolCalls: List<DeepSeekClient.ToolCall>?,
         val reasoningContent: String?,
         val usage: DeepSeekClient.Usage?,
-        val allMessages: List<Message>   // 本轮新增的所有消息
+        val allMessages: List<Message>
     )
 
     /**
      * 发送用户消息并获取 AI 回复
-     * 自动处理多轮工具调用（Function Calling 循环）
+     * 自动处理多轮工具调用，失败时回滚本轮写入的消息
      */
     suspend fun sendMessage(
         sessionId: String,
@@ -47,6 +45,9 @@ class ChatEngine(private val context: Context) {
         if (apiKey.isBlank()) {
             return@withContext Result.failure(Exception("请先在设置中配置 DeepSeek API Key"))
         }
+
+        // 记录本轮新增的消息 ID，用于失败回滚
+        val insertedIds = mutableListOf<Long>()
 
         try {
             // 1. 加载历史消息（超时后只保留 system prompt）
@@ -60,10 +61,9 @@ class ChatEngine(private val context: Context) {
             }
             val messages = history.map { it.toApiMessage() }.toMutableList()
 
-            // 2. 加载 OpenViking 上下文（可选）
+            // 2. 加载 OpenViking 上下文（直接追加到 system prompt，保持前缀一致以命中缓存）
             val ovContext = openViking.loadContext(userMessage)
             if (ovContext.isNotBlank()) {
-                // 把记忆上下文注入到 system prompt 附近
                 val systemMsgIdx = messages.indexOfFirst { it.role == "system" }
                 if (systemMsgIdx >= 0) {
                     val orig = messages[systemMsgIdx]
@@ -75,12 +75,8 @@ class ChatEngine(private val context: Context) {
             messages.add(DeepSeekClient.ChatMessage(role = "user", content = userMessage))
 
             // 4. 保存用户消息到数据库
-            val userMsgEntity = Message(
-                sessionId = sessionId,
-                role = "user",
-                content = userMessage
-            )
-            db.messageDao().insert(userMsgEntity)
+            val userMsgEntity = Message(sessionId = sessionId, role = "user", content = userMessage)
+            insertedIds.add(db.messageDao().insert(userMsgEntity))
 
             // 5. 多轮工具调用循环
             var finalContent = ""
@@ -89,8 +85,7 @@ class ChatEngine(private val context: Context) {
             val allNewMessages = mutableListOf(userMsgEntity)
             val maxRounds = AppPreferences.maxToolRounds
 
-            for (round in 0..maxRounds) {
-                // 调用 DeepSeek API
+            for (round in 0..maxRounds + 1) {
                 val result = deepSeek.chat(
                     messages = messages,
                     tools = toolRegistry.toToolDefinitions()
@@ -98,13 +93,15 @@ class ChatEngine(private val context: Context) {
 
                 if (result.isFailure) {
                     val err = result.exceptionOrNull()
+                    rollbackMessages(db, insertedIds)
                     return@withContext Result.failure(err ?: Exception("未知 API 错误"))
                 }
 
                 val response = result.getOrThrow()
-                val choice = response.choices.firstOrNull() ?: return@withContext Result.failure(
-                    Exception("API 返回空响应")
-                )
+                val choice = response.choices.firstOrNull() ?: run {
+                    rollbackMessages(db, insertedIds)
+                    return@withContext Result.failure(Exception("API 返回空响应"))
+                }
 
                 val assistantMsg = choice.message
                 val finishReason = choice.finishReason ?: ""
@@ -116,8 +113,8 @@ class ChatEngine(private val context: Context) {
                     db.sessionDao().addTokens(sessionId, usage.promptTokens, usage.completionTokens)
                 }
 
-                // 保存 assistant 消息（含 tool_calls）
-                val reasoning = assistantMsg.name  // 暂存在 name 字段
+                // 保存 assistant 消息
+                val reasoning = assistantMsg.name
                 val toolCallsJson = if (assistantMsg.toolCalls != null) {
                     gson.toJson(assistantMsg.toolCalls)
                 } else null
@@ -131,28 +128,25 @@ class ChatEngine(private val context: Context) {
                     completionTokens = usage?.completionTokens ?: 0
                 )
                 val msgId = db.messageDao().insert(assistantEntity)
+                insertedIds.add(msgId)
                 allNewMessages.add(assistantEntity.copy(id = msgId))
 
-                // 添加到 API 消息列表
                 messages.add(assistantMsg)
 
                 val toolCalls = assistantMsg.toolCalls
                 if (toolCalls.isNullOrEmpty() || finishReason == "stop") {
-                    // 没有工具调用，对话结束
                     finalContent = assistantMsg.content
                     finalReasoning = reasoning
                     break
                 }
 
-                // 处理工具调用
+                // 执行工具调用
                 for (tc in toolCalls) {
                     val toolName = tc.function.name
                     val toolArgs = tc.function.arguments
 
-                    // 执行工具
                     val toolResult = toolRegistry.executeToolCall(toolName, toolArgs)
 
-                    // 保存工具消息到数据库
                     val toolEntity = Message(
                         sessionId = sessionId,
                         role = "tool",
@@ -161,10 +155,9 @@ class ChatEngine(private val context: Context) {
                         toolName = toolName,
                         toolArgs = toolArgs
                     )
-                    db.messageDao().insert(toolEntity)
+                    insertedIds.add(db.messageDao().insert(toolEntity))
                     allNewMessages.add(toolEntity)
 
-                    // 添加到 API 消息列表
                     messages.add(DeepSeekClient.ChatMessage(
                         role = "tool",
                         content = toolResult,
@@ -173,12 +166,21 @@ class ChatEngine(private val context: Context) {
                     ))
                 }
 
-                // 最后再走一轮循环（LLM 根据工具结果生成回复）
+                // 最后一次工具调用：注入停止通知，让 LLM 多一轮来汇总
+                if (round == maxRounds) {
+                    messages.add(DeepSeekClient.ChatMessage(
+                        role = "user",
+                        content = "这是最后一次工具调用。请根据已有结果报告当前进度，总结完成情况，然后停止调用。"
+                    ))
+                }
             }
 
             // 6. 更新会话统计
             val msgCount = db.messageDao().getMessagesBySessionSync(sessionId).size
             db.sessionDao().updateStats(sessionId, System.currentTimeMillis(), msgCount)
+
+            // 7. 导出对话 JSON（调试用）
+            exportSessionToJson(sessionId)
 
             Result.success(ChatResult(
                 assistantContent = finalContent,
@@ -189,6 +191,7 @@ class ChatEngine(private val context: Context) {
             ))
 
         } catch (e: Exception) {
+            rollbackMessages(db, insertedIds)
             Result.failure(Exception("对话失败: ${e.message}"))
         }
     }
@@ -197,8 +200,7 @@ class ChatEngine(private val context: Context) {
      * 创建新会话
      */
     suspend fun createSession(): String = withContext(Dispatchers.IO) {
-        val sdf = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault())
-        val sessionId = sdf.format(Date())
+        val sessionId = UUID.randomUUID().toString().take(8)
 
         val session = ChatSession(
             id = sessionId,
@@ -207,7 +209,6 @@ class ChatEngine(private val context: Context) {
         )
         db.sessionDao().insert(session)
 
-        // 添加系统提示词
         val systemMsg = """
             你是 Android Agent，一个运行在 Android 设备上的 AI 助手。
             你有以下能力：
@@ -215,6 +216,9 @@ class ChatEngine(private val context: Context) {
             2. 执行 Android Shell 命令
             3. 搜索百度互联网信息
             4. 通过 OpenViking 管理长期记忆
+            5. 通过 SSH 连接远程服务器执行命令（ssh_execute）
+            6. 通过 SCP 向远程服务器上传下载文件（ssh_scp）
+            7. 在本地运行 Python 代码，支持 pip 安装包（execute_python）
             请用中文回答用户的问题。
         """.trimIndent()
 
@@ -233,6 +237,55 @@ class ChatEngine(private val context: Context) {
     suspend fun deleteSession(sessionId: String) = withContext(Dispatchers.IO) {
         db.messageDao().deleteBySession(sessionId)
         db.sessionDao().deleteById(sessionId)
+    }
+
+    /**
+     * 导出会话完整信息为 JSON 文件
+     * 保存到 /storage/emulated/0/Android/data/com.androidagent/files/chat_logs/
+     */
+    private suspend fun exportSessionToJson(sessionId: String) = withContext(Dispatchers.IO) {
+        try {
+            val sdf = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault())
+            val fileName = "chat_${sdf.format(Date())}_${sessionId}.json"
+
+            val exportDir = java.io.File(context.getExternalFilesDir(null), "chat_logs")
+            exportDir.mkdirs()
+            val file = java.io.File(exportDir, fileName)
+
+            val messages = db.messageDao().getMessagesBySessionSync(sessionId)
+
+            val data = mapOf(
+                "session_id" to sessionId,
+                "timestamp" to System.currentTimeMillis() / 1000,
+                "messages" to messages.map { msg ->
+                    mutableMapOf<String, Any?>(
+                        "role" to msg.role,
+                        "content" to msg.content
+                    ).apply {
+                        if (!msg.reasoningContent.isNullOrBlank()) put("reasoning_content", msg.reasoningContent)
+                        if (!msg.toolCalls.isNullOrBlank()) put("tool_calls", msg.toolCalls)
+                        if (!msg.toolCallId.isNullOrBlank()) put("tool_call_id", msg.toolCallId)
+                        if (!msg.toolName.isNullOrBlank()) put("tool_name", msg.toolName)
+                    }
+                }
+            )
+
+            file.writeText(gson.toJson(data))
+        } catch (_: Exception) {
+            // 导出失败不影响主流程
+        }
+    }
+
+    /**
+     * 回滚本轮写入的消息
+     */
+    private fun rollbackMessages(db: AppDatabase, ids: List<Long>) {
+        if (ids.isEmpty()) return
+        for (id in ids) {
+            try {
+                db.messageDao().delete(Message(id = id, sessionId = "", role = ""))
+            } catch (_: Exception) { }
+        }
     }
 
     /**

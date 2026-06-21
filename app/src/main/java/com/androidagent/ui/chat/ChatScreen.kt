@@ -57,7 +57,8 @@ fun ChatScreen(
         drawerContent = {
             SessionDrawer(state.allSessions, viewModel.getSessionId(),
                 onSelect = { scope.launch { drawerState.close() }; viewModel.switchToSession(it) },
-                onNew = { scope.launch { drawerState.close() }; viewModel.startNewSession() })
+                onNew = { scope.launch { drawerState.close() }; viewModel.startNewSession() },
+                onSettings = { scope.launch { drawerState.close() }; onNavigateToSettings() })
         }
     ) {
         Scaffold(
@@ -75,9 +76,6 @@ fun ChatScreen(
                     actions = {
                         IconButton(onClick = { viewModel.startNewSession() }) {
                             Icon(Icons.Default.Add, contentDescription = "新对话")
-                        }
-                        IconButton(onClick = onNavigateToSettings) {
-                            Icon(Icons.Default.Settings, contentDescription = "设置")
                         }
                     }
                 )
@@ -193,9 +191,10 @@ private fun TokenFooter(usage: DeepSeekClient.Usage, totalIn: Int, totalOut: Int
 @Composable
 private fun SessionDrawer(
     sessions: List<ChatSession>, currentId: String,
-    onSelect: (String) -> Unit, onNew: () -> Unit
+    onSelect: (String) -> Unit, onNew: () -> Unit, onSettings: () -> Unit
 ) {
-    val groups = groupSessions(sessions)
+    val validSessions = sessions.filter { it.messageCount > 0 }
+    val groups = groupSessions(validSessions)
     ModalDrawerSheet(Modifier.width(300.dp)) {
         Surface(Modifier.fillMaxWidth().clickable { onNew() },
             color = MaterialTheme.colorScheme.primaryContainer
@@ -211,7 +210,7 @@ private fun SessionDrawer(
             }
         }
         HorizontalDivider()
-        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(vertical = 8.dp)) {
+        LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(vertical = 8.dp)) {
             groups.forEach { (label, list) ->
                 item {
                     Text(label, Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
@@ -227,18 +226,30 @@ private fun SessionDrawer(
                                 else MaterialTheme.colorScheme.surface
                     ) {
                         Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
-                            Text(session.title.ifBlank { "新对话" }, fontSize = 14.sp,
+                            Text(fmtSessionTime(session.createdAt), fontSize = 14.sp,
                                 fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
                                 color = if (active) MaterialTheme.colorScheme.onSecondaryContainer
                                         else MaterialTheme.colorScheme.onSurface,
                                 maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            Text("${session.messageCount} 条 · ${fmtSessionTime(session.createdAt)}",
+                            Text("${session.messageCount} 条",
                                 fontSize = 11.sp,
                                 color = if (active) MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.6f)
                                         else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
                         }
                     }
                 }
+            }
+        }
+        // 底部：设置按钮
+        HorizontalDivider()
+        Surface(Modifier.fillMaxWidth().clickable { onSettings() }) {
+            Row(Modifier.padding(horizontal = 20.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.Settings, contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.width(12.dp))
+                Text("设置", fontSize = 15.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }

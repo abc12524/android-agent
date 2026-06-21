@@ -166,6 +166,7 @@ fun SettingsScreen(
                         text = "• DeepSeek API Key 是必填项\n" +
                                 "• 百度千帆 Key 用于搜索功能（可选）\n" +
                                 "• OpenViking 用于长期记忆存储（可选）\n" +
+                                "• Python 环境通过 Chaquopy 嵌入（无需额外配置）\n" +
                                 "• 设置保存后立即生效",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
