@@ -11,7 +11,7 @@ import java.util.concurrent.TimeUnit
  * 从 APK assets 中解压 Python 二进制 + stdlib 到 filesDir，
  * 通过 ProcessBuilder 执行 Python 代码。
  *
- * assets 中的 python-arm64.tar（纯 tar，无压缩）结构：
+ * assets 中的 python-env.bin（纯 tar，无压缩）结构：
  *   usr/bin/python3.13
  *   usr/lib/libpython3.13.so
  *   usr/lib/libpython3.so
@@ -24,7 +24,7 @@ import java.util.concurrent.TimeUnit
  */
 object PythonManager {
 
-    private const val ASSET_TAR = "python-arm64.tar"
+    private const val ASSET_TAR = "python-env.bin"
     private const val PYTHON_DIR = "python"
 
     @Volatile
