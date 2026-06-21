@@ -265,7 +265,8 @@ print(json.dumps(info, ensure_ascii=False))
     }
 
     private fun runPython(args: List<String>, timeoutSec: Int): ProcessResult {
-        val cmd = mutableListOf(pythonBin).also { it.addAll(args) }
+        // 用 linker64 绕过 SELinux noexec 限制（Android 禁止直接执行 app 私有目录下的二进制）
+        val cmd = mutableListOf("/system/bin/linker64", pythonBin).also { it.addAll(args) }
         val env = mapOf(
             "LD_LIBRARY_PATH" to libPath,
             "PYTHONHOME" to pythonHome,
