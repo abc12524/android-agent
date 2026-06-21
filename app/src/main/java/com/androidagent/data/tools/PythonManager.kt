@@ -1,13 +1,28 @@
 package com.androidagent.data.tools
 
 import android.content.Context
+import org.apache.commons.compress.archivers.tar.TarArchiveEntry
+import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
+import org.apache.commons.compress.compressors.gzip.GzipCompressorInputStream
 import java.io.File
+import java.io.FileOutputStream
 import java.util.concurrent.TimeUnit
 
 /**
  * 嵌入式 Python 管理器
  * 从 APK assets 中解压 Termux Python 二进制 + stdlib 到 filesDir，
  * 通过 ProcessBuilder 执行 Python 代码。
+ *
+ * assets 中的 python-arm64.tar.gz 结构：
+ *   usr/bin/python3.13
+ *   usr/lib/libpython3.13.so
+ *   usr/lib/libpython3.so
+ *   usr/lib/libandroid-support.so
+ *   usr/lib/python3.13/... (stdlib + site-packages)
+ *
+ * 解压后目录结构：
+ *   filesDir/python/usr/bin/python3.13
+ *   filesDir/python/usr/lib/python3.13/...
  */
 object PythonManager {
 
@@ -35,40 +50,42 @@ object PythonManager {
             return true
         }
 
-        // 从 assets 解压 tar.gz
         return try {
             baseDir.mkdirs()
-            val tarFile = File(baseDir, ASSET_TAR)
 
-            // 将 assets 中的 tarball 复制到 filesDir
+            // 用 commons-compress 直接解压 tar.gz（不依赖系统 tar 命令）
             context.assets.open(ASSET_TAR).use { input ->
-                tarFile.outputStream().use { output ->
-                    input.copyTo(output)
+                GzipCompressorInputStream(input).use { gzInput ->
+                    TarArchiveInputStream(gzInput).use { tarInput ->
+                        var entry: TarArchiveEntry? = tarInput.nextEntry
+                        while (entry != null) {
+                            val targetFile = File(baseDir, entry.name)
+                            if (entry.isDirectory) {
+                                targetFile.mkdirs()
+                            } else {
+                                targetFile.parentFile?.mkdirs()
+                                FileOutputStream(targetFile).use { output ->
+                                    val buffer = ByteArray(8192)
+                                    var bytesRead: Int
+                                    while (tarInput.read(buffer).also { bytesRead = it } != -1) {
+                                        output.write(buffer, 0, bytesRead)
+                                    }
+                                }
+                                // 可执行文件加执行权限
+                                if (entry.mode and 64 != 0) { // owner execute bit
+                                    targetFile.setExecutable(true)
+                                }
+                            }
+                            entry = tarInput.nextEntry
+                        }
+                    }
                 }
             }
-
-            // 解压 tarball
-            val process = ProcessBuilder(
-                "tar", "xzf", tarFile.absolutePath, "-C", baseDir.absolutePath
-            ).redirectErrorStream(true).start()
-
-            val done = process.waitFor(60, TimeUnit.SECONDS)
-            if (!done || process.exitValue() != 0) {
-                val err = if (done) "tar exit code: ${process.exitValue()}" else "tar timed out"
-                baseDir.deleteRecursively()
-                throw RuntimeException(err)
-            }
-
-            // 删除 tarball，释放空间
-            tarFile.delete()
 
             // 验证 python3.13 存在
             if (!File(pythonBin).exists()) {
                 throw RuntimeException("Python binary not found after extraction: $pythonBin")
             }
-
-            // 给 python3.13 加执行权限
-            File(pythonBin).setExecutable(true)
 
             initialized = true
             true
