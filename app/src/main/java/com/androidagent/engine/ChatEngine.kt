@@ -50,6 +50,8 @@ class ChatEngine(private val context: Context) {
         val insertedIds = mutableListOf<Long>()
 
         try {
+            val allNewMessages = mutableListOf<Message>()
+
             // 1. 加载历史消息（超时后只保留 system prompt）
             val timeoutMs = AppPreferences.sessionTimeoutMinutes * 60 * 1000L
             val session = db.sessionDao().getSession(sessionId)
@@ -61,13 +63,16 @@ class ChatEngine(private val context: Context) {
             }
             val messages = history.map { it.toApiMessage() }.toMutableList()
 
-            // 2. 搜索 OpenViking 记忆，以"系统提示"用户消息注入（不修改 system prompt）
+            // 2. 搜索 OpenViking 记忆，以"系统提示"用户消息注入
             val ovContext = openViking.loadContext(userMessage)
             if (ovContext.isNotBlank()) {
-                messages.add(DeepSeekClient.ChatMessage(
-                    role = "user",
-                    content = "系统提示：\n$ovContext"
-                ))
+                val ovMsg = "系统提示：\n$ovContext"
+                // 注入到 API 调用
+                messages.add(DeepSeekClient.ChatMessage(role = "user", content = ovMsg))
+                // 保存到 DB（后续历史对话包含 OV 记忆）
+                val ovEntity = Message(sessionId = sessionId, role = "user", content = ovMsg)
+                insertedIds.add(db.messageDao().insert(ovEntity))
+                allNewMessages.add(ovEntity)
             }
 
             // 3. 添加用户消息
@@ -76,12 +81,12 @@ class ChatEngine(private val context: Context) {
             // 4. 保存用户消息到数据库
             val userMsgEntity = Message(sessionId = sessionId, role = "user", content = userMessage)
             insertedIds.add(db.messageDao().insert(userMsgEntity))
+            allNewMessages.add(userMsgEntity)
 
             // 5. 多轮工具调用循环
             var finalContent = ""
             var finalReasoning: String? = null
             var finalUsage: DeepSeekClient.Usage? = null
-            val allNewMessages = mutableListOf(userMsgEntity)
             val maxRounds = AppPreferences.maxToolRounds
 
             for (round in 0..maxRounds + 1) {
