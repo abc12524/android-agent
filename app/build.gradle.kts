@@ -2,7 +2,6 @@ plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("com.google.devtools.ksp")
-    id("com.chaquo.python")
 }
 
 kotlin {
@@ -19,14 +18,6 @@ android {
         targetSdk = 34
         versionCode = 1
         versionName = "1.0.0"
-
-        // Chaquopy: 嵌入 Python 3 运行时
-        python {
-            buildPython("/usr/bin/python3")
-            pip {
-                install("requests")
-            }
-        }
     }
 
     buildTypes {

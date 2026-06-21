@@ -1,11 +1,12 @@
 package com.androidagent.data.tools
 
+import android.content.Context
 import com.androidagent.AndroidAgentApp
 import com.google.gson.Gson
 
 /**
  * Python 代码执行工具
- * 通过 Chaquopy 嵌入的 CPython 在 Android 本地运行 Python 代码。
+ * 通过嵌入式 Termux Python 二进制在 Android 本地运行 Python 代码。
  *
  * 支持:
  * - code:  执行 Python 代码片段
@@ -20,7 +21,7 @@ class PythonTool : Tool {
     override val name: String = "execute_python"
 
     override val description: String =
-        "在 Android 设备本地执行 Python 代码。通过 Chaquopy 嵌入的 CPython 运行时，" +
+        "在 Android 设备本地执行 Python 代码。内置 Python 3.13 + pip（清华源），" +
         "支持标准库和 pip 安装的第三方包。可执行代码片段、运行脚本文件、pip 安装包。"
 
     override val parameters: Map<String, Any> = mapOf(
@@ -50,36 +51,55 @@ class PythonTool : Tool {
     override suspend fun execute(args: Map<String, Any>): String {
         val action = args["action"] as? String ?: return """{"error": "缺少 action 参数"}"""
 
-        return try {
-            val python = com.chaquo.python.Python.getInstance()
-            val module = python.getModule("main")
+        // 首次使用需初始化 Python 环境（解压 tarball）
+        val context = AndroidAgentApp.instance
+        if (!PythonManager.isReady()) {
+            try {
+                PythonManager.initialize(context)
+            } catch (e: Exception) {
+                return """{"error": "Python 环境初始化失败: ${e.message}"}"""
+            }
+        }
 
+        return try {
             when (action) {
                 "code" -> {
                     val code = args["code"] as? String ?: return """{"error": "缺少 code 参数"}"""
-                    val result = module.callAttr("execute_python", code)
-                    result?.toString() ?: """{"success":true,"result":"执行完成"}"""
+                    val result = PythonManager.executeCode(code)
+                    gson.toJson(mapOf(
+                        "success" to result.success,
+                        "output" to result.output,
+                        "exit_code" to result.exitCode
+                    ))
                 }
                 "script" -> {
                     val scriptPath = args["script_path"] as? String ?: return """{"error": "缺少 script_path 参数"}"""
-                    val result = module.callAttr("execute_script", scriptPath)
-                    result?.toString() ?: """{"success":true,"result":"脚本执行完成"}"""
+                    val result = PythonManager.executeScript(scriptPath)
+                    gson.toJson(mapOf(
+                        "success" to result.success,
+                        "output" to result.output,
+                        "exit_code" to result.exitCode
+                    ))
                 }
                 "pip" -> {
                     val packages = args["packages"] as? String ?: return """{"error": "缺少 packages 参数"}"""
-                    val context = AndroidAgentApp.instance
-                    val pipCacheDir = context.filesDir.absolutePath
-                    val result = module.callAttr("pip_install", packages, pipCacheDir)
-                    result?.toString() ?: """{"success":true,"result":"pip install 完成"}"""
+                    val result = PythonManager.pipInstall(packages)
+                    gson.toJson(mapOf(
+                        "success" to result.success,
+                        "output" to result.output,
+                        "exit_code" to result.exitCode
+                    ))
                 }
                 "info" -> {
-                    val result = module.callAttr("system_info")
-                    result?.toString() ?: """{"success":true,"result":{}}"""
+                    val result = PythonManager.systemInfo()
+                    gson.toJson(mapOf(
+                        "success" to result.success,
+                        "output" to result.output,
+                        "exit_code" to result.exitCode
+                    ))
                 }
                 else -> """{"error": "未知操作: $action"}"""
             }
-        } catch (e: com.chaquo.python.PythonException) {
-            """{"error":"Python 错误: ${e.message}", "trace":"${e.cause?.message ?: ""}"}"""
         } catch (e: Exception) {
             """{"error":"Python 调用失败: ${e.message}"}"""
         }
