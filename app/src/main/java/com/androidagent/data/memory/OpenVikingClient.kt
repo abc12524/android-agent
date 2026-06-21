@@ -112,29 +112,43 @@ class OpenVikingClient {
         val user = AppPreferences.openVikingUser
         val uri = "viking://user/$user/peers/default/memories/$category/$name.md"
 
-        // 尝试 replace，失败则 create
+        // 新文件不存在时服务端返回 HTTP 404，不会进入 onSuccess
+        // 所以在 onFailure 中检测 404/NOT_FOUND 后重试为 create
         val result = post("/api/v1/content/write", mapOf(
             "uri" to uri, "content" to content, "mode" to "replace", "wait" to true
         ))
         return result.fold(
             onSuccess = { body ->
-                val json = try { JsonParser.parseString(body).asJsonObject } catch (e: Exception) { null }
+                val json = try { JsonParser.parseString(body).asJsonObject } catch (_: Exception) { null }
                 val err = json?.get("error")?.asString ?: ""
                 if (err.contains("NOT_FOUND", ignoreCase = true)) {
                     // 文件不存在，用 create 模式
-                    val retry = post("/api/v1/content/write", mapOf(
-                        "uri" to uri, "content" to content, "mode" to "create", "wait" to false
-                    ))
-                    retry.fold(
-                        onSuccess = { "{\"success\": true, \"uri\": \"$uri\"}" },
-                        onFailure = { "{\"error\": \"${it.message}\"}" }
-                    )
+                    retryCreate(uri, content)
                 } else if (err.isNotEmpty()) {
                     "{\"error\": \"$err\"}"
                 } else {
                     "{\"success\": true, \"uri\": \"$uri\"}"
                 }
             },
+            onFailure = { e ->
+                val msg = e.message ?: ""
+                if (msg.contains("404") || msg.contains("NOT_FOUND", ignoreCase = true)) {
+                    // HTTP 404 = 文件不存在，用 create 模式
+                    retryCreate(uri, content)
+                } else {
+                    "{\"error\": \"$msg\"}"
+                }
+            }
+        )
+    }
+
+    /** 以 create 模式重试写入（新文件） */
+    private suspend fun retryCreate(uri: String, content: String): String {
+        val retry = post("/api/v1/content/write", mapOf(
+            "uri" to uri, "content" to content, "mode" to "create", "wait" to false
+        ))
+        return retry.fold(
+            onSuccess = { "{\"success\": true, \"uri\": \"$uri\"}" },
             onFailure = { "{\"error\": \"${it.message}\"}" }
         )
     }
