@@ -117,7 +117,12 @@ fun ChatScreen(
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                         contentPadding = PaddingValues(top = 8.dp, bottom = 72.dp)
                     ) {
-                        items(state.messages.filter { it.role != "system" }, key = { it.id }) { msg ->
+                        // 过滤掉 system 角色和 OV 系统提示的用户消息
+                        val displayMessages = state.messages.filter { msg ->
+                            msg.role != "system" &&
+                            !(msg.role == "user" && msg.content.startsWith("系统提示："))
+                        }
+                        items(displayMessages, key = { it.id }) { msg ->
                             MessageBubble(msg)
                         }
                         // 底部 token 统计
@@ -261,16 +266,31 @@ private fun SessionDrawer(
 fun MessageBubble(msg: Message) {
     val isUser = msg.role == "user"
     val isTool = msg.role == "tool"
+    val hasToolCalls = msg.role == "assistant" && msg.toolCalls != null
+            && msg.content.isBlank()
     val bc = when { isUser -> BubbleUser; isTool -> BubbleTool; else -> BubbleAssistant }
     val tc = when { isUser -> BubbleUserText; isTool -> BubbleToolText; else -> BubbleAssistantText }
 
     Column(Modifier.fillMaxWidth(),
         horizontalAlignment = if (isUser) Alignment.End else Alignment.Start
     ) {
-        if (isTool && msg.toolName != null)
-            Text("🔧 ${msg.toolName}", fontSize = 11.sp,
+        // ---- 工具调用过程展示 ----
+        if (isTool && msg.toolName != null) {
+            val argsText = if (!msg.toolArgs.isNullOrBlank()) {
+                try {
+                    // 格式化 JSON 为一行显示
+                    val gson = com.google.gson.GsonBuilder().create()
+                    val obj = gson.fromJson(msg.toolArgs, Map::class.java)
+                    obj.entries.joinToString(", ") { (k, v) -> "$k=${v}" }
+                } catch (_: Exception) {
+                    msg.toolArgs
+                }
+            } else ""
+            Text("🔧 ${msg.toolName}($argsText)", fontSize = 11.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp))
+        }
+        // 推理内容
         if (msg.reasoningContent != null && msg.reasoningContent.isNotBlank()) {
             Surface(Modifier.padding(bottom = 4.dp).widthIn(max = 320.dp),
                 shape = RoundedCornerShape(8.dp),
@@ -288,12 +308,22 @@ fun MessageBubble(msg: Message) {
                 bottomEnd = if (isUser) 4.dp else 16.dp),
             color = bc
         ) {
-            if (isTool) {
-                Text(msg.content.ifBlank { "(空)" }, Modifier.padding(14.dp, 10.dp),
-                    color = tc, fontFamily = FontFamily.Monospace, fontSize = 13.sp, lineHeight = 18.sp)
-            } else {
-                MarkdownText(msg.content.ifBlank { "(空)" },
-                    Modifier.padding(horizontal = 14.dp, vertical = 10.dp), baseColor = tc)
+            when {
+                // 仅工具调用（无文本回复）
+                hasToolCalls -> {
+                    Text("调用工具中...", Modifier.padding(14.dp, 10.dp),
+                        color = tc, fontSize = 13.sp)
+                }
+                // 工具执行结果
+                isTool -> {
+                    Text(msg.content.ifBlank { "(空)" }, Modifier.padding(14.dp, 10.dp),
+                        color = tc, fontFamily = FontFamily.Monospace, fontSize = 13.sp, lineHeight = 18.sp)
+                }
+                // 普通消息 (user / assistant)
+                else -> {
+                    MarkdownText(msg.content.ifBlank { "(空)" },
+                        Modifier.padding(horizontal = 14.dp, vertical = 10.dp), baseColor = tc)
+                }
             }
         }
         Text(fmtTime(msg.timestamp), fontSize = 10.sp,
