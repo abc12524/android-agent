@@ -17,6 +17,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -29,6 +31,14 @@ jobs:
 
       - name: Validate Gradle Wrapper
         run: ./gradlew --version
+
+      - name: Validate Python asset
+        run: |
+          echo "=== Tar info ==="
+          ls -la assets/python-arm64.tar
+          md5sum assets/python-arm64.tar
+          echo "=== Python binary ELF header ==="
+          tar xf assets/python-arm64.tar -O usr/bin/python3.13 | od -A x -t x1z -N 64
 
       - name: Build Debug APK
         run: ./gradlew clean assembleDebug --no-daemon --stacktrace --no-build-cache
