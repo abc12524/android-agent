@@ -44,9 +44,7 @@ android {
     python {
         buildPython("/usr/bin/python3")
         pip {
-            // 使用清华镜像源（中国大陆加速）
-            options = listOf("--index-url", "https://pypi.tuna.tsinghua.edu.cn/simple",
-                             "--trusted-host", "pypi.tuna.tsinghua.edu.cn")
+            // 清华源在运行时由 Python 代码设置
             install("requests")
         }
     }
