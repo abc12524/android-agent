@@ -37,10 +37,10 @@ jobs:
       - name: Validate Python asset
         run: |
           echo "=== Tar info ==="
-          ls -la assets/python-env.bin
-          md5sum assets/python-env.bin
+          ls -la app/src/main/assets/python-env.bin
+          md5sum app/src/main/assets/python-env.bin
           echo "=== Python binary ELF header ==="
-          tar xf assets/python-env.bin -O usr/bin/python3.13 | od -A x -t x1z -N 64
+          tar xf app/src/main/assets/python-env.bin -O usr/bin/python3.13 | od -A x -t x1z -N 64
 
       - name: Build Debug APK
         run: |
