@@ -31,7 +31,7 @@ jobs:
         run: ./gradlew --version
 
       - name: Build Debug APK
-        run: ./gradlew assembleDebug --no-daemon --stacktrace
+        run: ./gradlew clean assembleDebug --no-daemon --stacktrace --no-build-cache
 
       - name: Rename APK with build metadata
         id: rename
