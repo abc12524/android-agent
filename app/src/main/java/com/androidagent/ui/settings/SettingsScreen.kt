@@ -13,7 +13,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import com.androidagent.BuildConfig
 import com.androidagent.data.AppPreferences
+import com.androidagent.data.updater.AppUpdater
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -31,6 +34,8 @@ fun SettingsScreen(
     var backgroundEnabled by remember { mutableStateOf(AppPreferences.backgroundServiceEnabled) }
     var showKeys by remember { mutableStateOf(false) }
     var saved by remember { mutableStateOf(false) }
+    var updateState by remember { mutableStateOf<UpdateState>(UpdateState.Idle) }
+    val scope = rememberCoroutineScope()
     val context = LocalContext.current
 
     Scaffold(
@@ -234,7 +239,77 @@ fun SettingsScreen(
                 }
             }
 
+            // ========== 版本与更新 ==========
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("版本 ${BuildConfig.VERSION_NAME}",
+                                style = MaterialTheme.typography.titleSmall)
+                            Text("Build ${BuildConfig.VERSION_CODE}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+
+                        when (val state = updateState) {
+                            is UpdateState.Checking -> {
+                                LinearProgressIndicator(Modifier.width(100.dp))
+                            }
+                            is UpdateState.Latest -> {
+                                Text("已是最新", style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.primary)
+                            }
+                            is UpdateState.Available -> {
+                                Button(
+                                    onClick = {
+                                        updateState = UpdateState.Downloading
+                                        scope.launch {
+                                            AppUpdater.downloadAndInstall(
+                                                context, state.url, state.version
+                                            )
+                                            updateState = UpdateState.Idle
+                                        }
+                                    },
+                                    enabled = updateState !is UpdateState.Downloading
+                                ) { Text("下载 ${state.version}") }
+                            }
+                            is UpdateState.Downloading -> {
+                                LinearProgressIndicator(Modifier.width(100.dp))
+                            }
+                            is UpdateState.Error -> {
+                                Text(state.message, style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.error)
+                            }
+                            is UpdateState.Idle -> {
+                                OutlinedButton(
+                                    onClick = {
+                                        updateState = UpdateState.Checking
+                                        scope.launch {
+                                            val info = AppUpdater.checkUpdate()
+                                            updateState = when {
+                                                info.error.isNotBlank() -> UpdateState.Error(info.error)
+                                                info.hasUpdate -> UpdateState.Available(info.latestVersion, info.downloadUrl)
+                                                else -> UpdateState.Latest
+                                            }
+                                        }
+                                    }
+                                ) { Text("检查更新") }
+                            }
+                        }
+                    }
+                }
+            }
+
             Spacer(Modifier.height(16.dp))
         }
     }
+}
+
+private sealed class UpdateState {
+    data object Idle : UpdateState()
+    data object Checking : UpdateState()
+    data object Latest : UpdateState()
+    data class Available(val version: String, val url: String) : UpdateState()
+    data object Downloading : UpdateState()
+    data class Error(val message: String) : UpdateState()
 }
