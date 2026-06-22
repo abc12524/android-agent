@@ -45,7 +45,11 @@ class SCPTool : Tool {
             ),
             "private_key" to mapOf(
                 "type" to "string",
-                "description" to "SSH 私钥内容（PEM 格式）。private_key 和 password 二选一"
+                "description" to "SSH 私钥内容（PEM 格式）。private_key / private_key_path / password 三选一"
+            ),
+            "private_key_path" to mapOf(
+                "type" to "string",
+                "description" to "私钥文件路径（设备上的文件），程序自动读取。private_key / private_key_path / password 三选一"
             ),
             "passphrase" to mapOf(
                 "type" to "string",
@@ -70,20 +74,42 @@ class SCPTool : Tool {
         val username = args["username"] as? String ?: return """{"error": "缺少 username 参数"}"""
         val password = args["password"] as? String
         val privateKey = args["private_key"] as? String
+        val privateKeyPath = args["private_key_path"] as? String
         val passphrase = args["passphrase"] as? String
         val localPath = args["local_path"] as? String ?: return """{"error": "缺少 local_path 参数"}"""
         val remotePath = args["remote_path"] as? String ?: return """{"error": "缺少 remote_path 参数"}"""
 
-        if (password.isNullOrBlank() && privateKey.isNullOrBlank()) {
-            return """{"error": "缺少认证信息，请提供 password 或 private_key"}"""
+        // 解析私钥：优先用 private_key 字符串，否则读 private_key_path 文件
+        val resolvedKey = when {
+            !privateKey.isNullOrBlank() -> privateKey
+            !privateKeyPath.isNullOrBlank() -> try {
+                java.io.File(privateKeyPath).readText()
+            } catch (e: Exception) {
+                return """{"error": "读取私钥文件失败: ${e.message}"}"""
+            }
+            else -> null
+        }
+
+        if (password.isNullOrBlank() && resolvedKey.isNullOrBlank()) {
+            return """{"error": "缺少认证信息，请提供 password、private_key 或 private_key_path"}"""
         }
 
         return try {
             when (action) {
-                "upload" -> scpUpload(host, port, username, password, privateKey, passphrase, localPath, remotePath)
-                "download" -> scpDownload(host, port, username, password, privateKey, passphrase, localPath, remotePath)
+                "upload" -> scpUpload(host, port, username, password, resolvedKey, passphrase, localPath, remotePath)
+                "download" -> scpDownload(host, port, username, password, resolvedKey, passphrase, localPath, remotePath)
                 else -> """{"error": "未知操作: $action，仅支持 upload/download"}"""
             }
+        } catch (e: com.jcraft.jsch.JSchException) {
+            val detail = when {
+                e.message?.contains("Auth fail") == true ->
+                    "认证失败：服务器拒绝了提供的凭据。请检查用户名是否正确，私钥/密码是否匹配"
+                e.message?.contains("PRIVATE KEY") == true ||
+                e.message?.contains("invalid privatekey") == true ->
+                    "私钥格式无效：JSch 仅支持 PEM 格式，不支持 OpenSSH 格式"
+                else -> "SSH 错误: ${e.message}"
+            }
+            """{"error": "SCP 操作失败: $detail"}"""
         } catch (e: Exception) {
             """{"error": "SCP 操作失败: ${e.message}"}"""
         }
@@ -96,7 +122,7 @@ class SCPTool : Tool {
         if (!privateKey.isNullOrBlank()) {
             val passphraseBytes = if (!passphrase.isNullOrBlank()) passphrase.toByteArray() else null
             jsch.addIdentity("scp_key_${host}_$port",
-                privateKey.toByteArray(), null, passphraseBytes)
+                normalizePem(privateKey).toByteArray(), null, passphraseBytes)
         }
         return jsch.getSession(username, host, port).apply {
             if (!password.isNullOrBlank()) setPassword(password)

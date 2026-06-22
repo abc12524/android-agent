@@ -84,8 +84,8 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.google.code.gson:gson:2.10.1")
 
-    // SSH (JSch)
-    implementation("com.jcraft:jsch:0.1.55")
+    // SSH (JSch fork — 支持 OpenSSH 密钥格式和 ED25519)
+    implementation("com.github.mwiede:jsch:2.28.3")
 
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")

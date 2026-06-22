@@ -40,7 +40,11 @@ class SSHTool : Tool {
             ),
             "private_key" to mapOf(
                 "type" to "string",
-                "description" to "SSH 私钥内容（PEM 格式，如 -----BEGIN RSA PRIVATE KEY-----...）。private_key 和 password 二选一"
+                "description" to "SSH 私钥内容（PEM 格式）。private_key / private_key_path / password 三选一"
+            ),
+            "private_key_path" to mapOf(
+                "type" to "string",
+                "description" to "私钥文件路径（设备上的文件），程序自动读取。private_key / private_key_path / password 三选一"
             ),
             "passphrase" to mapOf(
                 "type" to "string",
@@ -60,15 +64,37 @@ class SSHTool : Tool {
         val username = args["username"] as? String ?: return """{"error": "缺少 username 参数"}"""
         val password = args["password"] as? String
         val privateKey = args["private_key"] as? String
+        val privateKeyPath = args["private_key_path"] as? String
         val passphrase = args["passphrase"] as? String
         val command = args["command"] as? String ?: return """{"error": "缺少 command 参数"}"""
 
-        if (password.isNullOrBlank() && privateKey.isNullOrBlank()) {
-            return """{"error": "缺少认证信息，请提供 password 或 private_key"}"""
+        // 解析私钥：优先用 private_key 字符串，否则读 private_key_path 文件
+        val resolvedKey = when {
+            !privateKey.isNullOrBlank() -> privateKey
+            !privateKeyPath.isNullOrBlank() -> try {
+                java.io.File(privateKeyPath).readText()
+            } catch (e: Exception) {
+                return """{"error": "读取私钥文件失败: ${e.message}"}"""
+            }
+            else -> null
+        }
+
+        if (password.isNullOrBlank() && resolvedKey.isNullOrBlank()) {
+            return """{"error": "缺少认证信息，请提供 password、private_key 或 private_key_path"}"""
         }
 
         return try {
-            sshExec(host, port, username, password, privateKey, passphrase, command)
+            sshExec(host, port, username, password, resolvedKey, passphrase, command)
+        } catch (e: com.jcraft.jsch.JSchException) {
+            val detail = when {
+                e.message?.contains("Auth fail") == true ->
+                    "认证失败：服务器拒绝了提供的凭据。请检查用户名是否正确，私钥/密码是否匹配"
+                e.message?.contains("PRIVATE KEY") == true ||
+                e.message?.contains("invalid privatekey") == true ->
+                    "私钥格式无效：JSch 仅支持 PEM 格式（-----BEGIN RSA/EC/DSA PRIVATE KEY-----），不支持 OpenSSH 格式"
+                else -> "SSH 错误: ${e.message}"
+            }
+            """{"error": "$detail"}"""
         } catch (e: Exception) {
             """{"error": "SSH 执行失败: ${e.message}"}"""
         }
@@ -88,7 +114,7 @@ class SSHTool : Tool {
             if (!privateKey.isNullOrBlank()) {
                 val passphraseBytes = if (!passphrase.isNullOrBlank()) passphrase.toByteArray() else null
                 jsch.addIdentity("ssh_key_${host}_$port",
-                    privateKey.toByteArray(), null, passphraseBytes)
+                    normalizePem(privateKey).toByteArray(), null, passphraseBytes)
             }
 
             val sshSession = jsch.getSession(username, host, port).apply {
@@ -130,4 +156,28 @@ class SSHTool : Tool {
             try { session?.disconnect() } catch (_: Exception) {}
         }
     }
+}
+
+/**
+ * 归一化 PEM 私钥文本
+ * 处理 AI 可能传递的各种换行格式
+ */
+internal fun normalizePem(pem: String): String {
+    // 1. 替换字面 \n 为真正换行（AI 可能传 JSON 转义后的字符串）
+    var normalized = pem.replace("\\n", "\n")
+    // 2. 统一换行符
+    normalized = normalized.replace("\r\n", "\n").replace("\r", "\n")
+    // 3. 去掉首尾空白
+    normalized = normalized.trim()
+    // 4. 确保有正确的尾部标记
+    if (!normalized.endsWith("-----END")) {
+        val lastLine = normalized.substringAfterLast("\n")
+        if (lastLine.startsWith("-----END") || lastLine.startsWith("***--end")) {
+            normalized = normalized.substringBeforeLast("\n") + "\n" +
+                lastLine.replace("***--end", "-----END").let {
+                    if (!it.endsWith("-----")) it + "-----" else it
+                }
+        }
+    }
+    return normalized
 }
