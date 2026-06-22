@@ -146,6 +146,7 @@ class ChatEngine(private val context: Context) {
 
                     val toolResult = toolRegistry.executeToolCall(toolName, toolArgs)
 
+                    // DB 保存完整结果
                     val toolEntity = Message(
                         sessionId = sessionId,
                         role = "tool",

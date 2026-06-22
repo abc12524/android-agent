@@ -104,7 +104,7 @@ class NotificationTool : Tool {
         }
 
         val context = AndroidAgentApp.instance
-        val notificationId = (1000..Int.MAX_VALUE).filter { it % 7 == 0 }.first() + (System.currentTimeMillis() % 1000).toInt()
+        val notificationId = nextId++
 
         postNotification(context, title, content, priority, notificationId)
 
