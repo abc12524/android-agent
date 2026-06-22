@@ -6,6 +6,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.History
@@ -103,8 +104,10 @@ fun ChatScreen(
                 if (state.messages.isEmpty() && !state.isLoading) {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("Android Agent", fontSize = 28.sp, fontWeight = FontWeight.Light,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f))
+                            SelectionContainer {
+                                Text("Android Agent", fontSize = 28.sp, fontWeight = FontWeight.Light,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f))
+                            }
                             Spacer(Modifier.height(6.dp))
                             Text("开始一段新对话", fontSize = 14.sp,
                                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f))
@@ -123,7 +126,7 @@ fun ChatScreen(
                             !(msg.role == "user" && msg.content.startsWith("系统提示："))
                         }
                         items(displayMessages, key = { it.id }) { msg ->
-                            MessageBubble(msg)
+                            SelectionContainer { MessageBubble(msg) }
                         }
                         // 底部 token 统计
                         if (state.lastUsage != null) {
