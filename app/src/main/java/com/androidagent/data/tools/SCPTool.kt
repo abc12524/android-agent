@@ -9,7 +9,7 @@ import java.io.FileInputStream
 /**
  * SCP 文件传输工具
  * AI 通过此工具向 SSH 服务器上传/下载文件。
- * 所有连接参数由 AI 调用时直接传入。
+ * 所有连接参数由 AI 调用时直接传入。支持密码认证和私钥认证。
  */
 class SCPTool : Tool {
 
@@ -17,7 +17,7 @@ class SCPTool : Tool {
 
     override val description: String =
         "通过 SCP 向远程服务器传输文件。支持上传（本地→服务器）和下载（服务器→本地）。" +
-        "需提供 host/port/username/password 连接参数。"
+        "需提供 host/port/username，以及 password 或 private_key 连接参数。"
 
     override val parameters: Map<String, Any> = mapOf(
         "type" to "object",
@@ -41,7 +41,15 @@ class SCPTool : Tool {
             ),
             "password" to mapOf(
                 "type" to "string",
-                "description" to "SSH 密码（必填）"
+                "description" to "SSH 密码（private_key 和 password 二选一）"
+            ),
+            "private_key" to mapOf(
+                "type" to "string",
+                "description" to "SSH 私钥内容（PEM 格式）。private_key 和 password 二选一"
+            ),
+            "passphrase" to mapOf(
+                "type" to "string",
+                "description" to "私钥的密码短语（仅 private_key 加密时需要，可选）"
             ),
             "local_path" to mapOf(
                 "type" to "string",
@@ -52,7 +60,7 @@ class SCPTool : Tool {
                 "description" to "远程路径（upload=目标，download=源文件）"
             )
         ),
-        "required" to listOf("action", "host", "port", "username", "password", "local_path", "remote_path")
+        "required" to listOf("action", "host", "port", "username", "local_path", "remote_path")
     )
 
     override suspend fun execute(args: Map<String, Any>): String {
@@ -60,14 +68,20 @@ class SCPTool : Tool {
         val host = args["host"] as? String ?: return """{"error": "缺少 host 参数"}"""
         val port = (args["port"] as? Double)?.toInt() ?: (args["port"] as? String)?.toIntOrNull() ?: return """{"error": "缺少 port 参数"}"""
         val username = args["username"] as? String ?: return """{"error": "缺少 username 参数"}"""
-        val password = args["password"] as? String ?: return """{"error": "缺少 password 参数"}"""
+        val password = args["password"] as? String
+        val privateKey = args["private_key"] as? String
+        val passphrase = args["passphrase"] as? String
         val localPath = args["local_path"] as? String ?: return """{"error": "缺少 local_path 参数"}"""
         val remotePath = args["remote_path"] as? String ?: return """{"error": "缺少 remote_path 参数"}"""
 
+        if (password.isNullOrBlank() && privateKey.isNullOrBlank()) {
+            return """{"error": "缺少认证信息，请提供 password 或 private_key"}"""
+        }
+
         return try {
             when (action) {
-                "upload" -> scpUpload(host, port, username, password, localPath, remotePath)
-                "download" -> scpDownload(host, port, username, password, localPath, remotePath)
+                "upload" -> scpUpload(host, port, username, password, privateKey, passphrase, localPath, remotePath)
+                "download" -> scpDownload(host, port, username, password, privateKey, passphrase, localPath, remotePath)
                 else -> """{"error": "未知操作: $action，仅支持 upload/download"}"""
             }
         } catch (e: Exception) {
@@ -75,8 +89,25 @@ class SCPTool : Tool {
         }
     }
 
-    private suspend fun scpUpload(host: String, port: Int, username: String, password: String,
-                                   localPath: String, remotePath: String): String = withContext(Dispatchers.IO) {
+    /** 创建 SSH 会话（共用） */
+    private fun createSession(host: String, port: Int, username: String,
+                              password: String?, privateKey: String?, passphrase: String?): Session {
+        val jsch = JSch()
+        if (!privateKey.isNullOrBlank()) {
+            val passphraseBytes = if (!passphrase.isNullOrBlank()) passphrase.toByteArray() else null
+            jsch.addIdentity("scp_key_${host}_$port",
+                privateKey.toByteArray(), null, passphraseBytes)
+        }
+        return jsch.getSession(username, host, port).apply {
+            if (!password.isNullOrBlank()) setPassword(password)
+            setConfig("StrictHostKeyChecking", "no")
+            connect(10000)
+        }
+    }
+
+    private suspend fun scpUpload(host: String, port: Int, username: String,
+                                  password: String?, privateKey: String?, passphrase: String?,
+                                  localPath: String, remotePath: String): String = withContext(Dispatchers.IO) {
         var session: Session? = null
         var channel: ChannelExec? = null
 
@@ -84,12 +115,7 @@ class SCPTool : Tool {
             val localFile = File(localPath)
             if (!localFile.exists()) return@withContext """{"error": "本地文件不存在: $localPath"}"""
 
-            val jsch = JSch()
-            session = jsch.getSession(username, host, port).apply {
-                setPassword(password)
-                setConfig("StrictHostKeyChecking", "no")
-                connect(10000)
-            }
+            session = createSession(host, port, username, password, privateKey, passphrase)
 
             channel = session.openChannel("exec") as ChannelExec
             channel.setCommand("scp -p -d -t $remotePath")
@@ -117,18 +143,14 @@ class SCPTool : Tool {
         }
     }
 
-    private suspend fun scpDownload(host: String, port: Int, username: String, password: String,
-                                     localPath: String, remotePath: String): String = withContext(Dispatchers.IO) {
+    private suspend fun scpDownload(host: String, port: Int, username: String,
+                                    password: String?, privateKey: String?, passphrase: String?,
+                                    localPath: String, remotePath: String): String = withContext(Dispatchers.IO) {
         var session: Session? = null
         var channel: ChannelExec? = null
 
         try {
-            val jsch = JSch()
-            session = jsch.getSession(username, host, port).apply {
-                setPassword(password)
-                setConfig("StrictHostKeyChecking", "no")
-                connect(10000)
-            }
+            session = createSession(host, port, username, password, privateKey, passphrase)
 
             channel = session.openChannel("exec") as ChannelExec
             channel.setCommand("scp -f $remotePath")

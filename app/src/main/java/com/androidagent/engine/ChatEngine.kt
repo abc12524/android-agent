@@ -52,27 +52,22 @@ class ChatEngine(private val context: Context) {
         try {
             val allNewMessages = mutableListOf<Message>()
 
-            // 1. 加载历史消息（超时后只保留 system prompt）
-            val timeoutMs = AppPreferences.sessionTimeoutMinutes * 60 * 1000L
-            val session = db.sessionDao().getSession(sessionId)
-            val isExpired = session != null && (System.currentTimeMillis() - session.createdAt) > timeoutMs
-            val history = if (isExpired) {
-                db.messageDao().getMessagesBySessionSync(sessionId).filter { it.role == "system" }
-            } else {
-                db.messageDao().getMessagesBySessionSync(sessionId)
-            }
+            // 1. 加载历史消息（同一会话内始终保留全部记忆，不设超时）
+            val history = db.messageDao().getMessagesBySessionSync(sessionId)
             val messages = history.map { it.toApiMessage() }.toMutableList()
 
-            // 2. 搜索 OpenViking 记忆，以"系统提示"用户消息注入
-            val ovContext = openViking.loadContext(userMessage)
-            if (ovContext.isNotBlank()) {
-                val ovMsg = "系统提示：\n$ovContext"
-                // 注入到 API 调用
-                messages.add(DeepSeekClient.ChatMessage(role = "user", content = ovMsg))
-                // 保存到 DB（后续历史对话包含 OV 记忆）
-                val ovEntity = Message(sessionId = sessionId, role = "user", content = ovMsg)
-                insertedIds.add(db.messageDao().insert(ovEntity))
-                allNewMessages.add(ovEntity)
+            // 2. 搜索 OpenViking 记忆（仅在显示条数 >0 时注入）
+            if (AppPreferences.ovSearchDisplayCount > 0) {
+                val ovContext = openViking.loadContext(userMessage)
+                if (ovContext.isNotBlank()) {
+                    val ovMsg = "系统提示：\n$ovContext"
+                    // 注入到 API 调用
+                    messages.add(DeepSeekClient.ChatMessage(role = "user", content = ovMsg))
+                    // 保存到 DB（后续历史对话包含 OV 记忆）
+                    val ovEntity = Message(sessionId = sessionId, role = "user", content = ovMsg)
+                    insertedIds.add(db.messageDao().insert(ovEntity))
+                    allNewMessages.add(ovEntity)
+                }
             }
 
             // 3. 添加用户消息
@@ -215,14 +210,6 @@ class ChatEngine(private val context: Context) {
 
         val systemMsg = """
             你是 Android Agent，一个运行在 Android 设备上的 AI 助手。
-            你有以下能力：
-            1. 获取 Android 设备系统信息
-            2. 执行 Android Shell 命令
-            3. 搜索百度互联网信息
-            4. 通过 OpenViking 管理长期记忆
-            5. 通过 SSH 连接远程服务器执行命令（ssh_execute）
-            6. 通过 SCP 向远程服务器上传下载文件（ssh_scp）
-            7. 在本地运行 Python 代码，支持 pip 安装包（execute_python）
             请用中文回答用户的问题。
         """.trimIndent()
 

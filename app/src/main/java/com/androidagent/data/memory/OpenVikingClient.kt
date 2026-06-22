@@ -78,8 +78,9 @@ class OpenVikingClient {
 
     // ========== 语义搜索 ==========
     suspend fun search(query: String, limit: Int = 5): String {
+        val threshold = AppPreferences.ovScoreThreshold
         val result = post("/api/v1/search/search", mapOf(
-            "query" to query, "score_threshold" to 0.30, "limit" to limit
+            "query" to query, "score_threshold" to threshold, "limit" to limit
         ))
         return result.fold(
             onSuccess = { body ->
@@ -235,15 +236,18 @@ class OpenVikingClient {
 
     /** 加载相关记忆作为上下文 */
     suspend fun loadContext(query: String): String {
+        val threshold = AppPreferences.ovScoreThreshold
+        val displayCount = AppPreferences.ovSearchDisplayCount
+        if (displayCount <= 0) return ""
         val result = post("/api/v1/search/search", mapOf(
-            "query" to query, "score_threshold" to 0.30, "limit" to 3
+            "query" to query, "score_threshold" to threshold, "limit" to displayCount
         ))
         return result.fold(
             onSuccess = { body ->
                 try {
                     val json = JsonParser.parseString(body).asJsonObject
                     val mems = json.getAsJsonObject("result")?.getAsJsonArray("memories") ?: return@fold ""
-                    val hits = mems.take(3)
+                    val hits = mems.take(displayCount)
                     if (hits.isEmpty()) return@fold ""
                     hits.joinToString("\n") { h ->
                         val obj = h.asJsonObject

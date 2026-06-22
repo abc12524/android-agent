@@ -5,6 +5,8 @@
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
 
     <application
         android:name=".AndroidAgentApp"
@@ -25,5 +27,19 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <receiver
+            android:name=".NotificationReceiver"
+            android:exported="true"
+            android:enabled="true">
+            <intent-filter>
+                <action android:name="com.androidagent.action.SHOW_NOTIFICATION" />
+            </intent-filter>
+        </receiver>
+
+        <service
+            android:name=".ForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse" />
     </application>
 </manifest>

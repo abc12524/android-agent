@@ -50,6 +50,7 @@ class ToolRegistry(context: Context) {
         register(SSHTool())
         register(SCPTool())
         register(PythonTool())
+        register(NotificationTool())
     }
 
     fun register(tool: Tool) {
