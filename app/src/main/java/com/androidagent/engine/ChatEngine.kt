@@ -125,7 +125,9 @@ class ChatEngine(private val context: Context) {
                     reasoningContent = reasoning,
                     toolCalls = toolCallsJson,
                     promptTokens = usage?.promptTokens ?: 0,
-                    completionTokens = usage?.completionTokens ?: 0
+                    completionTokens = usage?.completionTokens ?: 0,
+                    promptCacheHitTokens = usage?.promptCacheHitTokens ?: 0,
+                    promptCacheMissTokens = usage?.promptCacheMissTokens ?: 0
                 )
                 val msgId = db.messageDao().insert(assistantEntity)
                 insertedIds.add(msgId)

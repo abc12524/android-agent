@@ -109,6 +109,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
                 val todayPrompt = db.messageDao().getPromptTokensSince(currentSessionId, todayStart)
                 val todayCompletion = db.messageDao().getCompletionTokensSince(currentSessionId, todayStart)
+                val todayHit = db.messageDao().getCacheHitSince(currentSessionId, todayStart)
+                val todayMiss = db.messageDao().getCacheMissSince(currentSessionId, todayStart)
 
                 uiState = uiState.copy(
                     messages = messages,
@@ -118,7 +120,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     cacheHitTokens = session?.totalCacheHitTokens ?: 0,
                     cacheMissTokens = session?.totalCacheMissTokens ?: 0,
                     todayPromptTokens = todayPrompt,
-                    todayCompletionTokens = todayCompletion
+                    todayCompletionTokens = todayCompletion,
+                    todayCacheHit = todayHit,
+                    todayCacheMiss = todayMiss
                 )
             }
         }
@@ -135,9 +139,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                         uiState = uiState.copy(
                             isLoading = false,
                             error = null,
-                            lastUsage = chatResult.usage,
-                            todayCacheHit = uiState.todayCacheHit + (chatResult.usage?.promptCacheHitTokens ?: 0),
-                            todayCacheMiss = uiState.todayCacheMiss + (chatResult.usage?.promptCacheMissTokens ?: 0)
+                            lastUsage = chatResult.usage
                         )
                         // 每次发送后刷新余额
                         refreshBalance()

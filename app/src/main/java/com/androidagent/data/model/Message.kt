@@ -21,5 +21,7 @@ data class Message(
     val reasoningContent: String? = null, // DeepSeek 推理内容
     val toolCalls: String? = null,    // assistant 消息的 tool_calls (JSON)
     val promptTokens: Int = 0,
-    val completionTokens: Int = 0
+    val completionTokens: Int = 0,
+    val promptCacheHitTokens: Int = 0,
+    val promptCacheMissTokens: Int = 0
 )

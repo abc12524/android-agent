@@ -30,4 +30,10 @@ interface MessageDao {
 
     @Query("SELECT COALESCE(SUM(completionTokens), 0) FROM messages WHERE sessionId = :sessionId AND timestamp >= :since AND completionTokens > 0")
     suspend fun getCompletionTokensSince(sessionId: String, since: Long): Int
+
+    @Query("SELECT COALESCE(SUM(promptCacheHitTokens), 0) FROM messages WHERE sessionId = :sessionId AND timestamp >= :since AND promptCacheHitTokens > 0")
+    suspend fun getCacheHitSince(sessionId: String, since: Long): Int
+
+    @Query("SELECT COALESCE(SUM(promptCacheMissTokens), 0) FROM messages WHERE sessionId = :sessionId AND timestamp >= :since AND promptCacheMissTokens > 0")
+    suspend fun getCacheMissSince(sessionId: String, since: Long): Int
 }
