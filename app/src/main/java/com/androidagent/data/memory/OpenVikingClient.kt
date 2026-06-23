@@ -40,7 +40,9 @@ class OpenVikingClient {
     }
 
     private fun buildRequest(method: String, path: String, body: String? = null): Request {
-        val url = "${getBaseUrl()}$path"
+        val baseUrl = getBaseUrl()
+        if (baseUrl.isBlank()) throw IOException("请在设置中配置 OpenViking 服务器地址")
+        val url = "$baseUrl$path"
         val builder = Request.Builder().url(url)
         getHeaders().forEach { (k, v) -> builder.addHeader(k, v) }
 
