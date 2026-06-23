@@ -131,7 +131,7 @@ fun ChatScreen(
                         // 底部 token 统计
                         if (state.lastUsage != null) {
                             item(key = "token_footer") {
-                                TokenFooter(state.lastUsage!!, state.promptTokens, state.completionTokens)
+                            TokenFooter(state.lastUsage!!, state.todayPromptTokens, state.todayCompletionTokens, state.balance)
                             }
                         }
                     }
@@ -172,7 +172,7 @@ fun ChatScreen(
 // ==================== Token 统计底部 ====================
 
 @Composable
-private fun TokenFooter(usage: DeepSeekClient.Usage, totalIn: Int, totalOut: Int) {
+private fun TokenFooter(usage: DeepSeekClient.Usage, todayIn: Int, todayOut: Int, balance: String) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(8.dp),
@@ -188,8 +188,12 @@ private fun TokenFooter(usage: DeepSeekClient.Usage, totalIn: Int, totalOut: Int
                 Text("  缓存命中: ${usage.promptCacheHitTokens}  |  缓存未命中: ${usage.promptCacheMissTokens}",
                     fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
             }
-            Text("  会话累计: 输入 $totalIn  |  输出 $totalOut",
+            Text("  今日累计: 输入 $todayIn  |  输出 $todayOut",
                 fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
+            if (balance.isNotBlank()) {
+                Text("  当前余额: $balance",
+                    fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
+            }
         }
     }
 }

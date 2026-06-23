@@ -30,4 +30,7 @@ interface SessionDao {
 
     @Query("UPDATE sessions SET totalPromptTokens = totalPromptTokens + :prompt, totalCompletionTokens = totalCompletionTokens + :completion WHERE id = :id")
     suspend fun addTokens(id: String, prompt: Int, completion: Int)
+
+    @Query("UPDATE sessions SET totalCacheHitTokens = totalCacheHitTokens + :hit, totalCacheMissTokens = totalCacheMissTokens + :miss WHERE id = :id")
+    suspend fun addCacheTokens(id: String, hit: Int, miss: Int)
 }

@@ -24,4 +24,10 @@ interface MessageDao {
 
     @Query("DELETE FROM messages WHERE sessionId = :sessionId")
     suspend fun deleteBySession(sessionId: String)
+
+    @Query("SELECT COALESCE(SUM(promptTokens), 0) FROM messages WHERE sessionId = :sessionId AND timestamp >= :since AND promptTokens > 0")
+    suspend fun getPromptTokensSince(sessionId: String, since: Long): Int
+
+    @Query("SELECT COALESCE(SUM(completionTokens), 0) FROM messages WHERE sessionId = :sessionId AND timestamp >= :since AND completionTokens > 0")
+    suspend fun getCompletionTokensSince(sessionId: String, since: Long): Int
 }

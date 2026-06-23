@@ -178,4 +178,37 @@ class DeepSeekClient {
             Result.failure(Exception("请求失败: ${e.message}"))
         }
     }
+
+    /**
+     * 查询账户余额
+     */
+    suspend fun checkBalance(): Result<String> = withContext(Dispatchers.IO) {
+        val apiKey = AppPreferences.deepSeekApiKey
+        if (apiKey.isBlank()) {
+            return@withContext Result.failure(Exception("请先配置 DeepSeek API Key"))
+        }
+        try {
+            val request = Request.Builder()
+                .url("https://api.deepseek.com/user/balance")
+                .addHeader("Accept", "application/json")
+                .addHeader("Authorization", "Bearer $apiKey")
+                .get()
+                .build()
+
+            val response = client.newCall(request).execute()
+            val body = response.body?.string() ?: ""
+            if (!response.isSuccessful) {
+                return@withContext Result.failure(Exception("余额查询失败 (${response.code}): $body"))
+            }
+
+            val json = JsonParser.parseString(body).asJsonObject
+            val isAvailable = json.get("is_available")?.asBoolean ?: false
+            val balanceInfos = json.getAsJsonArray("balance_infos")
+            val totalBalance = balanceInfos?.firstOrNull()?.asJsonObject?.get("total_balance")?.asString ?: "?"
+
+            Result.success("¥${totalBalance}")
+        } catch (e: Exception) {
+            Result.failure(Exception("余额查询失败: ${e.message}"))
+        }
+    }
 }

@@ -110,6 +110,7 @@ class ChatEngine(private val context: Context) {
                 if (usage != null) {
                     finalUsage = usage
                     db.sessionDao().addTokens(sessionId, usage.promptTokens, usage.completionTokens)
+                    db.sessionDao().addCacheTokens(sessionId, usage.promptCacheHitTokens, usage.promptCacheMissTokens)
                 }
 
                 // 保存 assistant 消息
@@ -310,4 +311,7 @@ class ChatEngine(private val context: Context) {
             )
         }
     }
+
+    /** 查询 DeepSeek 余额 */
+    suspend fun checkBalance(): Result<String> = deepSeek.checkBalance()
 }

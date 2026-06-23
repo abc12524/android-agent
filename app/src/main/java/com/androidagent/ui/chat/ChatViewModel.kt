@@ -21,10 +21,11 @@ data class ChatUiState(
     val isLoading: Boolean = false,
     val error: String? = null,
     val sessionTitle: String = "新对话",
-    val promptTokens: Int = 0,
-    val completionTokens: Int = 0,
+    val todayPromptTokens: Int = 0,
+    val todayCompletionTokens: Int = 0,
     val lastUsage: DeepSeekClient.Usage? = null,
-    val allSessions: List<ChatSession> = emptyList()
+    val allSessions: List<ChatSession> = emptyList(),
+    val balance: String = ""
 )
 
 class ChatViewModel(application: Application) : AndroidViewModel(application) {
@@ -46,6 +47,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 uiState = uiState.copy(allSessions = sessions)
             }
         }
+        // 初始加载余额
+        refreshBalance()
     }
 
     fun initSession(sessionId: String) {
@@ -89,11 +92,23 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         loadJob = viewModelScope.launch {
             db.messageDao().getMessagesBySession(currentSessionId).collect { messages ->
                 val session = db.sessionDao().getSession(currentSessionId)
+
+                // 计算 UTC+8 今日凌晨时间戳
+                val cal = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("Asia/Shanghai"))
+                cal.set(java.util.Calendar.HOUR_OF_DAY, 0)
+                cal.set(java.util.Calendar.MINUTE, 0)
+                cal.set(java.util.Calendar.SECOND, 0)
+                cal.set(java.util.Calendar.MILLISECOND, 0)
+                val todayStart = cal.timeInMillis
+
+                val todayPrompt = db.messageDao().getPromptTokensSince(currentSessionId, todayStart)
+                val todayCompletion = db.messageDao().getCompletionTokensSince(currentSessionId, todayStart)
+
                 uiState = uiState.copy(
                     messages = messages,
                     sessionTitle = session?.title ?: "新对话",
-                    promptTokens = session?.totalPromptTokens ?: 0,
-                    completionTokens = session?.totalCompletionTokens ?: 0
+                    todayPromptTokens = todayPrompt,
+                    todayCompletionTokens = todayCompletion
                 )
             }
         }
@@ -112,6 +127,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                             error = null,
                             lastUsage = chatResult.usage
                         )
+                        // 每次发送后刷新余额
+                        refreshBalance()
                     },
                     onFailure = { e ->
                         uiState = uiState.copy(isLoading = false, error = e.message ?: "未知错误")
@@ -128,4 +145,14 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun getSessionId(): String = currentSessionId
+
+    /** 刷新 DeepSeek 余额 */
+    fun refreshBalance() {
+        viewModelScope.launch {
+            val result = engine.checkBalance()
+            uiState = uiState.copy(
+                balance = result.getOrNull() ?: ""
+            )
+        }
+    }
 }
