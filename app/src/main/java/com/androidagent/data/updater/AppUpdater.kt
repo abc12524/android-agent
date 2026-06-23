@@ -5,8 +5,6 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.os.Build
-import android.os.Environment
 import androidx.core.app.NotificationCompat
 import androidx.core.content.FileProvider
 import com.androidagent.BuildConfig
@@ -114,7 +112,7 @@ object AppUpdater {
             val body = response.body ?: throw Exception("下载响应为空")
 
             val totalBytes = body.contentLength()
-            val downloadDir = File(context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "updates")
+            val downloadDir = File(context.getExternalFilesDir(null), "updates")
             downloadDir.mkdirs()
             val apkFile = File(downloadDir, APK_FILENAME)
 
