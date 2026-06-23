@@ -77,7 +77,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         if (sessionId == currentSessionId || uiState.isLoading) return
         currentSessionId = sessionId
         isSessionReady = true
-        uiState = ChatUiState(allSessions = uiState.allSessions)
+        uiState = uiState.copy(messages = emptyList(), error = null)
         loadMessages()
     }
 
@@ -88,7 +88,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             val newId = engine.createSession()
             currentSessionId = newId
             isSessionReady = true
-            uiState = ChatUiState(allSessions = uiState.allSessions)
+            uiState = uiState.copy(messages = emptyList())
             loadMessages()
         }
     }
@@ -107,10 +107,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 cal.set(java.util.Calendar.MILLISECOND, 0)
                 val todayStart = cal.timeInMillis
 
-                val todayPrompt = db.messageDao().getPromptTokensSince(currentSessionId, todayStart)
-                val todayCompletion = db.messageDao().getCompletionTokensSince(currentSessionId, todayStart)
-                val todayHit = db.messageDao().getCacheHitSince(currentSessionId, todayStart)
-                val todayMiss = db.messageDao().getCacheMissSince(currentSessionId, todayStart)
+                val todayPrompt = db.messageDao().getAllPromptTokensSince(todayStart)
+                val todayCompletion = db.messageDao().getAllCompletionTokensSince(todayStart)
+                val todayHit = db.messageDao().getAllCacheHitSince(todayStart)
+                val todayMiss = db.messageDao().getAllCacheMissSince(todayStart)
 
                 uiState = uiState.copy(
                     messages = messages,
@@ -122,7 +122,16 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     todayPromptTokens = todayPrompt,
                     todayCompletionTokens = todayCompletion,
                     todayCacheHit = todayHit,
-                    todayCacheMiss = todayMiss
+                    todayCacheMiss = todayMiss,
+                    lastUsage = messages.lastOrNull { it.role == "assistant" && it.promptTokens > 0 }?.let {
+                        DeepSeekClient.Usage(
+                            promptTokens = it.promptTokens,
+                            completionTokens = it.completionTokens,
+                            totalTokens = it.promptTokens + it.completionTokens,
+                            promptCacheHitTokens = it.promptCacheHitTokens,
+                            promptCacheMissTokens = it.promptCacheMissTokens
+                        )
+                    }
                 )
             }
         }
