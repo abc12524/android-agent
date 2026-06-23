@@ -131,7 +131,7 @@ fun ChatScreen(
                         // 底部 token 统计
                         if (state.lastUsage != null) {
                             item(key = "token_footer") {
-                            TokenFooter(state.lastUsage!!, state.todayPromptTokens, state.todayCompletionTokens, state.balance)
+                            TokenFooter(state.lastUsage!!, state.promptTokens, state.completionTokens, state.cacheHitTokens, state.cacheMissTokens, state.todayPromptTokens, state.todayCompletionTokens, state.todayCacheHit, state.todayCacheMiss, state.balance)
                             }
                         }
                     }
@@ -172,7 +172,15 @@ fun ChatScreen(
 // ==================== Token 统计底部 ====================
 
 @Composable
-private fun TokenFooter(usage: DeepSeekClient.Usage, todayIn: Int, todayOut: Int, balance: String) {
+private fun TokenFooter(usage: DeepSeekClient.Usage, sessionIn: Int, sessionOut: Int,
+                        cacheHit: Int, cacheMiss: Int, todayIn: Int, todayOut: Int,
+                        todayCacheHit: Int, todayCacheMiss: Int, balance: String) {
+    fun hitRate(hit: Int, miss: Int): String {
+        val total = hit + miss
+        if (total == 0) return "0%"
+        return "${(hit * 100 / total)}%"
+    }
+
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(8.dp),
@@ -182,16 +190,16 @@ private fun TokenFooter(usage: DeepSeekClient.Usage, todayIn: Int, todayOut: Int
             Text("📊 Token 消耗", fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.height(4.dp))
-            Text("  输入: ${usage.promptTokens}  |  输出: ${usage.completionTokens}  |  总计: ${usage.totalTokens}",
+            val reqHit = usage.promptCacheHitTokens
+            val reqMiss = usage.promptCacheMissTokens
+            Text("  当前 token：${usage.totalTokens}  hit：$reqHit  |  命中率 ${hitRate(reqHit, reqMiss)}",
                 fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
-            if (usage.promptCacheHitTokens > 0 || usage.promptCacheMissTokens > 0) {
-                Text("  缓存命中: ${usage.promptCacheHitTokens}  |  缓存未命中: ${usage.promptCacheMissTokens}",
-                    fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
-            }
-            Text("  今日累计: 输入 $todayIn  |  输出 $todayOut",
+            Text("  会话 token：${sessionIn + sessionOut}  hit：$cacheHit  |  命中率 ${hitRate(cacheHit, cacheMiss)}",
+                fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
+            Text("  今日累计 token：${todayIn + todayOut}  hit：$todayCacheHit  |  命中率 ${hitRate(todayCacheHit, todayCacheMiss)}",
                 fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
             if (balance.isNotBlank()) {
-                Text("  当前余额: $balance",
+                Text("  当前余额：$balance",
                     fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
             }
         }

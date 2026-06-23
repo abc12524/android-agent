@@ -21,8 +21,14 @@ data class ChatUiState(
     val isLoading: Boolean = false,
     val error: String? = null,
     val sessionTitle: String = "新对话",
+    val promptTokens: Int = 0,
+    val completionTokens: Int = 0,
+    val cacheHitTokens: Int = 0,
+    val cacheMissTokens: Int = 0,
     val todayPromptTokens: Int = 0,
     val todayCompletionTokens: Int = 0,
+    val todayCacheHit: Int = 0,
+    val todayCacheMiss: Int = 0,
     val lastUsage: DeepSeekClient.Usage? = null,
     val allSessions: List<ChatSession> = emptyList(),
     val balance: String = ""
@@ -107,6 +113,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 uiState = uiState.copy(
                     messages = messages,
                     sessionTitle = session?.title ?: "新对话",
+                    promptTokens = session?.totalPromptTokens ?: 0,
+                    completionTokens = session?.totalCompletionTokens ?: 0,
+                    cacheHitTokens = session?.totalCacheHitTokens ?: 0,
+                    cacheMissTokens = session?.totalCacheMissTokens ?: 0,
                     todayPromptTokens = todayPrompt,
                     todayCompletionTokens = todayCompletion
                 )
@@ -125,7 +135,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                         uiState = uiState.copy(
                             isLoading = false,
                             error = null,
-                            lastUsage = chatResult.usage
+                            lastUsage = chatResult.usage,
+                            todayCacheHit = uiState.todayCacheHit + (chatResult.usage?.promptCacheHitTokens ?: 0),
+                            todayCacheMiss = uiState.todayCacheMiss + (chatResult.usage?.promptCacheMissTokens ?: 0)
                         )
                         // 每次发送后刷新余额
                         refreshBalance()
