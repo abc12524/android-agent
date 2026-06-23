@@ -218,3 +218,27 @@ class OpenVikingCommitSessionTool(private val ov: OpenVikingClient) : Tool {
         return ov.commitSession(sessionId, keepRecent)
     }
 }
+
+/**
+ * OpenViking 删除文件工具
+ */
+class OpenVikingDeleteFileTool(private val ov: OpenVikingClient) : Tool {
+
+    override val name: String = "openviking_delete_file"
+
+    override val description: String =
+        "通过 URI 删除 OpenViking 记忆中的文件。注意：此操作不可撤销！"
+
+    override val parameters: Map<String, Any> = mapOf(
+        "type" to "object",
+        "properties" to mapOf(
+            "uri" to mapOf("type" to "string", "description" to "要删除的文件 URI")
+        ),
+        "required" to listOf("uri")
+    )
+
+    override suspend fun execute(args: Map<String, Any>): String {
+        val uri = args["uri"] as? String ?: return "{\"error\": \"缺少 uri 参数\"}"
+        return ov.deleteFile(uri)
+    }
+}

@@ -47,6 +47,7 @@ class OpenVikingClient {
         return when (method) {
             "GET" -> builder.get().build()
             "POST" -> builder.post(body?.toRequestBody(jsonMediaType) ?: "{}".toRequestBody(jsonMediaType)).build()
+            "DELETE" -> builder.delete().build()
             else -> builder.get().build()
         }
     }
@@ -54,6 +55,18 @@ class OpenVikingClient {
     private suspend fun get(path: String): Result<String> = withContext(Dispatchers.IO) {
         try {
             val request = buildRequest("GET", path)
+            val response = client.newCall(request).execute()
+            val body = response.body?.string() ?: ""
+            if (response.isSuccessful) Result.success(body)
+            else Result.failure(Exception("HTTP ${response.code}: $body"))
+        } catch (e: IOException) {
+            Result.failure(Exception("网络错误: ${e.message}"))
+        }
+    }
+
+    private suspend fun delete(path: String): Result<String> = withContext(Dispatchers.IO) {
+        try {
+            val request = buildRequest("DELETE", path)
             val response = client.newCall(request).execute()
             val body = response.body?.string() ?: ""
             if (response.isSuccessful) Result.success(body)
@@ -164,6 +177,15 @@ class OpenVikingClient {
                     json.get("content")?.asString ?: body
                 } catch (e: Exception) { body }
             },
+            onFailure = { "{\"error\": \"${it.message}\"}" }
+        )
+    }
+
+    // ========== 删除文件 ==========
+    suspend fun deleteFile(uri: String): String {
+        val result = delete("/api/v1/fs?uri=${java.net.URLEncoder.encode(uri, "UTF-8")}")
+        return result.fold(
+            onSuccess = { """{"success":true,"uri":"$uri"}""" },
             onFailure = { "{\"error\": \"${it.message}\"}" }
         )
     }
