@@ -9,6 +9,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Settings
@@ -17,19 +18,28 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import android.net.Uri
+import android.provider.OpenableColumns
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import com.androidagent.data.api.DeepSeekClient
 import com.androidagent.data.model.ChatSession
 import com.androidagent.data.model.Message
 import com.androidagent.ui.theme.*
+import java.io.File
+import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.*
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -46,6 +56,22 @@ fun ChatScreen(
     val state = viewModel.uiState
     var inputText by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
+    val context = LocalContext.current
+
+    val filePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        uri?.let {
+            scope.launch(Dispatchers.IO) {
+                val info = saveFileToAppDir(context, it)
+                withContext(Dispatchers.Main) {
+                    if (info != null) {
+                        inputText = "读取文件：${info.first}（已保存到应用目录）"
+                    }
+                }
+            }
+        }
+    }
 
     LaunchedEffect(state.messages.size) {
         if (state.messages.isNotEmpty() && !state.isLoading) {
@@ -86,6 +112,13 @@ fun ChatScreen(
                     Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
+                        IconButton(
+                            onClick = { filePickerLauncher.launch(arrayOf("*/*")) },
+                            enabled = !state.isLoading
+                        ) {
+                            Icon(Icons.Default.AttachFile, contentDescription = "选择文件")
+                        }
+                        Spacer(Modifier.width(4.dp))
                         OutlinedTextField(value = inputText, onValueChange = { inputText = it },
                             modifier = Modifier.weight(1f), placeholder = { Text("输入消息...") },
                             shape = RoundedCornerShape(24.dp), maxLines = 4,
@@ -396,4 +429,59 @@ private fun groupSessions(all: List<ChatSession>): List<SG> {
     if (w.isNotEmpty()) r.add(SG("本周", w))
     if (e.isNotEmpty()) r.add(SG("更早", e))
     return r
+}
+
+/**
+ * 将用户选择的文件保存到应用内部存储的 agent_files/ 目录
+ * @return Pair(原始文件名, 完整路径) 或 null（失败时）
+ */
+private suspend fun saveFileToAppDir(context: android.content.Context, uri: Uri): Pair<String, String>? {
+    return withContext(Dispatchers.IO) {
+        try {
+            val contentResolver = context.contentResolver
+
+            // 获取文件名
+            val fileName = contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                cursor.moveToFirst()
+                cursor.getString(nameIndex)
+            } ?: "unknown_${System.currentTimeMillis()}"
+
+            // 创建 agent_files 目录
+            val targetDir = File(context.filesDir, "agent_files")
+            targetDir.mkdirs()
+
+            // 写文件，自动处理重名
+            val targetFile = resolveDuplicate(targetDir, fileName)
+
+            contentResolver.openInputStream(uri)?.use { input ->
+                FileOutputStream(targetFile).use { output ->
+                    input.copyTo(output)
+                }
+            }
+
+            Pair(fileName, targetFile.absolutePath)
+        } catch (e: Exception) {
+            null
+        }
+    }
+}
+
+/**
+ * 若文件已存在，自动追加编号避免覆盖
+ */
+private fun resolveDuplicate(dir: File, name: String): File {
+    val file = File(dir, name)
+    if (!file.exists()) return file
+
+    val dotIdx = name.lastIndexOf('.')
+    val base = if (dotIdx > 0) name.substring(0, dotIdx) else name
+    val ext = if (dotIdx > 0) name.substring(dotIdx) else ""
+    var counter = 1
+    var newFile: File
+    do {
+        newFile = File(dir, "${base}_${counter}$ext")
+        counter++
+    } while (newFile.exists())
+    return newFile
 }

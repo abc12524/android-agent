@@ -1,0 +1,167 @@
+package com.androidagent.data.tools
+
+import android.content.Context
+import android.media.AudioAttributes
+import android.media.AudioManager
+import android.media.MediaPlayer
+import android.media.ToneGenerator
+import android.os.Build
+import com.androidagent.AndroidAgentApp
+
+/**
+ * 声音播放工具
+ * AI 通过此工具播放音调提示音或远程音频文件（如 TTS 语音）
+ */
+class SoundTool : Tool {
+
+    private val gson = com.google.gson.Gson()
+
+    override val name: String = "play_sound"
+
+    override val description: String =
+        "播放声音或音频。支持两种模式：tone=播放指定频率的音调提示音，audio_url=播放远程音频文件（如 TTS 语音链接）"
+
+    override val parameters: Map<String, Any> = mapOf(
+        "type" to "object",
+        "properties" to mapOf(
+            "mode" to mapOf(
+                "type" to "string",
+                "enum" to listOf("tone", "audio_url"),
+                "description" to "声音模式：tone=播放音调提示音，audio_url=播放远程音频文件"
+            ),
+            "frequency" to mapOf(
+                "type" to "integer",
+                "description" to "音调频率（Hz），仅 mode=tone 时生效。可选值：200=低频嗡声，500=中低频，800=适中，1000=标准提示音（默认），2000=清脆高频，3000=尖锐高频。默认 1000"
+            ),
+            "duration_ms" to mapOf(
+                "type" to "integer",
+                "description" to "音调持续时间（毫秒），仅 mode=tone 时生效。默认 500（半秒），最大 5000"
+            ),
+            "volume" to mapOf(
+                "type" to "number",
+                "description" to "音量 0.0（静音）~ 1.0（最大），默认 0.5"
+            ),
+            "url" to mapOf(
+                "type" to "string",
+                "description" to "音频文件 URL，仅 mode=audio_url 时生效。支持 MP3、WAV、AAC 等常见格式"
+            ),
+            "stream_type" to mapOf(
+                "type" to "string",
+                "enum" to listOf("notification", "alarm", "music", "ring"),
+                "description" to "音频流类型（可选，默认 notification）。notification=通知音，alarm=闹钟音，music=媒体音，ring=来电铃声音"
+            )
+        ),
+        "required" to listOf("mode")
+    )
+
+    override suspend fun execute(args: Map<String, Any>): String {
+        val mode = args["mode"] as? String ?: return """{"error": "缺少 mode 参数（tone 或 audio_url）"}"""
+
+        return when (mode) {
+            "tone" -> playTone(args)
+            "audio_url" -> playAudioUrl(args)
+            else -> """{"error": "未知 mode: $mode，仅支持 tone 或 audio_url"}"""
+        }
+    }
+
+    private fun playTone(args: Map<String, Any>): String {
+        val frequency = (args["frequency"] as? Number)?.toInt() ?: 1000
+        val durationMs = (args["duration_ms"] as? Number)?.toInt()?.coerceIn(50, 5000) ?: 500
+        val volume = (args["volume"] as? Number)?.toFloat()?.coerceIn(0f, 1f) ?: 0.5f
+        val streamTypeStr = args["stream_type"] as? String ?: "notification"
+
+        val streamType = when (streamTypeStr) {
+            "alarm" -> AudioManager.STREAM_ALARM
+            "music" -> AudioManager.STREAM_MUSIC
+            "ring" -> AudioManager.STREAM_RING
+            else -> AudioManager.STREAM_NOTIFICATION
+        }
+
+        return try {
+            // 将 0.0~1.0 音量映射到 ToneGenerator 的 0~100
+            val tgVolume = (volume * 100).toInt().coerceIn(0, 100)
+
+            // 将频率映射到最接近的 ToneGenerator 类型
+            val toneType = when {
+                frequency < 400 -> ToneGenerator.TONE_PROP_PROMPT
+                frequency < 800 -> ToneGenerator.TONE_SUP_RINGTONE
+                frequency < 1500 -> ToneGenerator.TONE_PROP_NACK
+                frequency < 2500 -> ToneGenerator.TONE_SUP_INTERCEPT
+                else -> ToneGenerator.TONE_SUP_INTERCEPT
+            }
+
+            val toneGen = ToneGenerator(streamType, tgVolume)
+            toneGen.startTone(toneType, durationMs)
+
+            // 等待音调播放完毕（非阻塞，但让 ToneGenerator 有时间处理）
+            // 注：startTone 是异步的，durationMs 后自动停止
+
+            """{"success": true, "mode": "tone", "frequency": $frequency, "duration_ms": $durationMs, "volume": $volume, "stream_type": "$streamTypeStr"}"""
+        } catch (e: Exception) {
+            """{"error": "播放音调失败: ${e.message}"}"""
+        }
+    }
+
+    private fun playAudioUrl(args: Map<String, Any>): String {
+        val url = args["url"] as? String
+        if (url.isNullOrBlank()) return """{"error": "缺少 url 参数（音频文件 URL）"}"""
+
+        val volume = (args["volume"] as? Number)?.toFloat()?.coerceIn(0f, 1f) ?: 0.5f
+        val streamTypeStr = args["stream_type"] as? String ?: "notification"
+
+        val streamType = when (streamTypeStr) {
+            "alarm" -> AudioManager.STREAM_ALARM
+            "music" -> AudioManager.STREAM_MUSIC
+            "ring" -> AudioManager.STREAM_RING
+            else -> AudioManager.STREAM_NOTIFICATION
+        }
+
+        return try {
+            val context = AndroidAgentApp.instance
+            val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+
+            // 请求音频焦点（需要 MODIFY_AUDIO_SETTINGS 权限）
+            val focusResult = audioManager.requestAudioFocus(
+                null,
+                streamType,
+                AudioManager.AUDIOFOCUS_GAIN_TRANSIENT
+            )
+
+            val mediaPlayer = MediaPlayer().apply {
+                setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setUsage(when (streamTypeStr) {
+                            "alarm" -> AudioAttributes.USAGE_ALARM
+                            "ring" -> AudioAttributes.USAGE_NOTIFICATION_RINGTONE
+                            "music" -> AudioAttributes.USAGE_MEDIA
+                            else -> AudioAttributes.USAGE_NOTIFICATION
+                        })
+                        .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                        .build()
+                )
+                setDataSource(url)
+                setVolume(volume, volume)
+                setOnCompletionListener {
+                    // 播放完成后释放音频焦点
+                    try {
+                        audioManager.abandonAudioFocus(null)
+                    } catch (_: Exception) { }
+                    it.release()
+                }
+                setOnErrorListener { _, what, extra ->
+                    try {
+                        audioManager.abandonAudioFocus(null)
+                    } catch (_: Exception) { }
+                    it.release()
+                    true
+                }
+                prepare()
+                start()
+            }
+
+            """{"success": true, "mode": "audio_url", "url": "$url", "volume": $volume, "stream_type": "$streamTypeStr", "focus_result": $focusResult}"""
+        } catch (e: Exception) {
+            """{"error": "播放音频失败: ${e.message}"}"""
+        }
+    }
+}

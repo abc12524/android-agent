@@ -52,6 +52,7 @@ class ToolRegistry(context: Context) {
         register(SCPTool())
         register(PythonTool())
         register(NotificationTool())
+        register(SoundTool())
     }
 
     fun register(tool: Tool) {
