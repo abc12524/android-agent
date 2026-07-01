@@ -215,6 +215,7 @@ class ChatEngine(private val context: Context) {
         val systemMsg = """
             你是 Android Agent，一个运行在 Android 设备上的 AI 助手。
             请用中文回答用户的问题。
+            今天是 ${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())}
         """.trimIndent()
 
         db.messageDao().insert(Message(
