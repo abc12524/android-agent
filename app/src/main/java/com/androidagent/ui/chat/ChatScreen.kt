@@ -66,7 +66,8 @@ fun ChatScreen(
                 val info = saveFileToAppDir(context, it)
                 withContext(Dispatchers.Main) {
                     if (info != null) {
-                        inputText = "读取文件：${info.first}（已保存到应用目录）"
+                        val (_, fullPath) = info
+                        inputText = "读取文件：$fullPath"
                     }
                 }
             }
@@ -433,55 +434,44 @@ private fun groupSessions(all: List<ChatSession>): List<SG> {
 
 /**
  * 将用户选择的文件保存到应用内部存储的 agent_files/ 目录
- * @return Pair(原始文件名, 完整路径) 或 null（失败时）
+ * 文件按 年-月-日-时-分-秒.{后缀} 格式重命名
+ * @return Pair(时间戳文件名, 完整根路径) 或 null（失败时）
  */
 private suspend fun saveFileToAppDir(context: android.content.Context, uri: Uri): Pair<String, String>? {
     return withContext(Dispatchers.IO) {
         try {
             val contentResolver = context.contentResolver
 
-            // 获取文件名
-            val fileName = contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+            // 获取原始文件名，仅用于提取后缀
+            val originalName = contentResolver.query(uri, null, null, null, null)?.use { cursor ->
                 val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
                 cursor.moveToFirst()
                 cursor.getString(nameIndex)
-            } ?: "unknown_${System.currentTimeMillis()}"
+            } ?: "unknown"
+
+            // 提取后缀
+            val dotIdx = originalName.lastIndexOf('.')
+            val ext = if (dotIdx > 0) originalName.substring(dotIdx) else ""
+
+            // 生成时间戳文件名：年-月-日-时-分-秒.{后缀}
+            val sdf = java.text.SimpleDateFormat("yyyy-MM-dd-HH-mm-ss", java.util.Locale.getDefault())
+            val timestampName = sdf.format(java.util.Date()) + ext
 
             // 创建 agent_files 目录
             val targetDir = File(context.filesDir, "agent_files")
             targetDir.mkdirs()
 
-            // 写文件，自动处理重名
-            val targetFile = resolveDuplicate(targetDir, fileName)
-
+            // 写文件
+            val targetFile = File(targetDir, timestampName)
             contentResolver.openInputStream(uri)?.use { input ->
                 FileOutputStream(targetFile).use { output ->
                     input.copyTo(output)
                 }
             }
 
-            Pair(fileName, targetFile.absolutePath)
+            Pair(timestampName, targetFile.absolutePath)
         } catch (e: Exception) {
             null
         }
     }
-}
-
-/**
- * 若文件已存在，自动追加编号避免覆盖
- */
-private fun resolveDuplicate(dir: File, name: String): File {
-    val file = File(dir, name)
-    if (!file.exists()) return file
-
-    val dotIdx = name.lastIndexOf('.')
-    val base = if (dotIdx > 0) name.substring(0, dotIdx) else name
-    val ext = if (dotIdx > 0) name.substring(dotIdx) else ""
-    var counter = 1
-    var newFile: File
-    do {
-        newFile = File(dir, "${base}_${counter}$ext")
-        counter++
-    } while (newFile.exists())
-    return newFile
 }
