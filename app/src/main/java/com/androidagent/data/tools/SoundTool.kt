@@ -141,18 +141,18 @@ class SoundTool : Tool {
                 )
                 setDataSource(url)
                 setVolume(volume, volume)
-                setOnCompletionListener {
+                setOnCompletionListener { mp ->
                     // 播放完成后释放音频焦点
                     try {
                         audioManager.abandonAudioFocus(null)
                     } catch (_: Exception) { }
-                    it.release()
+                    mp.release()
                 }
-                setOnErrorListener { _, what, extra ->
+                setOnErrorListener { mp, _, _ ->
                     try {
                         audioManager.abandonAudioFocus(null)
                     } catch (_: Exception) { }
-                    it.release()
+                    mp.release()
                     true
                 }
                 prepare()
