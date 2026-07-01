@@ -14,6 +14,22 @@ import com.androidagent.AndroidAgentApp
  */
 class SoundTool : Tool {
 
+    companion object {
+        /** 持有当前正在播放的 MediaPlayer 强引用，防止 GC 导致播放中断 */
+        private var currentPlayer: MediaPlayer? = null
+
+        /** 释放当前播放器 */
+        private fun releaseCurrent() {
+            currentPlayer?.let { mp ->
+                try {
+                    mp.stop()
+                } catch (_: Exception) { }
+                mp.release()
+            }
+            currentPlayer = null
+        }
+    }
+
     private val gson = com.google.gson.Gson()
 
     override val name: String = "play_sound"
@@ -120,12 +136,38 @@ class SoundTool : Tool {
             val context = AndroidAgentApp.instance
             val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
 
-            // 请求音频焦点（需要 MODIFY_AUDIO_SETTINGS 权限）
+            // 释放前一个播放器
+            releaseCurrent()
+
+            // 音频焦点变化监听器
+            val afChangeListener = AudioManager.OnAudioFocusChangeListener { focusChange ->
+                when (focusChange) {
+                    AudioManager.AUDIOFOCUS_LOSS,
+                    AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
+                        // 焦点永久/暂时丢失 → 停止播放并释放
+                        releaseCurrent()
+                    }
+                    AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> {
+                        // 可以降低音量继续播放
+                        currentPlayer?.setVolume(volume * 0.3f, volume * 0.3f)
+                    }
+                    AudioManager.AUDIOFOCUS_GAIN -> {
+                        // 重新获得焦点 → 恢复音量
+                        currentPlayer?.setVolume(volume, volume)
+                    }
+                }
+            }
+
+            // 请求音频焦点（持续持有，直到播放完毕）
             val focusResult = audioManager.requestAudioFocus(
-                null,
+                afChangeListener,
                 streamType,
-                AudioManager.AUDIOFOCUS_GAIN_TRANSIENT
+                AudioManager.AUDIOFOCUS_GAIN
             )
+
+            if (focusResult != AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
+                return """{"error": "无法获取音频焦点，可能正在播放其他音频"}"""
+            }
 
             val mediaPlayer = MediaPlayer().apply {
                 setAudioAttributes(
@@ -141,26 +183,30 @@ class SoundTool : Tool {
                 )
                 setDataSource(url)
                 setVolume(volume, volume)
-                setOnCompletionListener { mp ->
-                    // 播放完成后释放音频焦点
+                setOnCompletionListener {
+                    // 播放完成 → 释放焦点和播放器
                     try {
-                        audioManager.abandonAudioFocus(null)
+                        audioManager.abandonAudioFocus(afChangeListener)
                     } catch (_: Exception) { }
-                    mp.release()
+                    releaseCurrent()
                 }
-                setOnErrorListener { mp, _, _ ->
+                setOnErrorListener { _, _, _ ->
                     try {
-                        audioManager.abandonAudioFocus(null)
+                        audioManager.abandonAudioFocus(afChangeListener)
                     } catch (_: Exception) { }
-                    mp.release()
+                    releaseCurrent()
                     true
                 }
                 prepare()
                 start()
             }
 
+            // 持有强引用，防止 GC
+            currentPlayer = mediaPlayer
+
             """{"success": true, "mode": "audio_url", "url": "$url", "volume": $volume, "stream_type": "$streamTypeStr", "focus_result": $focusResult}"""
         } catch (e: Exception) {
+            releaseCurrent()
             """{"error": "播放音频失败: ${e.message}"}"""
         }
     }
