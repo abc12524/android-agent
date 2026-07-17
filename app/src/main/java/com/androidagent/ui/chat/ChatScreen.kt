@@ -356,7 +356,6 @@ fun MessageBubble(msg: Message) {
                     Spacer(Modifier.width(4.dp))
                     Text(msg.toolName, fontSize = 11.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
                 }
             }
         }
