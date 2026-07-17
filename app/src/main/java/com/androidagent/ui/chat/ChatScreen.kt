@@ -328,15 +328,6 @@ fun MessageBubble(msg: Message) {
     ) {
         // ---- 工具调用过程展示 ----
         if (isTool && msg.toolName != null) {
-            val argsText = if (!msg.toolArgs.isNullOrBlank()) {
-                try {
-                    val gson = com.google.gson.GsonBuilder().create()
-                    val obj = gson.fromJson(msg.toolArgs, Map::class.java)
-                    obj.entries.joinToString(", ") { (k, v) -> "$k=$v" }
-                } catch (_: Exception) {
-                    msg.toolArgs
-                }
-            } else ""
             Surface(
                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
                     .clickable { toolExpanded = !toolExpanded },
@@ -352,7 +343,7 @@ fun MessageBubble(msg: Message) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Spacer(Modifier.width(4.dp))
-                    Text("${msg.toolName}($argsText)", fontSize = 11.sp,
+                    Text(msg.toolName, fontSize = 11.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                     if (!toolExpanded) {
                         Text("  点击查看结果", fontSize = 10.sp,
