@@ -30,6 +30,8 @@ interface Tool {
 class ToolRegistry(context: Context) {
 
     private val tools = mutableMapOf<String, Tool>()
+    /** 当前会话 ID，供会话相关工具使用 */
+    var currentSessionId: String = ""
 
     init {
         // 注册所有工具
@@ -53,6 +55,7 @@ class ToolRegistry(context: Context) {
         register(PythonTool())
         register(NotificationTool())
         register(SoundTool())
+        register(RenameSessionTool(this, context))
     }
 
     fun register(tool: Tool) {

@@ -39,6 +39,8 @@ fun SettingsScreen(
 
 请用中文回答用户的问题。
 
+明确对话主题后，调用 rename_session 设置简洁的对话标题（≤20字）。
+
 【记忆规则】
 记忆是给未来的自己看的。善用 openviking_remember 记录：
 - 有用的操作、配置、步骤、关键信息 → 必须记录

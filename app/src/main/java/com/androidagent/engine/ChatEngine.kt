@@ -52,7 +52,10 @@ class ChatEngine(private val context: Context) {
         try {
             val allNewMessages = mutableListOf<Message>()
 
-            // 1. 加载历史消息（同一会话内始终保留全部记忆，不设超时）
+            // 设置当前会话 ID（供会话相关工具使用）
+            toolRegistry.currentSessionId = sessionId
+
+            // 1. 加载历史消息
             val history = db.messageDao().getMessagesBySessionSync(sessionId)
             val messages = history.map { it.toApiMessage() }.toMutableList()
 
