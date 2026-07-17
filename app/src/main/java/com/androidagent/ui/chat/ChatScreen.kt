@@ -356,9 +356,6 @@ fun MessageBubble(msg: Message) {
                     Spacer(Modifier.width(4.dp))
                     Text(msg.toolName, fontSize = 11.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    if (!toolExpanded) {
-                        Text("  点击查看结果", fontSize = 10.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
                     }
                 }
             }
