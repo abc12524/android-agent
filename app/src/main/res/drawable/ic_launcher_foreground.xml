@@ -4,16 +4,43 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- 圆形背景 -->
+    <!-- 渐变圆环背景 -->
     <path
         android:fillColor="#1565C0"
         android:pathData="M54,54m-40,0a40,40 0,1 1,80 0a40,40 0,1 1,-80 0"/>
-    <!-- AI 文字 -->
+    <path
+        android:fillColor="#1976D2"
+        android:pathData="M54,54m-35,0a35,35 0,1 1,70 0a35,35 0,1 1,-70 0"/>
+    <path
+        android:fillColor="#2196F3"
+        android:pathData="M54,54m-28,0a28,28 0,1 1,56 0a28,28 0,1 1,-56 0"/>
+    <!-- 像素风格脑袋 -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M38,48h4v4h-4zM42,48h4v4h-4zM46,48h4v4h-4zM50,48h4v4h-4zM54,48h4v4h-4zM58,48h4v4h-4zM62,48h4v4h-4zM66,48h4v4h-4z"/>
-    <!-- 下半部分 -->
+        android:pathData="M42,38h2v2h-2zM46,38h2v2h-2zM50,38h2v2h-2zM54,38h2v2h-2zM58,38h2v2h-2zM62,38h2v2h-2z"/>
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M38,54h4v4h-4zM42,54h4v4h-4zM46,54h4v4h-4zM50,54h4v4h-4zM54,54h4v4h-4zM58,54h4v4h-4zM62,54h4v4h-4zM66,54h4v4h-4z"/>
+        android:pathData="M40,42h2v2h-2zM44,42h2v2h-2zM48,42h2v2h-2zM52,42h2v2h-2zM56,42h2v2h-2zM60,42h2v2h-2zM64,42h2v2h-2z"/>
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M38,46h2v2h-2zM42,46h2v2h-2zM46,46h2v2h-2zM50,46h2v2h-2zM54,46h2v2h-2zM58,46h2v2h-2zM62,46h2v2h-2zM66,46h2v2h-2z"/>
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M38,50h2v2h-2zM42,50h2v2h-2zM46,50h2v2h-2zM50,50h2v2h-2zM54,50h2v2h-2zM58,50h2v2h-2zM62,50h2v2h-2zM66,50h2v2h-2z"/>
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M40,54h2v2h-2zM44,54h2v2h-2zM48,54h2v2h-2zM52,54h2v2h-2zM56,54h2v2h-2zM60,54h2v2h-2zM64,54h2v2h-2z"/>
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M42,58h2v2h-2zM46,58h2v2h-2zM50,58h2v2h-2zM54,58h2v2h-2zM58,58h2v2h-2zM62,58h2v2h-2z"/>
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M44,62h2v2h-2zM48,62h2v2h-2zM52,62h2v2h-2zM56,62h2v2h-2zM60,62h2v2h-2z"/>
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M48,66h2v2h-2zM52,66h2v2h-2zM56,66h2v2h-2z"/>
+    <!-- 闪烁小点（AI 活性指示） -->
+    <path
+        android:fillColor="#FFD54F"
+        android:pathData="M62,44h3v3h-3z"/>
 </vector>

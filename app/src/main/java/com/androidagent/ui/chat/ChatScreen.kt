@@ -320,6 +320,9 @@ fun MessageBubble(msg: Message) {
     val bc = when { isUser -> BubbleUser; isTool -> BubbleTool; else -> BubbleAssistant }
     val tc = when { isUser -> BubbleUserText; isTool -> BubbleToolText; else -> BubbleAssistantText }
 
+    // 工具结果折叠状态
+    var toolExpanded by remember { mutableStateOf(false) }
+
     Column(Modifier.fillMaxWidth(),
         horizontalAlignment = if (isUser) Alignment.End else Alignment.Start
     ) {
@@ -327,17 +330,36 @@ fun MessageBubble(msg: Message) {
         if (isTool && msg.toolName != null) {
             val argsText = if (!msg.toolArgs.isNullOrBlank()) {
                 try {
-                    // 格式化 JSON 为一行显示
                     val gson = com.google.gson.GsonBuilder().create()
                     val obj = gson.fromJson(msg.toolArgs, Map::class.java)
-                    obj.entries.joinToString(", ") { (k, v) -> "$k=${v}" }
+                    obj.entries.joinToString(", ") { (k, v) -> "$k=$v" }
                 } catch (_: Exception) {
                     msg.toolArgs
                 }
             } else ""
-            Text("🔧 ${msg.toolName}($argsText)", fontSize = 11.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp))
+            Surface(
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                    .clickable { toolExpanded = !toolExpanded },
+                shape = RoundedCornerShape(8.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+            ) {
+                Row(Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        if (toolExpanded) "🔽" else "🔧",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text("${msg.toolName}($argsText)", fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (!toolExpanded) {
+                        Text("  点击查看结果", fontSize = 10.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
+                    }
+                }
+            }
         }
         // 推理内容
         if (msg.reasoningContent != null && msg.reasoningContent.isNotBlank()) {
@@ -363,10 +385,19 @@ fun MessageBubble(msg: Message) {
                     Text("调用工具中...", Modifier.padding(14.dp, 10.dp),
                         color = tc, fontSize = 13.sp)
                 }
-                // 工具执行结果
+                // 工具执行结果 — 折叠显示
                 isTool -> {
-                    Text(msg.content.ifBlank { "(空)" }, Modifier.padding(14.dp, 10.dp),
-                        color = tc, fontFamily = FontFamily.Monospace, fontSize = 13.sp, lineHeight = 18.sp)
+                    val displayText = msg.content.ifBlank { "(空)" }
+                    if (toolExpanded || displayText.length < 200) {
+                        Text(displayText, Modifier.padding(14.dp, 10.dp),
+                            color = tc, fontFamily = FontFamily.Monospace,
+                            fontSize = 13.sp, lineHeight = 18.sp)
+                    } else {
+                        Text("${displayText.take(200)}...",
+                            Modifier.padding(14.dp, 10.dp),
+                            color = tc, fontFamily = FontFamily.Monospace,
+                            fontSize = 13.sp, lineHeight = 18.sp)
+                    }
                 }
                 // 普通消息 (user / assistant)
                 else -> {
