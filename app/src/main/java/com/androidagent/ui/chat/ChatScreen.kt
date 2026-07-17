@@ -331,17 +331,28 @@ fun MessageBubble(msg: Message) {
     val bc = when { isUser -> BubbleUser; isTool -> BubbleTool; else -> BubbleAssistant }
     val tc = when { isUser -> BubbleUserText; isTool -> BubbleToolText; else -> BubbleAssistantText }
 
+    // 工具调用折叠状态
+    var invocationExpanded by remember { mutableStateOf(false) }
     // 工具结果折叠状态
-    var toolExpanded by remember { mutableStateOf(false) }
+    var resultExpanded by remember { mutableStateOf(false) }
 
     Column(Modifier.fillMaxWidth(),
         horizontalAlignment = if (isUser) Alignment.End else Alignment.Start
     ) {
         // ---- 工具调用过程展示 ----
         if (isTool && msg.toolName != null) {
+            val argsText = if (!msg.toolArgs.isNullOrBlank()) {
+                try {
+                    val gson = com.google.gson.GsonBuilder().create()
+                    val obj = gson.fromJson(msg.toolArgs, Map::class.java)
+                    obj.entries.joinToString(", ") { (k, v) -> "$k=$v" }
+                } catch (_: Exception) {
+                    msg.toolArgs
+                }
+            } else ""
             Surface(
                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
-                    .clickable { toolExpanded = !toolExpanded },
+                    .clickable { invocationExpanded = !invocationExpanded },
                 shape = RoundedCornerShape(8.dp),
                 color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
             ) {
@@ -349,13 +360,18 @@ fun MessageBubble(msg: Message) {
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        if (toolExpanded) "🔽" else "🔧",
+                        if (invocationExpanded) "🔽" else "🔧",
                         fontSize = 11.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Spacer(Modifier.width(4.dp))
-                    Text(msg.toolName, fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (invocationExpanded && argsText.isNotBlank()) {
+                        Text("${msg.toolName}($argsText)", fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    } else {
+                        Text(msg.toolName, fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
             }
         }
@@ -372,7 +388,7 @@ fun MessageBubble(msg: Message) {
         }
         Surface(
             modifier = Modifier.widthIn(max = 320.dp)
-                .then(if (isTool) Modifier.clickable { toolExpanded = !toolExpanded } else Modifier),
+                .then(if (isTool) Modifier.clickable { resultExpanded = !resultExpanded } else Modifier),
             shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp,
                 bottomStart = if (isUser) 16.dp else 4.dp,
                 bottomEnd = if (isUser) 4.dp else 16.dp),
@@ -386,7 +402,7 @@ fun MessageBubble(msg: Message) {
                 }
                 // 工具执行结果 — 默认隐藏，点开展示全部
                 isTool -> {
-                    if (toolExpanded) {
+                    if (resultExpanded) {
                         val displayText = msg.content.ifBlank { "(空)" }
                         Text(displayText, Modifier.padding(14.dp, 10.dp),
                             color = tc, fontFamily = FontFamily.Monospace,
