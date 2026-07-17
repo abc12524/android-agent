@@ -371,7 +371,8 @@ fun MessageBubble(msg: Message) {
             }
         }
         Surface(
-            modifier = Modifier.widthIn(max = 320.dp),
+            modifier = Modifier.widthIn(max = 320.dp)
+                .then(if (isTool) Modifier.clickable { toolExpanded = !toolExpanded } else Modifier),
             shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp,
                 bottomStart = if (isUser) 16.dp else 4.dp,
                 bottomEnd = if (isUser) 4.dp else 16.dp),
@@ -383,18 +384,16 @@ fun MessageBubble(msg: Message) {
                     Text("调用工具中...", Modifier.padding(14.dp, 10.dp),
                         color = tc, fontSize = 13.sp)
                 }
-                // 工具执行结果 — 默认只显示第一行，点开展示全部
+                // 工具执行结果 — 默认隐藏，点开展示全部
                 isTool -> {
-                    val displayText = msg.content.ifBlank { "(空)" }
-                    val firstLine = displayText.lines().firstOrNull() ?: displayText
                     if (toolExpanded) {
+                        val displayText = msg.content.ifBlank { "(空)" }
                         Text(displayText, Modifier.padding(14.dp, 10.dp),
                             color = tc, fontFamily = FontFamily.Monospace,
                             fontSize = 13.sp, lineHeight = 18.sp)
                     } else {
-                        Text(firstLine, Modifier.padding(14.dp, 10.dp),
-                            color = tc, fontFamily = FontFamily.Monospace,
-                            fontSize = 13.sp, lineHeight = 18.sp)
+                        Text("(点击展开)", Modifier.padding(14.dp, 10.dp),
+                            color = tc.copy(alpha = 0.5f), fontSize = 13.sp)
                     }
                 }
                 // 普通消息 (user / assistant)
