@@ -280,15 +280,26 @@ private fun SessionDrawer(
                                 else MaterialTheme.colorScheme.surface
                     ) {
                         Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
-                            Text(fmtSessionTime(session.createdAt), fontSize = 14.sp,
+                            Text(
+                                if (session.title != "新对话") session.title
+                                else fmtSessionTime(session.createdAt),
+                                fontSize = 14.sp,
                                 fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
                                 color = if (active) MaterialTheme.colorScheme.onSecondaryContainer
                                         else MaterialTheme.colorScheme.onSurface,
                                 maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            Text("${session.messageCount} 条",
-                                fontSize = 11.sp,
-                                color = if (active) MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.6f)
-                                        else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("${session.messageCount} 条",
+                                    fontSize = 11.sp,
+                                    color = if (active) MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.6f)
+                                            else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                                if (session.title != "新对话") {
+                                    Text(" · ${fmtSessionTime(session.createdAt)}",
+                                        fontSize = 11.sp,
+                                        color = if (active) MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.5f)
+                                                else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+                                }
+                            }
                         }
                     }
                 }

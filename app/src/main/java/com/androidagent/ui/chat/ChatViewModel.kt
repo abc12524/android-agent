@@ -47,10 +47,14 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private var isSessionReady = false
 
     init {
-        // 收集所有会话列表
+        // 收集所有会话列表，同时更新当前会话标题
         viewModelScope.launch {
             db.sessionDao().getAllSessions().collect { sessions ->
                 uiState = uiState.copy(allSessions = sessions)
+                val current = sessions.find { it.id == currentSessionId }
+                if (current != null) {
+                    uiState = uiState.copy(sessionTitle = current.title)
+                }
             }
         }
         // 初始加载余额
