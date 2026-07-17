@@ -63,4 +63,9 @@ object AppPreferences {
     var ovSearchDisplayCount: Int
         get() = prefs.getInt("ov_search_display_count", 3)
         set(value) = prefs.edit().putInt("ov_search_display_count", value).apply()
+
+    // 系统提示词
+    var systemPrompt: String
+        get() = prefs.getString("system_prompt", "") ?: ""
+        set(value) = prefs.edit().putString("system_prompt", value).apply()
 }

@@ -32,6 +32,19 @@ fun SettingsScreen(
     var ovScoreThreshold by remember { mutableStateOf(AppPreferences.ovScoreThreshold) }
     var ovSearchDisplayCount by remember { mutableStateOf(AppPreferences.ovSearchDisplayCount.toString()) }
     var backgroundEnabled by remember { mutableStateOf(AppPreferences.backgroundServiceEnabled) }
+    var systemPrompt by remember { mutableStateOf(
+        AppPreferences.systemPrompt.ifBlank {
+            """你是 Android Agent，一个运行在 Android 设备上的 AI 助手。
+可写应用空间：/data/user/0/com.androidagent/files/
+
+请用中文回答用户的问题。
+
+【记忆规则】
+记忆是给未来的自己看的。善用 openviking_remember 记录：
+- 有用的操作、配置、步骤、关键信息 → 必须记录
+- 发现错误记忆 → 立即修正，不留错误"""
+        }
+    ) }
     var showKeys by remember { mutableStateOf(false) }
     var saved by remember { mutableStateOf(false) }
     var updateState by remember { mutableStateOf<UpdateState>(UpdateState.Idle) }
@@ -189,6 +202,27 @@ fun SettingsScreen(
                 }
             }
 
+            // ========== 系统提示词 ==========
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Text("💬 系统提示词", style = MaterialTheme.typography.titleSmall)
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = "自定义系统提示词，留空则使用默认。修改后新对话生效。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    OutlinedTextField(
+                        value = systemPrompt,
+                        onValueChange = { systemPrompt = it; saved = false },
+                        label = { Text("系统提示词") },
+                        modifier = Modifier.fillMaxWidth().height(200.dp),
+                        maxLines = 10
+                    )
+                }
+            }
+
             // ========== 显示密钥 + 保存 ==========
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
@@ -206,6 +240,7 @@ fun SettingsScreen(
                         AppPreferences.ovScoreThreshold = ovScoreThreshold
                         AppPreferences.ovSearchDisplayCount = ovSearchDisplayCount.toIntOrNull() ?: 3
                         AppPreferences.maxToolRounds = maxRounds.toIntOrNull() ?: 8
+                        AppPreferences.systemPrompt = systemPrompt
 
                         val wasEnabled = AppPreferences.backgroundServiceEnabled
                         AppPreferences.backgroundServiceEnabled = backgroundEnabled

@@ -1,0 +1,207 @@
+{
+  "/tmp/android-agent-ref/build.gradle.kts": {
+    "mtime": 1784032563.386985,
+    "ast_hash": "1431b7a837866d2e6f52d50741005e27",
+    "semantic_hash": ""
+  },
+  "/tmp/android-agent-ref/gradlew": {
+    "mtime": 1784032563.386985,
+    "ast_hash": "6c3b9bc3ea7c3377241765585a42153e",
+    "semantic_hash": ""
+  },
+  "/tmp/android-agent-ref/settings.gradle.kts": {
+    "mtime": 1784032563.386985,
+    "ast_hash": "2a68995e6cd10670de64408518fe9c82",
+    "semantic_hash": ""
+  },
+  "/tmp/android-agent-ref/app/build.gradle.kts": {
+    "mtime": 1784032563.0949738,
+    "ast_hash": "4d0c3187747aff6289d883e815f301f7",
+    "semantic_hash": ""
+  },
+  "/tmp/android-agent-ref/app/src/main/java/com/androidagent/ForegroundService.kt": {
+    "mtime": 1784032563.3829849,
+    "ast_hash": "e4e72e63877858656af5a4768dcba7d7",
+    "semantic_hash": ""
+  },
+  "/tmp/android-agent-ref/app/src/main/java/com/androidagent/MainActivity.kt": {
+    "mtime": 1784032563.3829849,
+    "ast_hash": "88da5221e3eaa841cd585a17306295bf",
+    "semantic_hash": ""
+  },
+  "/tmp/android-agent-ref/app/src/main/java/com/androidagent/NotificationReceiver.kt": {
+    "mtime": 1784032563.3829849,
+    "ast_hash": "0b211535ac065e55747f6a7548d6cdfa",
+    "semantic_hash": ""
+  },
+  "/tmp/android-agent-ref/app/src/main/java/com/androidagent/AndroidAgentApp.kt": {
+    "mtime": 1784032563.3829849,
+    "ast_hash": "2ccfd467ab1ed0e418319f7ffd2dbbe5",
+    "semantic_hash": ""
+  },
+  "/tmp/android-agent-ref/app/src/main/java/com/androidagent/data/AppPreferences.kt": {
+    "mtime": 1784032563.3829849,
+    "ast_hash": "b6b9918c5e227e438a6c91ae0fbcf0ed",
+    "semantic_hash": ""
+  },
+  "/tmp/android-agent-ref/app/src/main/java/com/androidagent/data/db/SessionDao.kt": {
+    "mtime": 1784032563.3829849,
+    "ast_hash": "31464f7cfb9288e9e31253beb6194a72",
+    "semantic_hash": ""
+  },
+  "/tmp/android-agent-ref/app/src/main/java/com/androidagent/data/db/AppDatabase.kt": {
+    "mtime": 1784032563.3829849,
+    "ast_hash": "7ad2a6384630a614a7747971ed61ee4c",
+    "semantic_hash": ""
+  },
+  "/tmp/android-agent-ref/app/src/main/java/com/androidagent/data/db/MessageDao.kt": {
+    "mtime": 1784032563.3829849,
+    "ast_hash": "e324160990b2a65651f96c4fcb500b70",
+    "semantic_hash": ""
+  },
+  "/tmp/android-agent-ref/app/src/main/java/com/androidagent/data/tools/NotificationTool.kt": {
+    "mtime": 1784032563.3829849,
+    "ast_hash": "8b00bc516e9acf8d77a5953fac45f784",
+    "semantic_hash": ""
+  },
+  "/tmp/android-agent-ref/app/src/main/java/com/androidagent/data/tools/ToolRegistry.kt": {
+    "mtime": 1784032563.3829849,
+    "ast_hash": "a4ee1725bd456a49b03c9da60391446c",
+    "semantic_hash": ""
+  },
+  "/tmp/android-agent-ref/app/src/main/java/com/androidagent/data/tools/ShellTool.kt": {
+    "mtime": 1784032563.3829849,
+    "ast_hash": "61f223094150a2480e07b700fc1fc004",
+    "semantic_hash": ""
+  },
+  "/tmp/android-agent-ref/app/src/main/java/com/androidagent/data/tools/SystemInfoTool.kt": {
+    "mtime": 1784032563.3829849,
+    "ast_hash": "6b42f9d46a99f0b9540a1b8ca7972b7b",
+    "semantic_hash": ""
+  },
+  "/tmp/android-agent-ref/app/src/main/java/com/androidagent/data/tools/GPSTool.kt": {
+    "mtime": 1784032563.3829849,
+    "ast_hash": "f12cada4207d0e129fd98074fe1c0b83",
+    "semantic_hash": ""
+  },
+  "/tmp/android-agent-ref/app/src/main/java/com/androidagent/data/tools/SoundTool.kt": {
+    "mtime": 1784032563.3829849,
+    "ast_hash": "943427135a09e8581a2ba12c689a5cdf",
+    "semantic_hash": ""
+  },
+  "/tmp/android-agent-ref/app/src/main/java/com/androidagent/data/tools/SCPTool.kt": {
+    "mtime": 1784032563.3829849,
+    "ast_hash": "2c445a3a13b7de066fcf2825b72e549b",
+    "semantic_hash": ""
+  },
+  "/tmp/android-agent-ref/app/src/main/java/com/androidagent/data/tools/SensorTool.kt": {
+    "mtime": 1784032563.3829849,
+    "ast_hash": "0ff5bd268b9670602eea106e95724dc9",
+    "semantic_hash": ""
+  },
+  "/tmp/android-agent-ref/app/src/main/java/com/androidagent/data/tools/PythonManager.kt": {
+    "mtime": 1784032563.3829849,
+    "ast_hash": "d8b71fe15c833a41974011d2fffe9434",
+    "semantic_hash": ""
+  },
+  "/tmp/android-agent-ref/app/src/main/java/com/androidagent/data/tools/PythonTool.kt": {
+    "mtime": 1784032563.3829849,
+    "ast_hash": "74f4af13f5a25ef137e3811730f7a6eb",
+    "semantic_hash": ""
+  },
+  "/tmp/android-agent-ref/app/src/main/java/com/androidagent/data/tools/OpenVikingTools.kt": {
+    "mtime": 1784032563.3829849,
+    "ast_hash": "5a37553f1c4816045eed738f5efa6705",
+    "semantic_hash": ""
+  },
+  "/tmp/android-agent-ref/app/src/main/java/com/androidagent/data/tools/SearchTools.kt": {
+    "mtime": 1784032563.3829849,
+    "ast_hash": "7d6cb7971df2d1a414eceb3b192c1648",
+    "semantic_hash": ""
+  },
+  "/tmp/android-agent-ref/app/src/main/java/com/androidagent/data/tools/SSHTool.kt": {
+    "mtime": 1784032563.3829849,
+    "ast_hash": "e202cc0189847722f724808aec3b1d4b",
+    "semantic_hash": ""
+  },
+  "/tmp/android-agent-ref/app/src/main/java/com/androidagent/data/model/ChatSession.kt": {
+    "mtime": 1784032563.3829849,
+    "ast_hash": "3951089f1bcf9e37e089a07573da5958",
+    "semantic_hash": ""
+  },
+  "/tmp/android-agent-ref/app/src/main/java/com/androidagent/data/model/Message.kt": {
+    "mtime": 1784032563.3829849,
+    "ast_hash": "176c600b61aae27b70a6bbb34b03098d",
+    "semantic_hash": ""
+  },
+  "/tmp/android-agent-ref/app/src/main/java/com/androidagent/data/memory/OpenVikingClient.kt": {
+    "mtime": 1784032563.3829849,
+    "ast_hash": "1635bfc469d3970dae287323bbc7a2cd",
+    "semantic_hash": ""
+  },
+  "/tmp/android-agent-ref/app/src/main/java/com/androidagent/data/updater/AppUpdater.kt": {
+    "mtime": 1784032563.3829849,
+    "ast_hash": "aa8067d07dd878f876fe70bb2b498501",
+    "semantic_hash": ""
+  },
+  "/tmp/android-agent-ref/app/src/main/java/com/androidagent/data/api/DeepSeekClient.kt": {
+    "mtime": 1784032563.3829849,
+    "ast_hash": "8093b13e519b5f7c18296adac8bf707e",
+    "semantic_hash": ""
+  },
+  "/tmp/android-agent-ref/app/src/main/java/com/androidagent/data/api/QianFanClient.kt": {
+    "mtime": 1784032563.3829849,
+    "ast_hash": "160278f942cf79e2efa3734fec64906e",
+    "semantic_hash": ""
+  },
+  "/tmp/android-agent-ref/app/src/main/java/com/androidagent/ui/theme/Color.kt": {
+    "mtime": 1784032563.3829849,
+    "ast_hash": "a328000f6f56dc4f80a69e429dd981ff",
+    "semantic_hash": ""
+  },
+  "/tmp/android-agent-ref/app/src/main/java/com/androidagent/ui/theme/Theme.kt": {
+    "mtime": 1784032563.3829849,
+    "ast_hash": "ac33d9f53d10bf6d6940771b0b09c25a",
+    "semantic_hash": ""
+  },
+  "/tmp/android-agent-ref/app/src/main/java/com/androidagent/ui/chat/MarkdownText.kt": {
+    "mtime": 1784032563.3829849,
+    "ast_hash": "e4f065bef6dbb6cd2f652731e4452cf5",
+    "semantic_hash": ""
+  },
+  "/tmp/android-agent-ref/app/src/main/java/com/androidagent/ui/chat/ChatScreen.kt": {
+    "mtime": 1784032563.3829849,
+    "ast_hash": "ccef36dc1cbe60677f727fdcc1b41536",
+    "semantic_hash": ""
+  },
+  "/tmp/android-agent-ref/app/src/main/java/com/androidagent/ui/chat/ChatViewModel.kt": {
+    "mtime": 1784032563.3829849,
+    "ast_hash": "d26a1e2b67de4129a83b97b52fc58816",
+    "semantic_hash": ""
+  },
+  "/tmp/android-agent-ref/app/src/main/java/com/androidagent/ui/settings/SettingsScreen.kt": {
+    "mtime": 1784032563.3829849,
+    "ast_hash": "57701d5f40b8091b93797919710e71d4",
+    "semantic_hash": ""
+  },
+  "/tmp/android-agent-ref/app/src/main/java/com/androidagent/engine/ChatEngine.kt": {
+    "mtime": 1784032563.3829849,
+    "ast_hash": "389045f1333f4e0fbb9cfbec8055cdc9",
+    "semantic_hash": ""
+  },
+  "/tmp/android-agent-ref/README.md": {
+    "mtime": 1784032563.0949738,
+    "ast_hash": "f69ab7aca9e65571f2c52af8b098006b",
+    "semantic_hash": ""
+  },
+  "/tmp/android-agent-ref/CHANGELOG.md": {
+    "mtime": 1784032563.0949738,
+    "ast_hash": "c3e4f12c2e447d3352d552e3441746a9",
+    "semantic_hash": ""
+  },
+  "/tmp/android-agent-ref/.github/workflows/android-build.yml": {
+    "mtime": 1784032563.0949738,
+    "ast_hash": "04fd6d6641f80b3e8115a5a51b04967b",
+    "semantic_hash": ""
+  }
+}

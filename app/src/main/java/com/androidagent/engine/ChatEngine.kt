@@ -182,9 +182,6 @@ class ChatEngine(private val context: Context) {
             val msgCount = db.messageDao().getMessagesBySessionSync(sessionId).size
             db.sessionDao().updateStats(sessionId, System.currentTimeMillis(), msgCount)
 
-            // 7. 导出对话 JSON（调试用）
-            exportSessionToJson(sessionId)
-
             Result.success(ChatResult(
                 assistantContent = finalContent,
                 toolCalls = null,
@@ -212,11 +209,13 @@ class ChatEngine(private val context: Context) {
         )
         db.sessionDao().insert(session)
 
-        val systemMsg = """
-            你是 Android Agent，一个运行在 Android 设备上的 AI 助手。
-            请用中文回答用户的问题。
-            今天是 ${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())}
-        """.trimIndent()
+        val systemMsg = AppPreferences.systemPrompt.let { prompt ->
+            if (prompt.isNotBlank()) {
+                "$prompt\n\n今天是 ${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())}"
+            } else {
+                "今天是 ${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())}"
+            }
+        }
 
         db.messageDao().insert(Message(
             sessionId = sessionId,
@@ -233,43 +232,6 @@ class ChatEngine(private val context: Context) {
     suspend fun deleteSession(sessionId: String) = withContext(Dispatchers.IO) {
         db.messageDao().deleteBySession(sessionId)
         db.sessionDao().deleteById(sessionId)
-    }
-
-    /**
-     * 导出会话完整信息为 JSON 文件
-     * 保存到 /storage/emulated/0/Android/data/com.androidagent/files/chat_logs/
-     */
-    private suspend fun exportSessionToJson(sessionId: String) = withContext(Dispatchers.IO) {
-        try {
-            val sdf = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault())
-            val fileName = "chat_${sdf.format(Date())}_${sessionId}.json"
-
-            val exportDir = java.io.File(context.getExternalFilesDir(null), "chat_logs")
-            exportDir.mkdirs()
-            val file = java.io.File(exportDir, fileName)
-
-            val messages = db.messageDao().getMessagesBySessionSync(sessionId)
-
-            val data = mapOf(
-                "session_id" to sessionId,
-                "timestamp" to System.currentTimeMillis() / 1000,
-                "messages" to messages.map { msg ->
-                    mutableMapOf<String, Any?>(
-                        "role" to msg.role,
-                        "content" to msg.content
-                    ).apply {
-                        if (!msg.reasoningContent.isNullOrBlank()) put("reasoning_content", msg.reasoningContent)
-                        if (!msg.toolCalls.isNullOrBlank()) put("tool_calls", msg.toolCalls)
-                        if (!msg.toolCallId.isNullOrBlank()) put("tool_call_id", msg.toolCallId)
-                        if (!msg.toolName.isNullOrBlank()) put("tool_name", msg.toolName)
-                    }
-                }
-            )
-
-            file.writeText(gson.toJson(data))
-        } catch (_: Exception) {
-            // 导出失败不影响主流程
-        }
     }
 
     /**
