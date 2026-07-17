@@ -376,16 +376,16 @@ fun MessageBubble(msg: Message) {
                     Text("调用工具中...", Modifier.padding(14.dp, 10.dp),
                         color = tc, fontSize = 13.sp)
                 }
-                // 工具执行结果 — 折叠显示
+                // 工具执行结果 — 默认只显示第一行，点开展示全部
                 isTool -> {
                     val displayText = msg.content.ifBlank { "(空)" }
-                    if (toolExpanded || displayText.length < 200) {
+                    val firstLine = displayText.lines().firstOrNull() ?: displayText
+                    if (toolExpanded) {
                         Text(displayText, Modifier.padding(14.dp, 10.dp),
                             color = tc, fontFamily = FontFamily.Monospace,
                             fontSize = 13.sp, lineHeight = 18.sp)
                     } else {
-                        Text("${displayText.take(200)}...",
-                            Modifier.padding(14.dp, 10.dp),
+                        Text(firstLine, Modifier.padding(14.dp, 10.dp),
                             color = tc, fontFamily = FontFamily.Monospace,
                             fontSize = 13.sp, lineHeight = 18.sp)
                     }
