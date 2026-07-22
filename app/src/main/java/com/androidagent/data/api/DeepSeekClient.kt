@@ -238,6 +238,7 @@ class DeepSeekClient {
             var contentBuffer = StringBuilder()
             var reasoningBuffer = StringBuilder()
             var finalUsage: Usage? = null
+            var doneSent = false
 
             while (reader.readLine().also { line = it } != null) {
                 val ln = line ?: continue
@@ -325,6 +326,7 @@ class DeepSeekClient {
                                 }
                             } else null
 
+                            doneSent = true
                             trySend(StreamEvent.Done(
                                 content = fullContent,
                                 reasoningContent = fullReasoning,
@@ -346,12 +348,23 @@ class DeepSeekClient {
                 }
             }
 
-            // 流正常结束，检查是否已经发送过 Done
-            if (contentBuffer.isNotEmpty() && !currentToolCalls.isNotEmpty()) {
+            // 流正常结束 — 如果 finish_reason 未触发（某些 API 变体），兜底发送 Done
+            if (!doneSent) {
                 trySend(StreamEvent.Done(
                     content = contentBuffer.toString(),
                     reasoningContent = reasoningBuffer.toString().ifEmpty { null },
-                    toolCalls = null,
+                    toolCalls = if (currentToolCalls.isNotEmpty()) {
+                        currentToolCalls.entries.sortedBy { it.key }.map { (_, tcData) ->
+                            DeepSeekClient.ToolCall(
+                                id = tcData["id"] as? String ?: "",
+                                type = tcData["type"] as? String ?: "function",
+                                function = DeepSeekClient.ToolFunction(
+                                    name = tcData["name"] as? String ?: "",
+                                    arguments = tcData["arguments"] as? String ?: ""
+                                )
+                            )
+                        }
+                    } else null,
                     finishReason = "stop",
                     usage = finalUsage
                 ))

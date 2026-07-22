@@ -284,7 +284,7 @@ class ChatEngine(private val context: Context) {
                     return@withContext Result.failure(Exception("流式响应不完整"))
                 }
 
-                val fullContent = de.content
+                val fullContent = contentBuilder.toString().ifEmpty { de.content }
                 val reasoning = de.reasoningContent ?: reasoningBuilder.toString().ifEmpty { null }
                 val usage = de.usage
                 val toolCalls = de.toolCalls
