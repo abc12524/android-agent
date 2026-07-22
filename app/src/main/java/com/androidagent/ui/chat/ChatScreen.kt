@@ -74,9 +74,11 @@ fun ChatScreen(
         }
     }
 
-    LaunchedEffect(state.messages.size) {
-        if (state.messages.isNotEmpty() && !state.isLoading) {
-            listState.animateScrollToItem(state.messages.size - 1)
+    // 有流式内容或新消息时自动滚动到底部
+    val scrollTarget = state.messages.size + if (state.streamingContent != null) 1 else 0
+    LaunchedEffect(scrollTarget, state.isLoading) {
+        if (scrollTarget > 0) {
+            listState.animateScrollToItem(scrollTarget - 1)
         }
     }
 
@@ -161,6 +163,13 @@ fun ChatScreen(
                         }
                         items(displayMessages, key = { it.id }) { msg ->
                             SelectionContainer { MessageBubble(msg) }
+                        }
+                        // 流式输出消息（实时显示增量内容）
+                        val streamContent = state.streamingContent
+                        if (streamContent != null) {
+                            item(key = "streaming_message") {
+                                StreamingBubble(streamContent)
+                            }
                         }
                         // 底部 token 统计
                         if (state.lastUsage != null) {
@@ -322,59 +331,42 @@ private fun SessionDrawer(
 
 // ==================== 消息气泡 ====================
 
+/** 流式输出气泡 — 实时显示 AI 正在生成的文本 */
+@Composable
+fun StreamingBubble(content: String) {
+    val tc = BubbleAssistantText
+    val bc = BubbleAssistant
+    Surface(
+        modifier = Modifier.widthIn(max = 320.dp),
+        shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp,
+            bottomStart = 4.dp, bottomEnd = 16.dp),
+        color = bc
+    ) {
+        Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+            MarkdownText(content, baseColor = tc)
+            Spacer(Modifier.height(2.dp))
+            // 闪烁光标
+            Text("▌", fontSize = 14.sp, color = tc,
+                fontFamily = FontFamily.Monospace)
+        }
+    }
+}
+
 @Composable
 fun MessageBubble(msg: Message) {
     val isUser = msg.role == "user"
     val isTool = msg.role == "tool"
     val hasToolCalls = msg.role == "assistant" && msg.toolCalls != null
             && msg.content.isBlank()
-    val bc = when { isUser -> BubbleUser; isTool -> BubbleTool; else -> BubbleAssistant }
-    val tc = when { isUser -> BubbleUserText; isTool -> BubbleToolText; else -> BubbleAssistantText }
+    val bc = when { isUser -> BubbleUser; isTool -> BubbleAssistant; else -> BubbleAssistant }
+    val tc = when { isUser -> BubbleUserText; isTool -> BubbleAssistantText; else -> BubbleAssistantText }
 
-    // 工具调用折叠状态
-    var invocationExpanded by remember { mutableStateOf(false) }
     // 工具结果折叠状态
     var resultExpanded by remember { mutableStateOf(false) }
 
     Column(Modifier.fillMaxWidth(),
         horizontalAlignment = if (isUser) Alignment.End else Alignment.Start
     ) {
-        // ---- 工具调用过程展示 ----
-        if (isTool && msg.toolName != null) {
-            val argsText = if (!msg.toolArgs.isNullOrBlank()) {
-                try {
-                    val gson = com.google.gson.GsonBuilder().create()
-                    val obj = gson.fromJson(msg.toolArgs, Map::class.java)
-                    obj.entries.joinToString(", ") { (k, v) -> "$k=$v" }
-                } catch (_: Exception) {
-                    msg.toolArgs
-                }
-            } else ""
-            Surface(
-                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
-                    .clickable { invocationExpanded = !invocationExpanded },
-                shape = RoundedCornerShape(8.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
-            ) {
-                Row(Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        if (invocationExpanded) "🔽" else "🔧",
-                        fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(Modifier.width(4.dp))
-                    if (invocationExpanded && argsText.isNotBlank()) {
-                        Text("${msg.toolName}($argsText)", fontSize = 11.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    } else {
-                        Text(msg.toolName, fontSize = 11.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                }
-            }
-        }
         // 推理内容
         if (msg.reasoningContent != null && msg.reasoningContent.isNotBlank()) {
             Surface(Modifier.padding(bottom = 4.dp).widthIn(max = 320.dp),
@@ -386,39 +378,89 @@ fun MessageBubble(msg: Message) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
-        Surface(
-            modifier = Modifier.widthIn(max = 320.dp)
-                .then(if (isTool) Modifier.clickable { resultExpanded = !resultExpanded } else Modifier),
-            shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp,
-                bottomStart = if (isUser) 16.dp else 4.dp,
-                bottomEnd = if (isUser) 4.dp else 16.dp),
-            color = bc
-        ) {
-            when {
-                // 仅工具调用（无文本回复）
-                hasToolCalls -> {
+
+        when {
+            // ---- 工具调用（执行信息 + 结果合并为一个卡片） ----
+            isTool && msg.toolName != null -> {
+                val argsText = if (!msg.toolArgs.isNullOrBlank()) {
+                    try {
+                        val gson = com.google.gson.GsonBuilder().create()
+                        val obj = gson.fromJson(msg.toolArgs, Map::class.java)
+                        obj.entries.joinToString(", ") { (k, v) -> "$k=$v" }
+                    } catch (_: Exception) {
+                        msg.toolArgs
+                    }
+                } else ""
+
+                Surface(
+                    modifier = Modifier.widthIn(max = 320.dp)
+                        .clickable { resultExpanded = !resultExpanded },
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
+                ) {
+                    Column(Modifier.padding(10.dp)) {
+                        // 头部：工具名称 + 参数
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(if (resultExpanded) "🔽" else "🔧",
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Spacer(Modifier.width(6.dp))
+                            Text(msg.toolName,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            if (argsText.isNotBlank()) {
+                                Text("($argsText)",
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
+                            }
+                        }
+                        // 结果：展开后显示
+                        if (resultExpanded) {
+                            Spacer(Modifier.height(6.dp))
+                            HorizontalDivider(
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.15f)
+                            )
+                            Spacer(Modifier.height(6.dp))
+                            val displayText = msg.content.ifBlank { "(空)" }
+                            Text(displayText,
+                                fontSize = 12.sp,
+                                fontFamily = FontFamily.Monospace,
+                                lineHeight = 17.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+            }
+
+            // ---- 仅工具调用（无文本回复） ----
+            hasToolCalls -> {
+                Surface(
+                    modifier = Modifier.widthIn(max = 320.dp),
+                    shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp,
+                        bottomStart = 4.dp, bottomEnd = 16.dp),
+                    color = bc
+                ) {
                     Text("调用工具中...", Modifier.padding(14.dp, 10.dp),
                         color = tc, fontSize = 13.sp)
                 }
-                // 工具执行结果 — 默认隐藏，点开展示全部
-                isTool -> {
-                    if (resultExpanded) {
-                        val displayText = msg.content.ifBlank { "(空)" }
-                        Text(displayText, Modifier.padding(14.dp, 10.dp),
-                            color = tc, fontFamily = FontFamily.Monospace,
-                            fontSize = 13.sp, lineHeight = 18.sp)
-                    } else {
-                        Text("(点击展开)", Modifier.padding(14.dp, 10.dp),
-                            color = tc.copy(alpha = 0.5f), fontSize = 13.sp)
-                    }
-                }
-                // 普通消息 (user / assistant)
-                else -> {
+            }
+
+            // ---- 普通消息 (user / assistant) ----
+            else -> {
+                Surface(
+                    modifier = Modifier.widthIn(max = 320.dp),
+                    shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp,
+                        bottomStart = if (isUser) 16.dp else 4.dp,
+                        bottomEnd = if (isUser) 4.dp else 16.dp),
+                    color = bc
+                ) {
                     MarkdownText(msg.content.ifBlank { "(空)" },
                         Modifier.padding(horizontal = 14.dp, vertical = 10.dp), baseColor = tc)
                 }
             }
         }
+
         Text(fmtTime(msg.timestamp), fontSize = 10.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp))

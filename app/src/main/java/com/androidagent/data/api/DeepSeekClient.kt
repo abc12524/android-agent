@@ -9,7 +9,12 @@ import kotlinx.coroutines.withContext
 import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
+import java.io.BufferedReader
 import java.io.IOException
+import java.io.InputStreamReader
 import java.util.concurrent.TimeUnit
 
 /**
@@ -177,6 +182,214 @@ class DeepSeekClient {
         } catch (e: Exception) {
             Result.failure(Exception("请求失败: ${e.message}"))
         }
+    }
+
+    /**
+     * 流式调用 DeepSeek Chat Completion API（SSE 流）
+     * 通过 Flow 逐 chunk 推送增量内容
+     */
+    fun chatStream(
+        messages: List<ChatMessage>,
+        tools: List<ToolDefinition>? = null
+    ): Flow<StreamEvent> = callbackFlow {
+        val apiKey = AppPreferences.deepSeekApiKey
+        if (apiKey.isBlank()) {
+            trySend(StreamEvent.Error(Exception("请先在设置中配置 DeepSeek API Key")))
+            close()
+            return@callbackFlow
+        }
+
+        val baseUrl = AppPreferences.deepSeekBaseUrl
+        val requestBody = ChatRequest(
+            messages = messages,
+            tools = tools?.takeIf { it.isNotEmpty() },
+            stream = true
+        )
+        val jsonBody = gson.toJson(requestBody)
+
+        try {
+            val request = Request.Builder()
+                .url("$baseUrl/v1/chat/completions")
+                .addHeader("Authorization", "Bearer $apiKey")
+                .addHeader("Content-Type", "application/json")
+                .addHeader("Accept", "text/event-stream")
+                .post(jsonBody.toRequestBody(jsonMediaType))
+                .build()
+
+            val call = client.newCall(request)
+            val response = call.execute()
+
+            if (!response.isSuccessful) {
+                val errorBody = response.body?.string() ?: ""
+                trySend(StreamEvent.Error(Exception("API 错误 (${response.code}): $errorBody")))
+                close()
+                return@callbackFlow
+            }
+
+            val body = response.body ?: run {
+                trySend(StreamEvent.Error(Exception("响应体为空")))
+                close()
+                return@callbackFlow
+            }
+
+            val reader = BufferedReader(InputStreamReader(body.byteStream()))
+            var line: String?
+            val currentToolCalls = mutableMapOf<Int, MutableMap<String, Any?>>()
+            var contentBuffer = StringBuilder()
+            var reasoningBuffer = StringBuilder()
+            var finalUsage: Usage? = null
+
+            while (reader.readLine().also { line = it } != null) {
+                val ln = line ?: continue
+                if (!ln.startsWith("data: ")) continue
+                val data = ln.removePrefix("data: ")
+
+                // [DONE] 标记
+                if (data == "[DONE]") continue
+
+                try {
+                    val json = JsonParser.parseString(data).asJsonObject
+                    val choices = json.getAsJsonArray("choices")
+                    if (choices == null || choices.size() == 0) {
+                        // usage 可能在最后一个非 choices 块中
+                        val usageObj = json.getAsJsonObject("usage")
+                        if (usageObj != null) {
+                            finalUsage = parseUsage(usageObj)
+                        }
+                        continue
+                    }
+
+                    for (choiceEl in choices) {
+                        val choice = choiceEl.asJsonObject
+                        val delta = choice.getAsJsonObject("delta") ?: continue
+                        val finishReason = choice.get("finish_reason")?.asString
+                        val index = choice.get("index")?.asInt ?: 0
+
+                        // reasoning_content
+                        if (delta.has("reasoning_content") && !delta.get("reasoning_content").isJsonNull) {
+                            val r = delta.get("reasoning_content").asString
+                            reasoningBuffer.append(r)
+                            trySend(StreamEvent.ReasoningDelta(r))
+                        }
+
+                        // content delta
+                        if (delta.has("content") && !delta.get("content").isJsonNull) {
+                            val c = delta.get("content").asString
+                            contentBuffer.append(c)
+                            trySend(StreamEvent.ContentDelta(c))
+                        }
+
+                        // tool_calls delta
+                        if (delta.has("tool_calls") && !delta.get("tool_calls").isJsonNull) {
+                            val tcArr = delta.getAsJsonArray("tool_calls")
+                            for (tcEl in tcArr) {
+                                val tcObj = tcEl.asJsonObject
+                                val tcIndex = tcObj.get("index")?.asInt ?: 0
+                                val tcData = currentToolCalls.getOrPut(tcIndex) { mutableMapOf() }
+
+                                if (tcObj.has("id") && !tcObj.get("id").isJsonNull) {
+                                    tcData["id"] = tcObj.get("id").asString
+                                }
+                                if (tcObj.has("type") && !tcObj.get("type").isJsonNull) {
+                                    tcData["type"] = tcObj.get("type").asString
+                                }
+                                val func = tcObj.getAsJsonObject("function")
+                                if (func != null) {
+                                    if (func.has("name") && !func.get("name").isJsonNull) {
+                                        val existing = tcData.getOrPut("name") { "" } as String
+                                        tcData["name"] = existing + func.get("name").asString
+                                    }
+                                    if (func.has("arguments") && !func.get("arguments").isJsonNull) {
+                                        val existing = tcData.getOrPut("arguments") { "" } as String
+                                        tcData["arguments"] = existing + func.get("arguments").asString
+                                    }
+                                }
+                            }
+                        }
+
+                        // finish_reason — 该 choice 结束
+                        if (finishReason != null) {
+                            val fullContent = contentBuffer.toString()
+                            val fullReasoning = reasoningBuffer.toString()
+
+                            val toolCalls = if (currentToolCalls.isNotEmpty()) {
+                                currentToolCalls.entries.sortedBy { it.key }.map { (_, tcData) ->
+                                    ToolCall(
+                                        id = tcData["id"] as? String ?: "",
+                                        type = tcData["type"] as? String ?: "function",
+                                        function = ToolFunction(
+                                            name = tcData["name"] as? String ?: "",
+                                            arguments = tcData["arguments"] as? String ?: ""
+                                        )
+                                    )
+                                }
+                            } else null
+
+                            trySend(StreamEvent.Done(
+                                content = fullContent,
+                                reasoningContent = fullReasoning,
+                                toolCalls = toolCalls,
+                                finishReason = finishReason,
+                                usage = finalUsage
+                            ))
+                        }
+                    }
+
+                    // 尝试解析 usage（可能在 choices 之后的行）
+                    val usageObj = json.getAsJsonObject("usage")
+                    if (usageObj != null) {
+                        finalUsage = parseUsage(usageObj)
+                    }
+
+                } catch (_: Exception) {
+                    // 跳过解析失败的 chunk
+                }
+            }
+
+            // 流正常结束，检查是否已经发送过 Done
+            if (contentBuffer.isNotEmpty() && !currentToolCalls.isNotEmpty()) {
+                trySend(StreamEvent.Done(
+                    content = contentBuffer.toString(),
+                    reasoningContent = reasoningBuffer.toString().ifEmpty { null },
+                    toolCalls = null,
+                    finishReason = "stop",
+                    usage = finalUsage
+                ))
+            }
+            reader.close()
+        } catch (e: IOException) {
+            trySend(StreamEvent.Error(Exception("网络错误: ${e.message}")))
+        } catch (e: Exception) {
+            trySend(StreamEvent.Error(Exception("请求失败: ${e.message}")))
+        }
+        close()
+        awaitClose { }
+    }
+
+    private fun parseUsage(usageObj: com.google.gson.JsonObject): Usage {
+        return Usage(
+            promptTokens = usageObj.get("prompt_tokens")?.asInt ?: 0,
+            completionTokens = usageObj.get("completion_tokens")?.asInt ?: 0,
+            totalTokens = usageObj.get("total_tokens")?.asInt ?: 0,
+            promptCacheHitTokens = usageObj.get("prompt_cache_hit_tokens")?.asInt ?: 0,
+            promptCacheMissTokens = usageObj.get("prompt_cache_miss_tokens")?.asInt ?: 0
+        )
+    }
+
+    /**
+     * 流式事件
+     */
+    sealed class StreamEvent {
+        data class ContentDelta(val delta: String) : StreamEvent()
+        data class ReasoningDelta(val delta: String) : StreamEvent()
+        data class Done(
+            val content: String,
+            val reasoningContent: String?,
+            val toolCalls: List<ToolCall>?,
+            val finishReason: String,
+            val usage: Usage?
+        ) : StreamEvent()
+        data class Error(val error: Exception) : StreamEvent()
     }
 
     /**

@@ -1,6 +1,7 @@
 package com.androidagent.ui.chat
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -16,13 +17,14 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 /**
  * 简单的 Markdown 文本渲染组件
- * 支持：**加粗** *斜体* `行内代码` ```代码块``` [链接](url)
+ * 支持：**加粗** *斜体* `行内代码` ```代码块``` [链接](url) | 表格 |
  */
 @Composable
 fun MarkdownText(
@@ -37,11 +39,11 @@ fun MarkdownText(
     val linkColor = MaterialTheme.colorScheme.primary
 
     // 先按代码块分割
-    val blocks = splitCodeBlocks(markdown)
+    val codeBlocks = splitCodeBlocks(markdown)
 
     Column(modifier = modifier) {
-        for (block in blocks) {
-            if (block.isCode) {
+        for (codeBlock in codeBlocks) {
+            if (codeBlock.isCode) {
                 // 代码块：等宽 + 背景
                 Box(
                     modifier = Modifier
@@ -52,7 +54,7 @@ fun MarkdownText(
                         .padding(12.dp)
                 ) {
                     Text(
-                        text = block.text,
+                        text = codeBlock.text,
                         fontFamily = FontFamily.Monospace,
                         fontSize = 13.sp,
                         lineHeight = 18.sp,
@@ -60,14 +62,24 @@ fun MarkdownText(
                     )
                 }
             } else {
-                // 普通文本：按行处理
-                val lines = block.text.split("\n")
-                for ((idx, line) in lines.withIndex()) {
-                    if (line.isBlank()) {
-                        if (idx < lines.lastIndex) Spacer(Modifier.height(4.dp))
-                        continue
+                // 普通文本：先提取表格，再逐行渲染
+                val segments = splitTableBlocks(codeBlock.text)
+                for (segment in segments) {
+                    when (segment) {
+                        is Segment.Table -> {
+                            renderTable(segment.rows, baseColor, codeColor, linkColor, fontSize)
+                        }
+                        is Segment.Text -> {
+                            val lines = segment.text.split("\n")
+                            for ((idx, line) in lines.withIndex()) {
+                                if (line.isBlank()) {
+                                    if (idx < lines.lastIndex) Spacer(Modifier.height(4.dp))
+                                    continue
+                                }
+                                renderLine(line.trimStart(), baseColor, codeColor, linkColor, fontSize, lineHeight)
+                            }
+                        }
                     }
-                    renderLine(line.trimStart(), baseColor, codeColor, linkColor, fontSize, lineHeight)
                 }
             }
         }
@@ -90,18 +102,146 @@ private fun splitCodeBlocks(text: String): List<Block> {
             break
         }
         if (!lookingForCode) {
-            // fence 前是普通文本
             if (idx > start) result.add(Block(text.substring(start, idx), false))
             start = idx + 3
             lookingForCode = true
         } else {
-            // fence 后是代码块内容
             result.add(Block(text.substring(start, idx), true))
             start = idx + 3
             lookingForCode = false
         }
     }
     return result
+}
+
+// ==================== 表格支持 ====================
+
+private sealed class Segment {
+    data class Text(val text: String) : Segment()
+    data class Table(val rows: List<List<String>>) : Segment()
+}
+
+/** 从普通文本中提取连续的 Markdown 表格行 */
+private fun splitTableBlocks(text: String): List<Segment> {
+    val result = mutableListOf<Segment>()
+    val lines = text.split("\n")
+    var i = 0
+    while (i < lines.size) {
+        val line = lines[i].trim()
+        if (line.startsWith("|") && line.endsWith("|") &&
+            i + 1 < lines.size && lines[i + 1].trim().matches(Regex("^\\|[\\s-:|]+\\|$"))) {
+            // 发现表格：收集所有连续表格行
+            val tableRows = mutableListOf<List<String>>()
+            // 第一行：表头
+            tableRows.add(parseTableRow(line))
+            i++
+            // 第二行：分隔符（跳过）
+            i++
+            // 后续行：数据行
+            while (i < lines.size) {
+                val dataLine = lines[i].trim()
+                if (dataLine.startsWith("|") && dataLine.endsWith("|")) {
+                    tableRows.add(parseTableRow(dataLine))
+                    i++
+                } else break
+            }
+            result.add(Segment.Table(tableRows))
+        } else {
+            val textLines = mutableListOf<String>()
+            textLines.add(lines[i])
+            i++
+            // 收集非表格行
+            while (i < lines.size) {
+                val next = lines[i].trim()
+                val isTableStart = next.startsWith("|") && next.endsWith("|") &&
+                    i + 1 < lines.size && lines[i + 1].trim().matches(Regex("^\\|[\\s-:|]+\\|$"))
+                if (isTableStart) break
+                textLines.add(lines[i])
+                i++
+            }
+            result.add(Segment.Text(textLines.joinToString("\n")))
+        }
+    }
+    return result
+}
+
+/** 解析一行表格数据：| a | b | c | → ["a", "b", "c"] */
+private fun parseTableRow(line: String): List<String> {
+    val trimmed = line.trim()
+    val content = if (trimmed.startsWith("|")) trimmed.substring(1) else trimmed
+    val endTrimmed = if (content.endsWith("|")) content.substring(0, content.length - 1) else content
+    return endTrimmed.split("|").map { it.trim() }
+}
+
+/** 渲染表格 */
+@Composable
+private fun renderTable(
+    rows: List<List<String>>,
+    baseColor: Color,
+    codeColor: Color,
+    linkColor: Color,
+    fontSize: TextUnit
+) {
+    if (rows.isEmpty()) return
+    val headerBg = baseColor.copy(alpha = 0.1f)
+    val borderColor = baseColor.copy(alpha = 0.25f)
+    val maxCols = rows.maxOfOrNull { it.size } ?: 1
+    val colWidths = computeColWidths(rows, fontSize)
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(borderColor)
+            .padding(1.dp) // 细边框效果
+    ) {
+        rows.forEachIndexed { rowIdx, row ->
+            val isHeader = rowIdx == 0
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(if (isHeader) headerBg else Color.Transparent)
+            ) {
+                for (colIdx in 0 until maxCols) {
+                    val cellText = row.getOrElse(colIdx) { "" }
+                    val width = colWidths.getOrElse(colIdx) { 80.dp }
+                    Box(
+                        modifier = Modifier
+                            .width(width)
+                            .padding(horizontal = 4.dp)
+                            .then(
+                                if (colIdx < maxCols - 1) Modifier.border(
+                                    width = 0.5.dp,
+                                    color = borderColor,
+                                    shape = RoundedCornerShape(0.dp)
+                                ) else Modifier
+                            )
+                            .padding(horizontal = 8.dp, vertical = 6.dp)
+                    ) {
+                        Text(
+                            text = cellText,
+                            fontSize = if (isHeader) (fontSize.value - 1).sp else (fontSize.value - 1).sp,
+                            fontWeight = if (isHeader) FontWeight.Bold else FontWeight.Normal,
+                            color = baseColor,
+                            maxLines = 1
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** 计算每列的最大宽度（基于字符数） */
+@Composable
+private fun computeColWidths(rows: List<List<String>>, fontSize: TextUnit): List<androidx.compose.ui.unit.Dp> {
+    val maxCols = rows.maxOfOrNull { it.size } ?: 1
+    val charWidth = fontSize.value * 0.6f // 近似字符宽度
+    return (0 until maxCols).map { col ->
+        val maxLen = rows.mapNotNull { it.getOrNull(col) }.maxOfOrNull { it.length } ?: 4
+        (maxLen.coerceAtLeast(3) * charWidth + 16).dp
+    }
 }
 
 /** 渲染一行文本（标题/列表/普通） */

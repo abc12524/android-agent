@@ -3,6 +3,7 @@ package com.androidagent.engine
 import android.content.Context
 import com.androidagent.data.AppPreferences
 import com.androidagent.data.api.DeepSeekClient
+import com.androidagent.data.api.DeepSeekClient.StreamEvent
 import com.androidagent.data.db.AppDatabase
 import com.androidagent.data.model.ChatSession
 import com.androidagent.data.model.Message
@@ -182,6 +183,187 @@ class ChatEngine(private val context: Context) {
             }
 
             // 6. 更新会话统计
+            val msgCount = db.messageDao().getMessagesBySessionSync(sessionId).size
+            db.sessionDao().updateStats(sessionId, System.currentTimeMillis(), msgCount)
+
+            Result.success(ChatResult(
+                assistantContent = finalContent,
+                toolCalls = null,
+                reasoningContent = finalReasoning,
+                usage = finalUsage,
+                allMessages = allNewMessages
+            ))
+
+        } catch (e: Exception) {
+            rollbackMessages(db, insertedIds)
+            Result.failure(Exception("对话失败: ${e.message}"))
+        }
+    }
+
+    /**
+     * 发送用户消息并获取 AI 回复（流式版）
+     * 自动处理多轮工具调用，通过 onDelta 回调逐 chunk 输出内容
+     */
+    suspend fun sendMessageStream(
+        sessionId: String,
+        userMessage: String,
+        onDelta: (content: String) -> Unit
+    ): Result<ChatResult> = withContext(Dispatchers.IO) {
+        val apiKey = AppPreferences.deepSeekApiKey
+        if (apiKey.isBlank()) {
+            return@withContext Result.failure(Exception("请先在设置中配置 DeepSeek API Key"))
+        }
+
+        val insertedIds = mutableListOf<Long>()
+
+        try {
+            val allNewMessages = mutableListOf<Message>()
+            toolRegistry.currentSessionId = sessionId
+
+            // 1. 加载历史消息
+            val history = db.messageDao().getMessagesBySessionSync(sessionId)
+            val messages = history.map { it.toApiMessage() }.toMutableList()
+
+            // 2. 搜索 OpenViking 记忆
+            if (AppPreferences.ovSearchDisplayCount > 0) {
+                val ovContext = openViking.loadContext(userMessage)
+                if (ovContext.isNotBlank()) {
+                    val ovMsg = "系统提示：\n$ovContext"
+                    messages.add(DeepSeekClient.ChatMessage(role = "user", content = ovMsg))
+                    val ovEntity = Message(sessionId = sessionId, role = "user", content = ovMsg)
+                    insertedIds.add(db.messageDao().insert(ovEntity))
+                    allNewMessages.add(ovEntity)
+                }
+            }
+
+            // 3. 添加用户消息
+            messages.add(DeepSeekClient.ChatMessage(role = "user", content = userMessage))
+            val userMsgEntity = Message(sessionId = sessionId, role = "user", content = userMessage)
+            insertedIds.add(db.messageDao().insert(userMsgEntity))
+            allNewMessages.add(userMsgEntity)
+
+            // 4. 多轮工具调用循环（流式版）
+            var finalContent = ""
+            var finalReasoning: String? = null
+            var finalUsage: DeepSeekClient.Usage? = null
+            val maxRounds = AppPreferences.maxToolRounds
+
+            for (round in 0..maxRounds + 1) {
+                val contentBuilder = StringBuilder()
+                val reasoningBuilder = StringBuilder()
+                var streamError: Exception? = null
+                var doneEvent: StreamEvent.Done? = null
+
+                // 收集流式事件
+                deepSeek.chatStream(messages, toolRegistry.toToolDefinitions()).collect { event ->
+                    when (event) {
+                        is StreamEvent.ContentDelta -> {
+                            contentBuilder.append(event.delta)
+                            onDelta(event.delta)
+                        }
+                        is StreamEvent.ReasoningDelta -> {
+                            reasoningBuilder.append(event.delta)
+                        }
+                        is StreamEvent.Done -> {
+                            doneEvent = event
+                        }
+                        is StreamEvent.Error -> {
+                            streamError = event.error
+                        }
+                    }
+                }
+
+                if (streamError != null) {
+                    rollbackMessages(db, insertedIds)
+                    return@withContext Result.failure(streamError!!)
+                }
+
+                val de = doneEvent
+                if (de == null) {
+                    rollbackMessages(db, insertedIds)
+                    return@withContext Result.failure(Exception("流式响应不完整"))
+                }
+
+                val fullContent = de.content
+                val reasoning = de.reasoningContent ?: reasoningBuilder.toString().ifEmpty { null }
+                val usage = de.usage
+                val toolCalls = de.toolCalls
+
+                // 记录 Token 消耗
+                if (usage != null) {
+                    finalUsage = usage
+                    db.sessionDao().addTokens(sessionId, usage.promptTokens, usage.completionTokens)
+                    db.sessionDao().addCacheTokens(sessionId, usage.promptCacheHitTokens, usage.promptCacheMissTokens)
+                }
+
+                // 保存 assistant 消息
+                val toolCallsJson = if (toolCalls != null) {
+                    gson.toJson(toolCalls)
+                } else null
+                val assistantEntity = Message(
+                    sessionId = sessionId,
+                    role = "assistant",
+                    content = fullContent,
+                    reasoningContent = reasoning,
+                    toolCalls = toolCallsJson,
+                    promptTokens = usage?.promptTokens ?: 0,
+                    completionTokens = usage?.completionTokens ?: 0,
+                    promptCacheHitTokens = usage?.promptCacheHitTokens ?: 0,
+                    promptCacheMissTokens = usage?.promptCacheMissTokens ?: 0
+                )
+                val msgId = db.messageDao().insert(assistantEntity)
+                insertedIds.add(msgId)
+                allNewMessages.add(assistantEntity.copy(id = msgId))
+
+                // 添加到 API 消息列表
+                messages.add(DeepSeekClient.ChatMessage(
+                    role = "assistant",
+                    content = fullContent,
+                    toolCalls = toolCalls
+                ))
+
+                // 检查是否结束
+                if (toolCalls.isNullOrEmpty() || de.finishReason == "stop") {
+                    finalContent = fullContent
+                    finalReasoning = reasoning
+                    break
+                }
+
+                // 执行工具调用（非流式）
+                for (tc in toolCalls) {
+                    val toolName = tc.function.name
+                    val toolArgs = tc.function.arguments
+                    val toolResult = toolRegistry.executeToolCall(toolName, toolArgs)
+
+                    val toolEntity = Message(
+                        sessionId = sessionId,
+                        role = "tool",
+                        content = toolResult,
+                        toolCallId = tc.id,
+                        toolName = toolName,
+                        toolArgs = toolArgs
+                    )
+                    insertedIds.add(db.messageDao().insert(toolEntity))
+                    allNewMessages.add(toolEntity)
+
+                    messages.add(DeepSeekClient.ChatMessage(
+                        role = "tool",
+                        content = toolResult,
+                        toolCallId = tc.id,
+                        name = toolName
+                    ))
+                }
+
+                // 最后一次工具调用：注入停止通知
+                if (round == maxRounds) {
+                    messages.add(DeepSeekClient.ChatMessage(
+                        role = "user",
+                        content = "这是最后一次工具调用。请根据已有结果报告当前进度，总结完成情况，然后停止调用。"
+                    ))
+                }
+            }
+
+            // 5. 更新会话统计
             val msgCount = db.messageDao().getMessagesBySessionSync(sessionId).size
             db.sessionDao().updateStats(sessionId, System.currentTimeMillis(), msgCount)
 

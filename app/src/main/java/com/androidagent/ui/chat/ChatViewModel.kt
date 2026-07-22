@@ -31,7 +31,9 @@ data class ChatUiState(
     val todayCacheMiss: Int = 0,
     val lastUsage: DeepSeekClient.Usage? = null,
     val allSessions: List<ChatSession> = emptyList(),
-    val balance: String = ""
+    val balance: String = "",
+    /** 流式输出的增量内容，非 null 表示正在流式输出中 */
+    val streamingContent: String? = null
 )
 
 class ChatViewModel(application: Application) : AndroidViewModel(application) {
@@ -143,26 +145,38 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     fun sendMessage(text: String) {
         if (text.isBlank() || uiState.isLoading) return
-        uiState = uiState.copy(isLoading = true, error = null)
+        uiState = uiState.copy(isLoading = true, error = null, streamingContent = "")
         viewModelScope.launch {
             try {
-                val result = engine.sendMessage(currentSessionId, text)
+                val result = engine.sendMessageStream(
+                    sessionId = currentSessionId,
+                    userMessage = text,
+                    onDelta = { delta ->
+                        uiState = uiState.copy(
+                            streamingContent = (uiState.streamingContent ?: "") + delta
+                        )
+                    }
+                )
                 result.fold(
                     onSuccess = { chatResult ->
                         uiState = uiState.copy(
                             isLoading = false,
                             error = null,
-                            lastUsage = chatResult.usage
+                            lastUsage = chatResult.usage,
+                            streamingContent = null
                         )
-                        // 每次发送后刷新余额
                         refreshBalance()
                     },
                     onFailure = { e ->
-                        uiState = uiState.copy(isLoading = false, error = e.message ?: "未知错误")
+                        uiState = uiState.copy(
+                            isLoading = false,
+                            error = e.message ?: "未知错误",
+                            streamingContent = null
+                        )
                     }
                 )
             } catch (e: Throwable) {
-                uiState = uiState.copy(isLoading = false, error = "发送失败: ${e.message}")
+                uiState = uiState.copy(isLoading = false, error = "发送失败: ${e.message}", streamingContent = null)
             }
         }
     }
