@@ -65,7 +65,7 @@ class DeepSeekClient {
     )
 
     data class ChatRequest(
-        val model: String = "deepseek-chat",
+        val model: String = "deepseek-v4-flash",
         val messages: List<ChatMessage>,
         val tools: List<ToolDefinition>? = null,
         val temperature: Double = 0.7,
