@@ -74,11 +74,9 @@ fun ChatScreen(
         }
     }
 
-    // 有流式内容或新消息时自动滚动到底部
-    val scrollTarget = state.messages.size + if (state.streamingContent != null) 1 else 0
-    LaunchedEffect(scrollTarget, state.isLoading) {
-        if (scrollTarget > 0) {
-            listState.animateScrollToItem(scrollTarget - 1)
+    LaunchedEffect(state.messages.size) {
+        if (state.messages.isNotEmpty() && !state.isLoading) {
+            listState.animateScrollToItem(state.messages.size - 1)
         }
     }
 
@@ -163,13 +161,6 @@ fun ChatScreen(
                         }
                         items(displayMessages, key = { it.id }) { msg ->
                             SelectionContainer { MessageBubble(msg) }
-                        }
-                        // 流式输出消息（实时显示增量内容）
-                        val streamContent = state.streamingContent
-                        if (streamContent != null) {
-                            item(key = "streaming_message") {
-                                StreamingBubble(streamContent)
-                            }
                         }
                         // 底部 token 统计
                         if (state.lastUsage != null) {
@@ -330,27 +321,6 @@ private fun SessionDrawer(
 }
 
 // ==================== 消息气泡 ====================
-
-/** 流式输出气泡 — 实时显示 AI 正在生成的文本 */
-@Composable
-fun StreamingBubble(content: String) {
-    val tc = BubbleAssistantText
-    val bc = BubbleAssistant
-    Surface(
-        modifier = Modifier.widthIn(max = 320.dp),
-        shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp,
-            bottomStart = 4.dp, bottomEnd = 16.dp),
-        color = bc
-    ) {
-        Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
-            MarkdownText(content, baseColor = tc)
-            Spacer(Modifier.height(2.dp))
-            // 闪烁光标
-            Text("▌", fontSize = 14.sp, color = tc,
-                fontFamily = FontFamily.Monospace)
-        }
-    }
-}
 
 @Composable
 fun MessageBubble(msg: Message) {
