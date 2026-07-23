@@ -341,8 +341,8 @@ fun MessageBubble(msg: Message) {
     Column(Modifier.fillMaxWidth(),
         horizontalAlignment = if (isUser) Alignment.End else Alignment.Start
     ) {
-        // 推理内容
-        if (msg.reasoningContent != null && msg.reasoningContent.isNotBlank()) {
+        // 推理内容（仅在非 tool-call 消息时独立显示，tool-call 消息的推理在下方卡片内）
+        if (msg.reasoningContent != null && msg.reasoningContent.isNotBlank() && !hasToolCalls) {
             Surface(Modifier.padding(bottom = 4.dp).widthIn(max = 320.dp),
                 shape = RoundedCornerShape(8.dp),
                 color = MaterialTheme.colorScheme.surfaceVariant
@@ -431,16 +431,47 @@ fun MessageBubble(msg: Message) {
                 }
             }
 
-            // ---- 仅工具调用（无文本回复） ----
+            // ---- 仅工具调用（无文本回复）- 显示推理内容 ----
             hasToolCalls -> {
+                val hasReasoning = !msg.reasoningContent.isNullOrBlank()
                 Surface(
-                    modifier = Modifier.widthIn(max = 320.dp),
-                    shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp,
-                        bottomStart = 4.dp, bottomEnd = 16.dp),
-                    color = bc
+                    modifier = Modifier.widthIn(max = 320.dp)
+                        .let { if (hasReasoning) it.clickable { resultExpanded = !resultExpanded } else it },
+                    shape = RoundedCornerShape(10.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                    tonalElevation = 1.dp
                 ) {
-                    Text("调用工具中...", Modifier.padding(14.dp, 10.dp),
-                        color = tc, fontSize = 13.sp)
+                    Column(Modifier.padding(12.dp)) {
+                        // 头部
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(if (hasReasoning && resultExpanded) "▼" else "🧠",
+                                fontSize = 13.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Spacer(Modifier.width(6.dp))
+                            Text(if (hasReasoning) "深度思考" else "调用工具中...",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            if (hasReasoning) {
+                                Spacer(Modifier.weight(1f))
+                                Text(if (resultExpanded) "收起" else "详情",
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f))
+                            }
+                        }
+
+                        // 展开：推理内容
+                        if (hasReasoning && resultExpanded) {
+                            Spacer(Modifier.height(8.dp))
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                            Spacer(Modifier.height(8.dp))
+                            Text(msg.reasoningContent,
+                                fontSize = 12.sp,
+                                fontFamily = FontFamily.Monospace,
+                                lineHeight = 17.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
                 }
             }
 
