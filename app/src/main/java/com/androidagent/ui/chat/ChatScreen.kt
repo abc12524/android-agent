@@ -465,7 +465,7 @@ fun MessageBubble(msg: Message) {
                             Spacer(Modifier.height(8.dp))
                             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                             Spacer(Modifier.height(8.dp))
-                            Text(msg.reasoningContent,
+                            Text(msg.reasoningContent!!,
                                 fontSize = 12.sp,
                                 fontFamily = FontFamily.Monospace,
                                 lineHeight = 17.sp,
