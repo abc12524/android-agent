@@ -420,15 +420,12 @@ fun MessageBubble(msg: Message) {
                                 fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
                             Spacer(Modifier.height(2.dp))
-                            // 结果使用 MarkdownText 渲染
-                            MarkdownText(
-                                markdown = displayText,
-                                style = TextStyle(
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    fontSize = 12.sp
-                                ),
-                                syntaxHighlightColor = Color(0x80FFEB3B)
-                            )
+                            // 结果原文显示（不解析 Markdown）
+                            Text(displayText,
+                                fontSize = 12.sp,
+                                fontFamily = FontFamily.Monospace,
+                                lineHeight = 17.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                 }
