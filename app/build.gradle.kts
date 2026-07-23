@@ -90,4 +90,7 @@ dependencies {
 
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
+
+    // Markdown
+    implementation("com.github.jeziellago:compose-markdown:0.7.2")
 }

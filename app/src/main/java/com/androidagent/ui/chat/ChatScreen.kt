@@ -1,5 +1,7 @@
 package com.androidagent.ui.chat
 
+import dev.jeziellago.compose.markdowntext.MarkdownText
+
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -19,6 +21,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -416,10 +419,14 @@ fun MessageBubble(msg: Message) {
                                 fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
                             Spacer(Modifier.height(2.dp))
-                            // 结果使用 MarkdownText 渲染（支持表格、代码等格式）
-                            MarkdownText(displayText,
-                                fontSize = 12.sp,
-                                baseColor = MaterialTheme.colorScheme.onSurfaceVariant)
+                            // 结果使用 MarkdownText 渲染
+                            MarkdownText(
+                                markdown = displayText,
+                                style = TextStyle(
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontSize = 12.sp
+                                )
+                            )
                         }
                     }
                 }
@@ -447,8 +454,11 @@ fun MessageBubble(msg: Message) {
                         bottomEnd = if (isUser) 4.dp else 16.dp),
                     color = bc
                 ) {
-                    MarkdownText(msg.content.ifBlank { "(空)" },
-                        Modifier.padding(horizontal = 14.dp, vertical = 10.dp), baseColor = tc)
+                    MarkdownText(
+                        markdown = msg.content.ifBlank { "(空)" },
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                        style = TextStyle(color = tc, fontSize = 15.sp)
+                    )
                 }
             }
         }
