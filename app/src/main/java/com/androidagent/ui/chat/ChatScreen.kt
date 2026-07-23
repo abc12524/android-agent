@@ -433,43 +433,43 @@ fun MessageBubble(msg: Message) {
 
             // ---- 仅工具调用（无文本回复）- 显示推理内容 ----
             hasToolCalls -> {
-                val hasReasoning = !msg.reasoningContent.isNullOrBlank()
-                Surface(
-                    modifier = Modifier.widthIn(max = 320.dp)
-                        .let { if (hasReasoning) it.clickable { resultExpanded = !resultExpanded } else it },
-                    shape = RoundedCornerShape(10.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
-                    tonalElevation = 1.dp
-                ) {
-                    Column(Modifier.padding(12.dp)) {
-                        // 头部
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(if (hasReasoning && resultExpanded) "▼" else "🧠",
-                                fontSize = 13.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Spacer(Modifier.width(6.dp))
-                            Text(if (hasReasoning) "深度思考" else "调用工具中...",
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            if (hasReasoning) {
+                if (!msg.reasoningContent.isNullOrBlank()) {
+                    var resultExpanded by remember { mutableStateOf(false) }
+                    Surface(
+                        modifier = Modifier.widthIn(max = 320.dp)
+                            .clickable { resultExpanded = !resultExpanded },
+                        shape = RoundedCornerShape(10.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                        tonalElevation = 1.dp
+                    ) {
+                        Column(Modifier.padding(12.dp)) {
+                            // 头部
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(if (resultExpanded) "▼" else "🧠",
+                                    fontSize = 13.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Spacer(Modifier.width(6.dp))
+                                Text("深度思考",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 Spacer(Modifier.weight(1f))
                                 Text(if (resultExpanded) "收起" else "详情",
                                     fontSize = 11.sp,
                                     color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f))
                             }
-                        }
 
-                        // 展开：推理内容
-                        if (hasReasoning && resultExpanded) {
-                            Spacer(Modifier.height(8.dp))
-                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                            Spacer(Modifier.height(8.dp))
-                            Text(msg.reasoningContent!!,
-                                fontSize = 12.sp,
-                                fontFamily = FontFamily.Monospace,
-                                lineHeight = 17.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            // 展开：推理内容
+                            if (resultExpanded) {
+                                Spacer(Modifier.height(8.dp))
+                                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                                Spacer(Modifier.height(8.dp))
+                                Text(msg.reasoningContent!!,
+                                    fontSize = 12.sp,
+                                    fontFamily = FontFamily.Monospace,
+                                    lineHeight = 17.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
                         }
                     }
                 }
