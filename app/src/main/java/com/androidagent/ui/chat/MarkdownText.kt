@@ -2,7 +2,9 @@ package com.androidagent.ui.chat
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -173,7 +175,7 @@ private fun parseTableRow(line: String): List<String> {
     return endTrimmed.split("|").map { it.trim() }
 }
 
-/** 渲染表格 */
+/** 渲染表格 — 可横向滑动，支持单元格内联 Markdown */
 @Composable
 private fun renderTable(
     rows: List<List<String>>,
@@ -185,62 +187,47 @@ private fun renderTable(
     if (rows.isEmpty()) return
     val headerBg = baseColor.copy(alpha = 0.1f)
     val borderColor = baseColor.copy(alpha = 0.25f)
-    val maxCols = rows.maxOfOrNull { it.size } ?: 1
-    val colWidths = computeColWidths(rows, fontSize)
+    val cellFontSize = (fontSize.value - 1).sp
 
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 4.dp)
             .clip(RoundedCornerShape(8.dp))
             .background(borderColor)
-            .padding(1.dp) // 细边框效果
+            .horizontalScroll(rememberScrollState())
     ) {
-        rows.forEachIndexed { rowIdx, row ->
-            val isHeader = rowIdx == 0
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(if (isHeader) headerBg else Color.Transparent)
-            ) {
-                for (colIdx in 0 until maxCols) {
-                    val cellText = row.getOrElse(colIdx) { "" }
-                    val width = colWidths.getOrElse(colIdx) { 80.dp }
-                    Box(
-                        modifier = Modifier
-                            .width(width)
-                            .padding(horizontal = 4.dp)
-                            .then(
-                                if (colIdx < maxCols - 1) Modifier.border(
-                                    width = 0.5.dp,
-                                    color = borderColor,
-                                    shape = RoundedCornerShape(0.dp)
-                                ) else Modifier
+        Column {
+            rows.forEachIndexed { rowIdx, row ->
+                Row(
+                    modifier = Modifier
+                        .background(if (rowIdx == 0) headerBg else Color.Transparent)
+                ) {
+                    row.forEachIndexed { colIdx, cellText ->
+                        Box(
+                            modifier = Modifier
+                                .defaultMinSize(minWidth = 80.dp)
+                                .padding(horizontal = 4.dp)
+                                .then(
+                                    if (colIdx < row.lastIndex) Modifier.border(
+                                        width = 0.5.dp,
+                                        color = borderColor,
+                                        shape = RoundedCornerShape(0.dp)
+                                    ) else Modifier
+                                )
+                                .padding(horizontal = 8.dp, vertical = 6.dp)
+                        ) {
+                            Text(
+                                text = parseInline(cellText, baseColor, codeColor, linkColor),
+                                fontSize = cellFontSize,
+                                fontWeight = if (rowIdx == 0) FontWeight.Bold else FontWeight.Normal,
+                                color = baseColor
                             )
-                            .padding(horizontal = 8.dp, vertical = 6.dp)
-                    ) {
-                        Text(
-                            text = cellText,
-                            fontSize = if (isHeader) (fontSize.value - 1).sp else (fontSize.value - 1).sp,
-                            fontWeight = if (isHeader) FontWeight.Bold else FontWeight.Normal,
-                            color = baseColor,
-                            maxLines = 1
-                        )
+                        }
                     }
                 }
             }
         }
-    }
-}
-
-/** 计算每列的最大宽度（基于字符数） */
-@Composable
-private fun computeColWidths(rows: List<List<String>>, fontSize: TextUnit): List<androidx.compose.ui.unit.Dp> {
-    val maxCols = rows.maxOfOrNull { it.size } ?: 1
-    val charWidth = fontSize.value * 0.6f // 近似字符宽度
-    return (0 until maxCols).map { col ->
-        val maxLen = rows.mapNotNull { it.getOrNull(col) }.maxOfOrNull { it.length } ?: 4
-        (maxLen.coerceAtLeast(3) * charWidth + 16).dp
     }
 }
 
