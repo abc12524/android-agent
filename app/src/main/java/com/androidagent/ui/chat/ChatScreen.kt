@@ -350,54 +350,76 @@ fun MessageBubble(msg: Message) {
         }
 
         when {
-            // ---- 工具调用（执行信息 + 结果合并为一个卡片） ----
+            // ---- 工具调用（折叠：仅工具名；展开：参数 + 结果） ----
             isTool && msg.toolName != null -> {
-                val argsText = if (!msg.toolArgs.isNullOrBlank()) {
-                    try {
-                        val gson = com.google.gson.GsonBuilder().create()
-                        val obj = gson.fromJson(msg.toolArgs, Map::class.java)
-                        obj.entries.joinToString(", ") { (k, v) -> "$k=$v" }
-                    } catch (_: Exception) {
-                        msg.toolArgs
-                    }
-                } else ""
-
                 Surface(
                     modifier = Modifier.widthIn(max = 320.dp)
                         .clickable { resultExpanded = !resultExpanded },
-                    shape = RoundedCornerShape(12.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
+                    shape = RoundedCornerShape(10.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                    tonalElevation = 1.dp
                 ) {
-                    Column(Modifier.padding(10.dp)) {
-                        // 头部：工具名称 + 参数
+                    Column(Modifier.padding(12.dp)) {
+                        // 头部：仅工具名（折叠态不显示参数）
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(if (resultExpanded) "🔽" else "🔧",
-                                fontSize = 12.sp,
+                            Text(if (resultExpanded) "▼" else "🔧",
+                                fontSize = 13.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant)
                             Spacer(Modifier.width(6.dp))
                             Text(msg.toolName,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Medium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            if (argsText.isNotBlank()) {
-                                Text("($argsText)",
-                                    fontSize = 11.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
-                            }
+                            Spacer(Modifier.weight(1f))
+                            Text(if (resultExpanded) "收起" else "详情",
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f))
                         }
-                        // 结果：展开后显示
+
+                        // 展开：参数 + 结果
                         if (resultExpanded) {
-                            Spacer(Modifier.height(6.dp))
+                            Spacer(Modifier.height(8.dp))
                             HorizontalDivider(
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.15f)
+                                color = MaterialTheme.colorScheme.outlineVariant
                             )
-                            Spacer(Modifier.height(6.dp))
+                            Spacer(Modifier.height(8.dp))
+
+                            // 参数展示
+                            val argsText = if (!msg.toolArgs.isNullOrBlank()) {
+                                try {
+                                    val gson = com.google.gson.GsonBuilder().create()
+                                    val obj = gson.fromJson(msg.toolArgs, Map::class.java)
+                                    obj.entries.joinToString("\n") { (k, v) ->
+                                        "• $k: $v"
+                                    }
+                                } catch (_: Exception) {
+                                    msg.toolArgs
+                                }
+                            } else ""
+                            if (argsText.isNotBlank()) {
+                                Text("参数",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
+                                Spacer(Modifier.height(2.dp))
+                                Text(argsText,
+                                    fontSize = 12.sp,
+                                    lineHeight = 18.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Spacer(Modifier.height(8.dp))
+                            }
+
+                            // 结果
                             val displayText = msg.content.ifBlank { "(空)" }
-                            Text(displayText,
+                            Text("结果",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
+                            Spacer(Modifier.height(2.dp))
+                            // 结果使用 MarkdownText 渲染（支持表格、代码等格式）
+                            MarkdownText(displayText,
                                 fontSize = 12.sp,
-                                fontFamily = FontFamily.Monospace,
-                                lineHeight = 17.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                baseColor = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                 }
