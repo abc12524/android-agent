@@ -20,6 +20,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -425,7 +426,8 @@ fun MessageBubble(msg: Message) {
                                 style = TextStyle(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     fontSize = 12.sp
-                                )
+                                ),
+                                syntaxHighlightColor = Color(0x80FFEB3B)
                             )
                         }
                     }
@@ -457,7 +459,8 @@ fun MessageBubble(msg: Message) {
                     MarkdownText(
                         markdown = msg.content.ifBlank { "(空)" },
                         modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                        style = TextStyle(color = tc, fontSize = 15.sp)
+                        style = TextStyle(color = tc, fontSize = 15.sp),
+                        syntaxHighlightColor = Color(0x80FFEB3B)
                     )
                 }
             }
