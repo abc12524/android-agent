@@ -33,7 +33,6 @@ import android.net.Uri
 import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import com.androidagent.data.api.DeepSeekClient
 import com.androidagent.data.model.ChatSession
 import com.androidagent.data.model.Message
 import com.androidagent.ui.theme.*
@@ -169,7 +168,7 @@ fun ChatScreen(
                         // 底部 token 统计
                         if (state.lastUsage != null) {
                             item(key = "token_footer") {
-                            TokenFooter(state.lastUsage!!, state.promptTokens, state.completionTokens, state.cacheHitTokens, state.cacheMissTokens, state.todayPromptTokens, state.todayCompletionTokens, state.todayCacheHit, state.todayCacheMiss, state.balance)
+                            TokenFooter(state.promptTokens, state.completionTokens, state.cacheHitTokens, state.cacheMissTokens, state.balance)
                             }
                         }
                     }
@@ -210,9 +209,8 @@ fun ChatScreen(
 // ==================== Token 统计底部 ====================
 
 @Composable
-private fun TokenFooter(usage: DeepSeekClient.Usage, sessionIn: Int, sessionOut: Int,
-                        cacheHit: Int, cacheMiss: Int, todayIn: Int, todayOut: Int,
-                        todayCacheHit: Int, todayCacheMiss: Int, balance: String) {
+private fun TokenFooter(sessionIn: Int, sessionOut: Int,
+                        cacheHit: Int, cacheMiss: Int, balance: String) {
     fun hitRate(hit: Int, miss: Int): String {
         val total = hit + miss
         if (total == 0) return "0%"
@@ -228,18 +226,10 @@ private fun TokenFooter(usage: DeepSeekClient.Usage, sessionIn: Int, sessionOut:
             Text("📊 Token 消耗", fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.height(4.dp))
-            val reqHit = usage.promptCacheHitTokens
-            val reqMiss = usage.promptCacheMissTokens
-            Text("  当前 token：${usage.totalTokens}  hit：$reqHit  |  命中率 ${hitRate(reqHit, reqMiss)}",
-                fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
             Text("  会话 token：${sessionIn + sessionOut}  hit：$cacheHit  |  命中率 ${hitRate(cacheHit, cacheMiss)}",
                 fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
-            Text("  今日累计 token：${todayIn + todayOut}  hit：$todayCacheHit  |  命中率 ${hitRate(todayCacheHit, todayCacheMiss)}",
+            Text("  当前余额：${balance.ifBlank { "无" }}",
                 fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
-            if (balance.isNotBlank()) {
-                Text("  当前余额：$balance",
-                    fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
-            }
         }
     }
 }
@@ -434,7 +424,11 @@ fun MessageBubble(msg: Message) {
             // ---- 普通消息 (user / assistant) ----
             else -> {
                 Surface(
-                    modifier = Modifier.fillMaxWidth(0.92f),
+                    modifier = if (isUser)
+                        // 问题框自适应内容宽度，最长 92% 屏宽
+                        Modifier.fillMaxWidth(0.92f).wrapContentWidth(Alignment.End, unbounded = false)
+                    else
+                        Modifier.fillMaxWidth(0.92f),
                     shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp,
                         bottomStart = if (isUser) 16.dp else 4.dp,
                         bottomEnd = if (isUser) 4.dp else 16.dp),

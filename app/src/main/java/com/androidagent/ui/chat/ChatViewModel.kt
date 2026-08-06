@@ -45,6 +45,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private var currentSessionId: String = ""
     private var loadJob: Job? = null
     private var isSessionReady = false
+    private var balanceFetchInFlight = false
 
     init {
         // 收集所有会话列表，同时更新当前会话标题
@@ -57,8 +58,6 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
         }
-        // 初始加载余额
-        refreshBalance()
     }
 
     fun initSession(sessionId: String) {
@@ -127,6 +126,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     todayCompletionTokens = todayCompletion,
                     todayCacheHit = todayHit,
                     todayCacheMiss = todayMiss,
+                    balance = session?.balance ?: "",
                     lastUsage = messages.lastOrNull { it.role == "assistant" && it.promptTokens > 0 }?.let {
                         DeepSeekClient.Usage(
                             promptTokens = it.promptTokens,
@@ -137,6 +137,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                         )
                     }
                 )
+                // 会话尚未记录余额时，异步获取一次并写入该会话
+                if ((session?.balance).isNullOrBlank() && !uiState.isLoading) {
+                    refreshBalance()
+                }
             }
         }
     }
@@ -172,13 +176,20 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     fun getSessionId(): String = currentSessionId
 
-    /** 刷新 DeepSeek 余额 */
+    /** 刷新 DeepSeek 余额，并写入当前会话固定保存 */
     fun refreshBalance() {
+        val sid = currentSessionId
+        if (sid.isBlank() || balanceFetchInFlight) return
+        balanceFetchInFlight = true
         viewModelScope.launch {
-            val result = engine.checkBalance()
-            uiState = uiState.copy(
-                balance = result.getOrNull() ?: ""
-            )
+            try {
+                val balance = engine.checkBalance().getOrNull() ?: return@launch
+                if (currentSessionId != sid) return@launch
+                db.sessionDao().updateBalance(sid, balance)
+                uiState = uiState.copy(balance = balance)
+            } finally {
+                balanceFetchInFlight = false
+            }
         }
     }
 }

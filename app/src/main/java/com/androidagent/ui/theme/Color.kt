@@ -13,9 +13,9 @@ val BlueGrey40 = Color(0xFF546E7A)
 val Teal40 = Color(0xFF00897B)
 
 // 聊天气泡配色
-val BubbleUser = Color(0xFFF5F5F5)
+val BubbleUser = Color(0xFF9DF29F)
 val BubbleUserText = Color(0xFF212121)
-val BubbleAssistant = Color(0xFFF5F5F5)
+val BubbleAssistant = Color(0xFFEEEEF0)
 val BubbleAssistantText = Color(0xFF212121)
 val BubbleTool = Color(0xFFFFF3E0)
 val BubbleToolText = Color(0xFFE65100)

@@ -33,4 +33,7 @@ interface SessionDao {
 
     @Query("UPDATE sessions SET totalCacheHitTokens = totalCacheHitTokens + :hit, totalCacheMissTokens = totalCacheMissTokens + :miss WHERE id = :id")
     suspend fun addCacheTokens(id: String, hit: Int, miss: Int)
+
+    @Query("UPDATE sessions SET balance = :balance WHERE id = :id")
+    suspend fun updateBalance(id: String, balance: String)
 }
