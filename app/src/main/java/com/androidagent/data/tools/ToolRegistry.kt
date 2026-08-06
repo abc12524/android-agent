@@ -2,7 +2,6 @@ package com.androidagent.data.tools
 
 import android.content.Context
 import com.androidagent.data.api.DeepSeekClient
-import com.androidagent.data.api.QianFanClient
 import com.androidagent.data.memory.OpenVikingClient
 
 /**
@@ -39,8 +38,6 @@ class ToolRegistry(context: Context) {
         register(ShellTool())
         register(GPSTool(context))
         register(SensorTool(context))
-        register(BaiDuSearchTool(QianFanClient()))
-        register(BaiKeTool(QianFanClient()))
         register(OpenVikingSearchTool(OpenVikingClient()))
         register(OpenVikingRememberTool(OpenVikingClient()))
         register(OpenVikingReadTool(OpenVikingClient()))

@@ -133,7 +133,7 @@ class SSHTool : Tool {
 
             val output = ByteArrayOutputStream()
             val inputStream = chan.inputStream
-            chan.connect(30000)
+            chan.connect(60000)
 
             val buf = ByteArray(1024)
             while (true) {

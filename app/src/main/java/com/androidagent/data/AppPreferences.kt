@@ -23,11 +23,6 @@ object AppPreferences {
         get() = prefs.getString("deepseek_base_url", "https://api.deepseek.com") ?: "https://api.deepseek.com"
         set(value) = prefs.edit().putString("deepseek_base_url", value).apply()
 
-    // 百度千帆
-    var qianFanApiKey: String
-        get() = prefs.getString("qianfan_api_key", "") ?: ""
-        set(value) = prefs.edit().putString("qianfan_api_key", value).apply()
-
     // OpenViking
     var openVikingUrl: String
         get() = prefs.getString("openviking_url", "") ?: ""

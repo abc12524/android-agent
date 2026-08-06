@@ -341,16 +341,9 @@ fun MessageBubble(msg: Message) {
     Column(Modifier.fillMaxWidth(),
         horizontalAlignment = if (isUser) Alignment.End else Alignment.Start
     ) {
-        // 推理内容（仅在非 tool-call 消息时独立显示，tool-call 消息的推理在下方卡片内）
+        // 推理内容（统一用「深度思考」折叠卡片展示）
         if (msg.reasoningContent != null && msg.reasoningContent.isNotBlank() && !hasToolCalls) {
-            Surface(Modifier.padding(bottom = 4.dp).widthIn(max = 320.dp),
-                shape = RoundedCornerShape(8.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant
-            ) {
-                Text("💭 ${msg.reasoningContent}", Modifier.padding(8.dp), fontSize = 12.sp,
-                    fontFamily = FontFamily.Monospace,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
+            ReasoningCard(msg.reasoningContent, Modifier.padding(bottom = 4.dp))
         }
 
         when {
@@ -434,69 +427,95 @@ fun MessageBubble(msg: Message) {
             // ---- 仅工具调用（无文本回复）- 显示推理内容 ----
             hasToolCalls -> {
                 if (!msg.reasoningContent.isNullOrBlank()) {
-                    var resultExpanded by remember { mutableStateOf(false) }
-                    Surface(
-                        modifier = Modifier.widthIn(max = 320.dp)
-                            .clickable { resultExpanded = !resultExpanded },
-                        shape = RoundedCornerShape(10.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
-                        tonalElevation = 1.dp
-                    ) {
-                        Column(Modifier.padding(12.dp)) {
-                            // 头部
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(if (resultExpanded) "▼" else "🧠",
-                                    fontSize = 13.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                Spacer(Modifier.width(6.dp))
-                                Text("深度思考",
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                Spacer(Modifier.weight(1f))
-                                Text(if (resultExpanded) "收起" else "详情",
-                                    fontSize = 11.sp,
-                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f))
-                            }
-
-                            // 展开：推理内容
-                            if (resultExpanded) {
-                                Spacer(Modifier.height(8.dp))
-                                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                                Spacer(Modifier.height(8.dp))
-                                Text(msg.reasoningContent!!,
-                                    fontSize = 12.sp,
-                                    fontFamily = FontFamily.Monospace,
-                                    lineHeight = 17.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                        }
-                    }
+                    ReasoningCard(msg.reasoningContent!!)
                 }
             }
 
             // ---- 普通消息 (user / assistant) ----
             else -> {
                 Surface(
-                    modifier = Modifier.widthIn(max = 320.dp),
+                    modifier = Modifier.fillMaxWidth(0.92f),
                     shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp,
                         bottomStart = if (isUser) 16.dp else 4.dp,
                         bottomEnd = if (isUser) 4.dp else 16.dp),
                     color = bc
                 ) {
-                    MarkdownText(
-                        markdown = msg.content.ifBlank { "(空)" },
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                        style = TextStyle(color = tc, fontSize = 15.sp),
-                        syntaxHighlightColor = Color(0x80FFEB3B)
-                    )
+                    val blocks = remember(msg.content) { markdownBlocks(msg.content) }
+                    Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+                        blocks.forEachIndexed { index, block ->
+                            when (block) {
+                                is MdBlock.Text -> MarkdownText(
+                                    markdown = block.text,
+                                    style = TextStyle(color = tc, fontSize = 15.sp),
+                                    syntaxHighlightColor = Color(0x80FFEB3B)
+                                )
+                                is MdBlock.Table -> MarkdownTable(
+                                    table = block.table,
+                                    textStyle = TextStyle(color = tc, fontSize = 15.sp)
+                                )
+                            }
+                            if (index != blocks.lastIndex) {
+                                Spacer(Modifier.height(6.dp))
+                            }
+                        }
+                    }
                 }
             }
         }
 
-        Text(fmtTime(msg.timestamp), fontSize = 10.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp))
+        // 仅正式回复（用户消息 / AI 正文回复）下方显示时间，思考与工具调用不显示
+        if (isUser || (msg.role == "assistant" && msg.content.isNotBlank())) {
+            Text(fmtTime(msg.timestamp), fontSize = 10.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp))
+        }
+    }
+}
+
+// ==================== 深度思考折叠卡片 ====================
+
+/**
+ * 「深度思考」折叠卡片：默认收起，点击展开/收起推理内容
+ */
+@Composable
+private fun ReasoningCard(reasoning: String, modifier: Modifier = Modifier) {
+    var expanded by remember { mutableStateOf(false) }
+    Surface(
+        modifier = modifier.widthIn(max = 320.dp)
+            .clickable { expanded = !expanded },
+        shape = RoundedCornerShape(10.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+        tonalElevation = 1.dp
+    ) {
+        Column(Modifier.padding(12.dp)) {
+            // 头部
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(if (expanded) "▼" else "🧠",
+                    fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.width(6.dp))
+                Text("深度思考",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.weight(1f))
+                Text(if (expanded) "收起" else "详情",
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f))
+            }
+
+            // 展开：推理内容
+            if (expanded) {
+                Spacer(Modifier.height(8.dp))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                Spacer(Modifier.height(8.dp))
+                Text(reasoning,
+                    fontSize = 12.sp,
+                    fontFamily = FontFamily.Monospace,
+                    lineHeight = 17.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
     }
 }
 

@@ -24,7 +24,6 @@ fun SettingsScreen(
     onBack: () -> Unit
 ) {
     var deepSeekKey by remember { mutableStateOf(AppPreferences.deepSeekApiKey) }
-    var qianFanKey by remember { mutableStateOf(AppPreferences.qianFanApiKey) }
     var ovUrl by remember { mutableStateOf(AppPreferences.openVikingUrl) }
     var ovKey by remember { mutableStateOf(AppPreferences.openVikingKey) }
     var ovUser by remember { mutableStateOf(AppPreferences.openVikingUser) }
@@ -81,19 +80,6 @@ fun SettingsScreen(
                     OutlinedTextField(
                         value = deepSeekKey,
                         onValueChange = { deepSeekKey = it; saved = false },
-                        label = { Text("API Key") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        visualTransformation = if (showKeys) VisualTransformation.None else PasswordVisualTransformation()
-                    )
-
-                    HorizontalDivider(Modifier.padding(vertical = 8.dp))
-
-                    Text("🔍 百度千帆 API", style = MaterialTheme.typography.titleSmall)
-                    Spacer(Modifier.height(6.dp))
-                    OutlinedTextField(
-                        value = qianFanKey,
-                        onValueChange = { qianFanKey = it; saved = false },
                         label = { Text("API Key") },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
@@ -235,7 +221,6 @@ fun SettingsScreen(
                 Button(
                     onClick = {
                         AppPreferences.deepSeekApiKey = deepSeekKey
-                        AppPreferences.qianFanApiKey = qianFanKey
                         AppPreferences.openVikingUrl = ovUrl
                         AppPreferences.openVikingKey = ovKey
                         AppPreferences.openVikingUser = ovUser
@@ -266,7 +251,6 @@ fun SettingsScreen(
                     Spacer(Modifier.height(4.dp))
                     Text(
                         text = "• DeepSeek API Key 是必填项\n" +
-                                "• 百度千帆 Key 用于搜索功能（可选）\n" +
                                 "• OpenViking 用于长期记忆存储（可选）\n" +
                                 "• Python 首次使用自动解压\n" +
                                 "• 设置保存后立即生效",

@@ -231,7 +231,7 @@ object PythonManager {
 
     // ========== Python 执行接口 ==========
 
-    fun executeCode(code: String, timeoutSec: Int = 30): ProcessResult {
+    fun executeCode(code: String, timeoutSec: Int = 60): ProcessResult {
         return runPython(listOf("-c", code), timeoutSec)
     }
 
