@@ -40,7 +40,7 @@ class PythonTool : Tool {
             ),
             "script_path" to mapOf(
                 "type" to "string",
-                "description" to "Python 脚本文件路径（action=script 时必填，如 /sdcard/scripts/test.py）"
+                "description" to "Python 脚本文件路径（action=script 时必填，如 /PATH/TO/FILE）"
             ),
             "packages" to mapOf(
                 "type" to "string",

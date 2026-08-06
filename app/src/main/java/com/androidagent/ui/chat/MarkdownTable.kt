@@ -76,7 +76,7 @@ internal fun markdownBlocks(content: String): List<MdBlock> {
         val table = parseMdTable(lines, i)
         if (table != null) {
             flushText()
-            blocks.add(MdBlock.Table(table))
+            blocks.add(MdBlock.Table(MdTable(table.headers, table.alignments, table.rows)))
             i = table.nextIndex
         } else {
             textBuf.appendLine(line)
