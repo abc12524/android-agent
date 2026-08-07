@@ -157,10 +157,9 @@ fun ChatScreen(
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                         contentPadding = PaddingValues(top = 8.dp, bottom = 72.dp)
                     ) {
-                        // 过滤掉 system 角色和 OV 系统提示的用户消息
+                        // 过滤掉 system 角色消息（OV 检索记忆作为用户侧消息显示）
                         val displayMessages = state.messages.filter { msg ->
-                            msg.role != "system" &&
-                            !(msg.role == "user" && msg.content.startsWith("系统提示："))
+                            msg.role != "system"
                         }
                         items(displayMessages, key = { it.id }) { msg ->
                             SelectionContainer { MessageBubble(msg) }
@@ -322,6 +321,7 @@ fun MessageBubble(msg: Message) {
     val isTool = msg.role == "tool"
     val hasToolCalls = msg.role == "assistant" && msg.toolCalls != null
             && msg.content.isBlank()
+    val isOvContext = msg.role == "user" && msg.content.startsWith("[自动检索的候选记忆")
     val bc = when { isUser -> BubbleUser; isTool -> BubbleAssistant; else -> BubbleAssistant }
     val tc = when { isUser -> BubbleUserText; isTool -> BubbleAssistantText; else -> BubbleAssistantText }
 
@@ -337,6 +337,17 @@ fun MessageBubble(msg: Message) {
         }
 
         when {
+            // ---- OV 检索记忆：用户侧，复用思考卡片样式 ----
+            isOvContext -> {
+                val ovContent = remember(msg.content) {
+                    val c = msg.content
+                    val start = c.indexOf('\n')
+                    val end = c.lastIndexOf('\n')
+                    if (start >= 0 && end > start) c.substring(start + 1, end).trim() else c
+                }
+                ReasoningCard(ovContent, Modifier.padding(bottom = 4.dp), title = "[openviking-search]")
+            }
+
             // ---- 工具调用（折叠：仅工具名；展开：参数 + 结果） ----
             isTool && msg.toolName != null -> {
                 Surface(
@@ -457,8 +468,8 @@ fun MessageBubble(msg: Message) {
             }
         }
 
-        // 仅正式回复（用户消息 / AI 正文回复）下方显示时间，思考与工具调用不显示
-        if (isUser || (msg.role == "assistant" && msg.content.isNotBlank())) {
+        // 仅正式回复（用户消息 / AI 正文回复）下方显示时间，思考、工具调用与 OV 检索不显示
+        if (!isOvContext && (isUser || (msg.role == "assistant" && msg.content.isNotBlank()))) {
             Text(fmtTime(msg.timestamp), fontSize = 10.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp))
@@ -472,7 +483,7 @@ fun MessageBubble(msg: Message) {
  * 「深度思考」折叠卡片：默认收起，点击展开/收起推理内容
  */
 @Composable
-private fun ReasoningCard(reasoning: String, modifier: Modifier = Modifier) {
+private fun ReasoningCard(reasoning: String, modifier: Modifier = Modifier, title: String = "深度思考") {
     var expanded by remember { mutableStateOf(false) }
     Surface(
         modifier = modifier.widthIn(max = 320.dp)
@@ -488,7 +499,7 @@ private fun ReasoningCard(reasoning: String, modifier: Modifier = Modifier) {
                     fontSize = 13.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(Modifier.width(6.dp))
-                Text("深度思考",
+                Text(title,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
