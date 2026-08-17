@@ -19,8 +19,6 @@
 | `get_system_info` | 获取设备系统信息 |
 | `get_gps_location` | 获取设备 GPS 定位 |
 | `read_sensors` | 读取陀螺仪、加速度计、磁力计等传感器 |
-| `baidu_search` | 百度搜索引擎搜索 |
-| `baidu_baike` | 百度百科查询 |
 | `openviking_*` | 外置记忆读写搜索（OpenViking） |
 
 ### 🧠 嵌入式 Python 环境
