@@ -8,6 +8,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.asRequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -34,12 +35,24 @@ class DeepSeekClient {
 
     data class ChatMessage(
         val role: String,       // "system" / "user" / "assistant" / "tool"
-        val content: String = "",
+        // 纯文本时为 String；含图片时为 List<Map>（[{type: text}, {type: file, file_id} ...]）
+        val content: Any? = "",
         @SerializedName("tool_call_id")
         val toolCallId: String? = null,
         @SerializedName("tool_calls")
         val toolCalls: List<ToolCall>? = null,
         val name: String? = null
+    )
+
+    /**
+     * Files API 上传结果
+     */
+    data class UploadFileResult(
+        val id: String,
+        val filename: String,
+        val bytes: Long,
+        val purpose: String,
+        val expiresAt: Long
     )
 
     data class ToolCall(
@@ -94,6 +107,96 @@ class DeepSeekClient {
     )
 
     /**
+     * 获取可用模型列表（GET /models）
+     * @return 模型 ID 列表
+     */
+    suspend fun listModels(): Result<List<String>> = withContext(Dispatchers.IO) {
+        val apiKey = AppPreferences.deepSeekApiKey
+        if (apiKey.isBlank()) {
+            return@withContext Result.failure(Exception("请先在设置中配置 DeepSeek API Key"))
+        }
+
+        val baseUrl = AppPreferences.deepSeekBaseUrl
+        try {
+            val request = Request.Builder()
+                .url("$baseUrl/models")
+                .addHeader("Accept", "application/json")
+                .addHeader("Authorization", "Bearer $apiKey")
+                .get()
+                .build()
+
+            val response = client.newCall(request).execute()
+            val responseBody = response.body?.string() ?: ""
+
+            if (!response.isSuccessful) {
+                return@withContext Result.failure(
+                    Exception("获取模型列表失败 (${response.code}): $responseBody")
+                )
+            }
+
+            val json = JsonParser.parseString(responseBody).asJsonObject
+            val models = json.getAsJsonArray("data")?.mapNotNull { el ->
+                el.asJsonObject.get("id")?.asString
+            } ?: emptyList()
+            Result.success(models)
+        } catch (e: Exception) {
+            Result.failure(Exception("获取模型列表失败: ${e.message}"))
+        }
+    }
+
+    /**
+     * 上传文件到 DeepSeek Files API（用于 vision 模型图片识别）
+     * 文件默认 12 小时有效（expires_after[seconds]=43200），过期后不可再引用
+     * @param file 本地图片文件（JPEG/PNG/GIF/WebP，最大 64 MiB）
+     * @return UploadFileResult（含 file_id，格式 file-api-...）
+     */
+    suspend fun uploadFile(file: java.io.File): Result<UploadFileResult> = withContext(Dispatchers.IO) {
+        val apiKey = AppPreferences.deepSeekApiKey
+        if (apiKey.isBlank()) {
+            return@withContext Result.failure(Exception("请先在设置中配置 DeepSeek API Key"))
+        }
+
+        val baseUrl = AppPreferences.deepSeekBaseUrl
+        try {
+            val body = MultipartBody.Builder()
+                .setType(MultipartBody.FORM)
+                .addFormDataPart("purpose", "user_data")
+                .addFormDataPart("expires_after[anchor]", "created_at")
+                .addFormDataPart("expires_after[seconds]", "43200")
+                .addFormDataPart("file", file.name, file.asRequestBody("application/octet-stream".toMediaType()))
+                .build()
+
+            val request = Request.Builder()
+                .url("$baseUrl/files")
+                .addHeader("Authorization", "Bearer $apiKey")
+                .post(body)
+                .build()
+
+            val response = client.newCall(request).execute()
+            val responseBody = response.body?.string() ?: ""
+
+            if (!response.isSuccessful) {
+                return@withContext Result.failure(
+                    Exception("上传失败 (${response.code}): $responseBody")
+                )
+            }
+
+            val json = JsonParser.parseString(responseBody).asJsonObject
+            Result.success(UploadFileResult(
+                id = json.get("id")?.asString ?: "",
+                filename = json.get("filename")?.asString ?: file.name,
+                bytes = json.get("bytes")?.asLong ?: 0,
+                purpose = json.get("purpose")?.asString ?: "",
+                expiresAt = json.get("expires_at")?.asLong ?: 0L
+            ))
+        } catch (e: IOException) {
+            Result.failure(Exception("网络错误: ${e.message}"))
+        } catch (e: Exception) {
+            Result.failure(Exception("上传失败: ${e.message}"))
+        }
+    }
+
+    /**
      * 调用 DeepSeek Chat Completion API（非流式）
      */
     suspend fun chat(
@@ -107,6 +210,7 @@ class DeepSeekClient {
 
         val baseUrl = AppPreferences.deepSeekBaseUrl
         val requestBody = ChatRequest(
+            model = AppPreferences.deepSeekModel,
             messages = messages,
             tools = tools?.takeIf { it.isNotEmpty() }
         )
@@ -157,7 +261,8 @@ class DeepSeekClient {
                     index = choiceIndex,
                     message = ChatMessage(
                         role = msg.get("role").asString,
-                        content = msg.get("content")?.asString ?: "",
+                        content = if (msg.get("content")?.isJsonArray == true)
+                            "" else msg.get("content")?.asString ?: "",
                         toolCalls = toolCalls,
                         name = reasoning
                     ),
@@ -201,6 +306,7 @@ class DeepSeekClient {
 
         val baseUrl = AppPreferences.deepSeekBaseUrl
         val requestBody = ChatRequest(
+            model = AppPreferences.deepSeekModel,
             messages = messages,
             tools = tools?.takeIf { it.isNotEmpty() },
             stream = true

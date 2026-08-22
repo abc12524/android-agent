@@ -12,6 +12,7 @@ import com.androidagent.data.tools.ToolRegistry
 import com.google.gson.Gson
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -37,10 +38,12 @@ class ChatEngine(private val context: Context) {
     /**
      * 发送用户消息并获取 AI 回复
      * 自动处理多轮工具调用，失败时回滚本轮写入的消息
+     * @param imageFilePath 可选。vision 模型下的本地图片路径，自动上传 Files API 后随消息发送
      */
     suspend fun sendMessage(
         sessionId: String,
-        userMessage: String
+        userMessage: String,
+        imageFilePath: String? = null
     ): Result<ChatResult> = withContext(Dispatchers.IO) {
         val apiKey = AppPreferences.deepSeekApiKey
         if (apiKey.isBlank()) {
@@ -60,8 +63,8 @@ class ChatEngine(private val context: Context) {
             val history = db.messageDao().getMessagesBySessionSync(sessionId)
             val messages = history.map { it.toApiMessage() }.toMutableList()
 
-            // 2. 添加用户消息（放在最前面）
-            messages.add(DeepSeekClient.ChatMessage(role = "user", content = userMessage))
+            // 2. 添加用户消息（放在最前面），含图片时自动上传 Files API（vision 模型）
+            messages.add(buildUserMessage(userMessage, imageFilePath))
             val userMsgEntity = Message(sessionId = sessionId, role = "user", content = userMessage)
             insertedIds.add(db.messageDao().insert(userMsgEntity))
             allNewMessages.add(userMsgEntity)
@@ -125,7 +128,7 @@ class ChatEngine(private val context: Context) {
                 val assistantEntity = Message(
                     sessionId = sessionId,
                     role = "assistant",
-                    content = assistantMsg.content,
+                    content = assistantMsg.content as? String ?: "",
                     reasoningContent = reasoning,
                     toolCalls = toolCallsJson,
                     promptTokens = usage?.promptTokens ?: 0,
@@ -141,7 +144,7 @@ class ChatEngine(private val context: Context) {
 
                 val toolCalls = assistantMsg.toolCalls
                 if (toolCalls.isNullOrEmpty() || finishReason == "stop") {
-                    finalContent = assistantMsg.content
+                    finalContent = assistantMsg.content as? String ?: ""
                     finalReasoning = reasoning
                     break
                 }
@@ -207,6 +210,7 @@ class ChatEngine(private val context: Context) {
     suspend fun sendMessageStream(
         sessionId: String,
         userMessage: String,
+        imageFilePath: String? = null,
         onDelta: (content: String) -> Unit
     ): Result<ChatResult> = withContext(Dispatchers.IO) {
         val apiKey = AppPreferences.deepSeekApiKey
@@ -224,8 +228,8 @@ class ChatEngine(private val context: Context) {
             val history = db.messageDao().getMessagesBySessionSync(sessionId)
             val messages = history.map { it.toApiMessage() }.toMutableList()
 
-            // 2. 添加用户消息（放在最前面）
-            messages.add(DeepSeekClient.ChatMessage(role = "user", content = userMessage))
+            // 2. 添加用户消息（放在最前面），含图片时自动上传 Files API（vision 模型）
+            messages.add(buildUserMessage(userMessage, imageFilePath))
             val userMsgEntity = Message(sessionId = sessionId, role = "user", content = userMessage)
             insertedIds.add(db.messageDao().insert(userMsgEntity))
             allNewMessages.add(userMsgEntity)
@@ -431,6 +435,36 @@ class ChatEngine(private val context: Context) {
                 db.messageDao().delete(Message(id = id, sessionId = "", role = ""))
             } catch (_: Exception) { }
         }
+    }
+
+    /**
+     * 构建用户消息。
+     * 无图片时返回纯文本 content；带图片时上传 Files API 获取 file_id，
+     * 并返回 OpenAI 风格 content 数组（text + file 块）。仅 vision 模型支持图片。
+     */
+    private suspend fun buildUserMessage(
+        userMessage: String,
+        imageFilePath: String?
+    ): DeepSeekClient.ChatMessage {
+        if (imageFilePath.isNullOrBlank()) {
+            return DeepSeekClient.ChatMessage(role = "user", content = userMessage)
+        }
+
+        val model = AppPreferences.deepSeekModel
+        if (!model.contains("vision")) {
+            throw IllegalArgumentException(
+                "当前模型 $model 不支持图片识别，请在设置中切换到 deepseek-v4-flash-vision-exp"
+            )
+        }
+
+        val upload = deepSeek.uploadFile(File(imageFilePath)).getOrElse { throw it }
+        val parts = mutableListOf<Map<String, String>>()
+        if (userMessage.isNotBlank()) {
+            parts.add(mapOf("type" to "text", "text" to userMessage))
+        }
+        parts.add(mapOf("type" to "file", "file_id" to upload.id))
+
+        return DeepSeekClient.ChatMessage(role = "user", content = parts)
     }
 
     /**

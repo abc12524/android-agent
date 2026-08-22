@@ -23,6 +23,10 @@ object AppPreferences {
         get() = prefs.getString("deepseek_base_url", "https://api.deepseek.com") ?: "https://api.deepseek.com"
         set(value) = prefs.edit().putString("deepseek_base_url", value).apply()
 
+    var deepSeekModel: String
+        get() = prefs.getString("deepseek_model", "deepseek-v4-flash") ?: "deepseek-v4-flash"
+        set(value) = prefs.edit().putString("deepseek_model", value).apply()
+
     // OpenViking
     var openVikingUrl: String
         get() = prefs.getString("openviking_url", "") ?: ""
@@ -52,7 +56,7 @@ object AppPreferences {
 
     // OpenViking 记忆检索设置
     var ovScoreThreshold: Float
-        get() = prefs.getFloat("ov_score_threshold", 0.30f)
+        get() = prefs.getFloat("ov_score_threshold", 0.4f)
         set(value) = prefs.edit().putFloat("ov_score_threshold", value).apply()
 
     var ovSearchDisplayCount: Int

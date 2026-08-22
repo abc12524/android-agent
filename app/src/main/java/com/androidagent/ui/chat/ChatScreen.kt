@@ -58,6 +58,8 @@ fun ChatScreen(
 
     val state = viewModel.uiState
     var inputText by remember { mutableStateOf("") }
+    var pendingImagePath by remember { mutableStateOf<String?>(null) }
+    var pendingImageName by remember { mutableStateOf<String?>(null) }
     val listState = rememberLazyListState()
     val context = LocalContext.current
 
@@ -67,10 +69,17 @@ fun ChatScreen(
         uri?.let {
             scope.launch(Dispatchers.IO) {
                 val info = saveFileToAppDir(context, it)
+                val mime = context.contentResolver.getType(it)
                 withContext(Dispatchers.Main) {
                     if (info != null) {
-                        val (_, fullPath) = info
-                        inputText = "读取文件：$fullPath"
+                        val (name, fullPath) = info
+                        // 图片 → 作为 vision 附件；其它文件 → 沿用「读取文件」文本指令
+                        if (mime?.startsWith("image/") == true) {
+                            pendingImagePath = fullPath
+                            pendingImageName = name
+                        } else {
+                            inputText = "读取文件：$fullPath"
+                        }
                     }
                 }
             }
@@ -113,9 +122,38 @@ fun ChatScreen(
             },
             bottomBar = {
                 Surface(shadowElevation = 8.dp, color = MaterialTheme.colorScheme.surface) {
-                    Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
+                    Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                        // 待发送图片附件提示
+                        if (pendingImagePath != null) {
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                                modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)
+                            ) {
+                                Row(
+                                    Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text("🖼️",
+                                        fontSize = 13.sp)
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(pendingImageName ?: "",
+                                        fontSize = 12.sp,
+                                        modifier = Modifier.weight(1f),
+                                        maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    TextButton(
+                                        onClick = {
+                                            pendingImagePath = null
+                                            pendingImageName = null
+                                        }
+                                    ) { Text("移除", fontSize = 12.sp) }
+                                }
+                            }
+                        }
+                        Row(Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                         IconButton(
                             onClick = { filePickerLauncher.launch(arrayOf("*/*")) },
                             enabled = !state.isLoading
@@ -129,10 +167,18 @@ fun ChatScreen(
                             enabled = !state.isLoading)
                         Spacer(Modifier.width(8.dp))
                         FilledIconButton(
-                            onClick = { if (inputText.isNotBlank()) { viewModel.sendMessage(inputText.trim()); inputText = "" } },
-                            enabled = inputText.isNotBlank() && !state.isLoading,
+                            onClick = {
+                                if (inputText.isNotBlank() || pendingImagePath != null) {
+                                    viewModel.sendMessage(inputText.trim(), pendingImagePath)
+                                    inputText = ""
+                                    pendingImagePath = null
+                                    pendingImageName = null
+                                }
+                            },
+                            enabled = (inputText.isNotBlank() || pendingImagePath != null) && !state.isLoading,
                             modifier = Modifier.size(48.dp)
                         ) { Icon(Icons.Default.Send, contentDescription = "发送") }
+                        }
                     }
                 }
             }
@@ -345,7 +391,7 @@ fun MessageBubble(msg: Message) {
                     val end = c.lastIndexOf('\n')
                     if (start >= 0 && end > start) c.substring(start + 1, end).trim() else c
                 }
-                ReasoningCard(ovContent, Modifier.padding(bottom = 4.dp), title = "[openviking-search]")
+                ReasoningCard(ovContent, Modifier.padding(bottom = 4.dp), title = "ov-search", icon = "🔧")
             }
 
             // ---- 工具调用（折叠：仅工具名；展开：参数 + 结果） ----
@@ -483,7 +529,7 @@ fun MessageBubble(msg: Message) {
  * 「深度思考」折叠卡片：默认收起，点击展开/收起推理内容
  */
 @Composable
-private fun ReasoningCard(reasoning: String, modifier: Modifier = Modifier, title: String = "深度思考") {
+private fun ReasoningCard(reasoning: String, modifier: Modifier = Modifier, title: String = "深度思考", icon: String = "🧠") {
     var expanded by remember { mutableStateOf(false) }
     Surface(
         modifier = modifier.widthIn(max = 320.dp)
@@ -495,7 +541,7 @@ private fun ReasoningCard(reasoning: String, modifier: Modifier = Modifier, titl
         Column(Modifier.padding(12.dp)) {
             // 头部
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(if (expanded) "▼" else "🧠",
+                Text(if (expanded) "▼" else icon,
                     fontSize = 13.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(Modifier.width(6.dp))

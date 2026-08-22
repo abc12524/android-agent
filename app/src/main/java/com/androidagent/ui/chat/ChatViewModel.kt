@@ -145,12 +145,12 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun sendMessage(text: String) {
-        if (text.isBlank() || uiState.isLoading) return
+    fun sendMessage(text: String, imageFilePath: String? = null) {
+        if ((text.isBlank() && imageFilePath.isNullOrBlank()) || uiState.isLoading) return
         uiState = uiState.copy(isLoading = true, error = null)
         viewModelScope.launch {
             try {
-                val result = engine.sendMessage(currentSessionId, text)
+                val result = engine.sendMessage(currentSessionId, text, imageFilePath)
                 result.fold(
                     onSuccess = { chatResult ->
                         uiState = uiState.copy(

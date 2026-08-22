@@ -5,6 +5,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -15,6 +16,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import com.androidagent.BuildConfig
 import com.androidagent.data.AppPreferences
+import com.androidagent.data.api.DeepSeekClient
 import com.androidagent.data.updater.AppUpdater
 import kotlinx.coroutines.launch
 
@@ -24,6 +26,12 @@ fun SettingsScreen(
     onBack: () -> Unit
 ) {
     var deepSeekKey by remember { mutableStateOf(AppPreferences.deepSeekApiKey) }
+    var deepSeekBaseUrl by remember { mutableStateOf(AppPreferences.deepSeekBaseUrl) }
+    var deepSeekModel by remember { mutableStateOf(AppPreferences.deepSeekModel) }
+    var modelOptions by remember { mutableStateOf(listOf<String>()) }
+    var modelLoading by remember { mutableStateOf(false) }
+    var modelMenuExpanded by remember { mutableStateOf(false) }
+    var modelError by remember { mutableStateOf<String?>(null) }
     var ovUrl by remember { mutableStateOf(AppPreferences.openVikingUrl) }
     var ovKey by remember { mutableStateOf(AppPreferences.openVikingKey) }
     var ovUser by remember { mutableStateOf(AppPreferences.openVikingUser) }
@@ -85,6 +93,80 @@ fun SettingsScreen(
                         singleLine = true,
                         visualTransformation = if (showKeys) VisualTransformation.None else PasswordVisualTransformation()
                     )
+
+                    Spacer(Modifier.height(6.dp))
+                    OutlinedTextField(
+                        value = deepSeekBaseUrl,
+                        onValueChange = { deepSeekBaseUrl = it; saved = false },
+                        label = { Text("Base URL") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        ExposedDropdownMenuBox(
+                            expanded = modelMenuExpanded,
+                            onExpandedChange = { if (modelOptions.isNotEmpty()) modelMenuExpanded = it },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            OutlinedTextField(
+                                value = deepSeekModel,
+                                onValueChange = { deepSeekModel = it; saved = false },
+                                label = { Text("模型") },
+                                modifier = Modifier.fillMaxWidth().menuAnchor(),
+                                singleLine = true,
+                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = modelMenuExpanded) }
+                            )
+                            ExposedDropdownMenu(
+                                expanded = modelMenuExpanded,
+                                onDismissRequest = { modelMenuExpanded = false }
+                            ) {
+                                modelOptions.forEach { m ->
+                                    DropdownMenuItem(
+                                        text = { Text(m) },
+                                        onClick = {
+                                            deepSeekModel = m
+                                            saved = false
+                                            modelMenuExpanded = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                        IconButton(
+                            onClick = {
+                                modelLoading = true
+                                modelError = null
+                                scope.launch {
+                                    try {
+                                        DeepSeekClient().listModels().fold(
+                                            onSuccess = { models ->
+                                                modelOptions = models
+                                                modelMenuExpanded = true
+                                            },
+                                            onFailure = { e ->
+                                                modelError = e.message ?: "获取模型列表失败"
+                                            }
+                                        )
+                                    } finally {
+                                        modelLoading = false
+                                    }
+                                }
+                            },
+                            enabled = !modelLoading
+                        ) {
+                            if (modelLoading) {
+                                CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                            } else {
+                                Icon(Icons.Default.Refresh, contentDescription = "刷新模型列表")
+                            }
+                        }
+                    }
+                    if (modelError != null) {
+                        Spacer(Modifier.height(2.dp))
+                        Text(modelError!!, fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.error)
+                    }
 
                     HorizontalDivider(Modifier.padding(vertical = 8.dp))
 
@@ -221,6 +303,8 @@ fun SettingsScreen(
                 Button(
                     onClick = {
                         AppPreferences.deepSeekApiKey = deepSeekKey
+                        AppPreferences.deepSeekBaseUrl = deepSeekBaseUrl
+                        AppPreferences.deepSeekModel = deepSeekModel
                         AppPreferences.openVikingUrl = ovUrl
                         AppPreferences.openVikingKey = ovKey
                         AppPreferences.openVikingUser = ovUser
