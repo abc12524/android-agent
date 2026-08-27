@@ -91,6 +91,33 @@ class OpenVikingClient {
         }
     }
 
+    /**
+     * 解析 /api/v1/search/search 返回，合并 memories / resources / skills 三段结果，
+     * 按 uri 去重（保留首次出现），并按相关度（score）降序排序。
+     */
+    private fun parseSearchHits(body: String): List<com.google.gson.JsonObject> {
+        val json = JsonParser.parseString(body).asJsonObject
+        val result = json.getAsJsonObject("result") ?: return emptyList()
+        val groups = listOf(
+            result.getAsJsonArray("memories"),
+            result.getAsJsonArray("resources"),
+            result.getAsJsonArray("skills")
+        )
+        val seen = mutableSetOf<String>()
+        val hits = mutableListOf<com.google.gson.JsonObject>()
+        for (arr in groups) {
+            arr ?: continue
+            for (el in arr) {
+                val obj = el.asJsonObject
+                val uri = obj.get("uri")?.asString ?: ""
+                if (uri.isNotBlank() && !seen.add(uri)) continue
+                hits.add(obj)
+            }
+        }
+        hits.sortByDescending { it.get("score")?.asDouble ?: 0.0 }
+        return hits
+    }
+
     // ========== 语义搜索 ==========
     suspend fun search(query: String, limit: Int = 5): String {
         val threshold = AppPreferences.ovScoreThreshold
@@ -100,13 +127,11 @@ class OpenVikingClient {
         return result.fold(
             onSuccess = { body ->
                 try {
-                    val json = JsonParser.parseString(body).asJsonObject
-                    val mems = json.getAsJsonObject("result")?.getAsJsonArray("memories") ?: return body
-                    val hits = mems.take(8)
-                    if (hits.isEmpty()) return gson.toJson(mapOf("success" to true, "results" to emptyList<Any>(), "message" to "未找到相关记忆"))
+                    val hits = parseSearchHits(body)
+                    val top = hits.take(8)
+                    if (top.isEmpty()) return gson.toJson(mapOf("success" to true, "results" to emptyList<Any>(), "message" to "未找到相关记忆"))
 
-                    val results = hits.map { h ->
-                        val obj = h.asJsonObject
+                    val results = top.map { obj ->
                         mapOf(
                             "uri" to (obj.get("uri")?.asString ?: ""),
                             "score" to (obj.get("score")?.asDouble ?: 0.0),
@@ -114,7 +139,7 @@ class OpenVikingClient {
                             "category" to (obj.get("category")?.asString ?: "")
                         )
                     }
-                    gson.toJson(mapOf("success" to true, "results" to results))
+                    gson.toJson(mapOf("success" to true, "results" to results, "total" to hits.size))
                 } catch (e: Exception) {
                     "{\"error\": \"解析搜索结果失败: ${e.message}\"}"
                 }
@@ -269,12 +294,9 @@ class OpenVikingClient {
         return result.fold(
             onSuccess = { body ->
                 try {
-                    val json = JsonParser.parseString(body).asJsonObject
-                    val mems = json.getAsJsonObject("result")?.getAsJsonArray("memories") ?: return@fold ""
-                    val hits = mems.take(displayCount)
+                    val hits = parseSearchHits(body).take(displayCount)
                     if (hits.isEmpty()) return@fold ""
-                    hits.joinToString("\n") { h ->
-                        val obj = h.asJsonObject
+                    hits.joinToString("\n") { obj ->
                         val uri = obj.get("uri")?.asString ?: ""
                         val snippet = (obj.get("abstract")?.asString ?: "").take(200)
                         "> 📖 [$uri] ${obj.get("score")?.asDouble?.let { "(${String.format("%.2f", it)})" } ?: ""}\n  $snippet"
