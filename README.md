@@ -76,6 +76,57 @@ maven { setUrl("https://maven.aliyun.com/repository/gradle-plugin") }
 - Python 环境（~53MB）会在首次启动时自动解压，耗时约 10-30 秒
 - 解压期间尝试调用 Python 工具会收到初始化提示
 
+## 远程配置导入（一键导入设置）
+
+在 **设置** 中填入远程配置地址（`configUrl`），应用会从该 URL 拉取 JSON 并一次性应用所有已知设置，无需逐项手动输入。该 JSON 即为配置格式，**建议放在 Web 服务器根目录**，通过 HTTP(s) 直接访问。
+
+JSON 顶层 key 与应用的设置项一一对应；**顶层值为对象的 key 会被识别为账号**（多账号隔离），导入时可选择导入到哪个账号；若 JSON 为扁平结构（无嵌套对象）则直接整体导入。缺失或不存在的 key 会被忽略。
+
+```json
+{
+  "kelivo": {
+    "deepseek_api_key": "sk-***",
+    "deepseek_base_url": "https://api.deepseek.com",
+    "deepseek_model": "deepseek-v4-flash",
+    "openviking_url": "http://192.168.1.100:1933",
+    "openviking_key": "***",
+    "openviking_user": "***",
+    "ov_peer_id": "",
+    "ov_peer_scope": "actor",
+    "ov_workspace_peer": true,
+    "ov_recall_dedup": true,
+    "ov_profile_enabled": true,
+    "ov_auto_capture": true,
+    "max_tool_rounds": 8,
+    "session_timeout_minutes": 15,
+    "background_service_enabled": false,
+    "ov_score_threshold": 0.4,
+    "ov_search_display_count": 3,
+    "system_prompt": ""
+  },
+  "default": {
+    "deepseek_api_key": "sk-xxxx",
+    "deepseek_base_url": "https://api.deepseek.com",
+    "deepseek_model": "deepseek-v4-flash",
+    "openviking_url": "",
+    "openviking_key": "",
+    "openviking_user": "default",
+    "ov_peer_id": "",
+    "ov_peer_scope": "actor",
+    "ov_workspace_peer": true,
+    "ov_recall_dedup": true,
+    "ov_profile_enabled": true,
+    "ov_auto_capture": true,
+    "max_tool_rounds": 8,
+    "session_timeout_minutes": 15,
+    "background_service_enabled": false,
+    "ov_score_threshold": 0.4,
+    "ov_search_display_count": 3,
+    "system_prompt": ""
+  }
+}
+```
+
 ## 技术栈
 
 - **语言**: Kotlin
