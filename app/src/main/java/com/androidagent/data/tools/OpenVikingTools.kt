@@ -78,8 +78,15 @@ class OpenVikingReadTool(private val ov: OpenVikingClient) : Tool {
     )
 
     override suspend fun execute(args: Map<String, Any>): String {
-        val uri = args["uri"] as? String ?: return "{\"error\": \"缺少 uri 参数\"}"
-        return ov.readFile(uri)
+        val raw = args["uri"]
+        // 支持单个 URI 字符串或 URI 列表（批量读取）
+        val uris = when (raw) {
+            is String -> listOf(raw)
+            is List<*> -> raw.filterIsInstance<String>()
+            else -> emptyList()
+        }
+        if (uris.isEmpty()) return "{\"error\": \"缺少 uri 参数\"}"
+        return if (uris.size == 1) ov.readFile(uris.first()) else ov.readFiles(uris)
     }
 }
 
@@ -240,5 +247,94 @@ class OpenVikingDeleteFileTool(private val ov: OpenVikingClient) : Tool {
     override suspend fun execute(args: Map<String, Any>): String {
         val uri = args["uri"] as? String ?: return "{\"error\": \"缺少 uri 参数\"}"
         return ov.deleteFile(uri)
+    }
+}
+
+/**
+ * OpenViking 批量添加消息工具
+ */
+class OpenVikingAddMessagesBatchTool(private val ov: OpenVikingClient) : Tool {
+
+    override val name: String = "openviking_add_messages_batch"
+
+    override val description: String =
+        "批量向 OpenViking Session 添加多条消息（一次最多 100 条），比逐条添加效率高。每条含 role(user/assistant) 与 content"
+
+    override val parameters: Map<String, Any> = mapOf(
+        "type" to "object",
+        "properties" to mapOf(
+            "session_id" to mapOf("type" to "string", "description" to "Session ID"),
+            "messages" to mapOf(
+                "type" to "array",
+                "description" to "消息列表，每条为 {role, content} 对象",
+                "items" to mapOf(
+                    "type" to "object",
+                    "properties" to mapOf(
+                        "role" to mapOf("type" to "string", "description" to "user 或 assistant"),
+                        "content" to mapOf("type" to "string", "description" to "消息内容")
+                    ),
+                    "required" to listOf("role", "content")
+                )
+            )
+        ),
+        "required" to listOf("session_id", "messages")
+    )
+
+    override suspend fun execute(args: Map<String, Any>): String {
+        val sessionId = args["session_id"] as? String ?: return "{\"error\": \"缺少 session_id 参数\"}"
+        val raw = args["messages"]
+        val list = raw as? List<*>
+            ?: return "{\"error\": \"messages 必须是对象数组\"}"
+        val messages = list.filterIsInstance<Map<*, *>>().mapNotNull { m ->
+            val role = m["role"] as? String
+            val content = m["content"] as? String
+            if (role != null && content != null) mapOf("role" to role, "content" to content) else null
+        }
+        return ov.addMessagesBatch(sessionId, messages)
+    }
+}
+
+/**
+ * OpenViking 获取 Session 详情工具
+ */
+class OpenVikingGetSessionTool(private val ov: OpenVikingClient) : Tool {
+
+    override val name: String = "openviking_get_session"
+
+    override val description: String =
+        "获取 OpenViking Session 详情，包括会话中的消息列表"
+
+    override val parameters: Map<String, Any> = mapOf(
+        "type" to "object",
+        "properties" to mapOf(
+            "session_id" to mapOf("type" to "string", "description" to "Session ID")
+        ),
+        "required" to listOf("session_id")
+    )
+
+    override suspend fun execute(args: Map<String, Any>): String {
+        val sessionId = args["session_id"] as? String ?: return "{\"error\": \"缺少 session_id 参数\"}"
+        return ov.getSession(sessionId)
+    }
+}
+
+/**
+ * OpenViking 列出所有 Session 工具
+ */
+class OpenVikingListSessionsTool(private val ov: OpenVikingClient) : Tool {
+
+    override val name: String = "openviking_list_sessions"
+
+    override val description: String =
+        "列出所有已创建的 OpenViking Session"
+
+    override val parameters: Map<String, Any> = mapOf(
+        "type" to "object",
+        "properties" to emptyMap<String, Any>(),
+        "required" to emptyList<String>()
+    )
+
+    override suspend fun execute(args: Map<String, Any>): String {
+        return ov.listSessions()
     }
 }

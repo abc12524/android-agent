@@ -19,7 +19,17 @@ import com.androidagent.BuildConfig
 import com.androidagent.data.AppPreferences
 import com.androidagent.data.api.DeepSeekClient
 import com.androidagent.data.updater.AppUpdater
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.net.HttpURLConnection
+import java.net.URL
+import java.security.SecureRandom
+import java.security.cert.X509Certificate
+import javax.net.ssl.HostnameVerifier
+import javax.net.ssl.HttpsURLConnection
+import javax.net.ssl.SSLContext
+import javax.net.ssl.X509TrustManager
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -39,6 +49,11 @@ fun SettingsScreen(
     var maxRounds by remember { mutableStateOf(AppPreferences.maxToolRounds.toString()) }
     var ovScoreThreshold by remember { mutableStateOf(AppPreferences.ovScoreThreshold) }
     var ovSearchDisplayCount by remember { mutableStateOf(AppPreferences.ovSearchDisplayCount.toString()) }
+    var ovPeerId by remember { mutableStateOf(AppPreferences.ovPeerId) }
+    var ovWorkspacePeer by remember { mutableStateOf(AppPreferences.ovWorkspacePeer) }
+    var ovRecallDedup by remember { mutableStateOf(AppPreferences.ovRecallDedup) }
+    var ovProfileEnabled by remember { mutableStateOf(AppPreferences.ovProfileEnabled) }
+    var ovAutoCapture by remember { mutableStateOf(AppPreferences.ovAutoCapture) }
     var backgroundEnabled by remember { mutableStateOf(AppPreferences.backgroundServiceEnabled) }
     var systemPrompt by remember { mutableStateOf(
         AppPreferences.systemPrompt.ifBlank {
@@ -58,8 +73,36 @@ fun SettingsScreen(
     var showKeys by remember { mutableStateOf(false) }
     var saved by remember { mutableStateOf(false) }
     var updateState by remember { mutableStateOf<UpdateState>(UpdateState.Idle) }
+    var configUrl by remember { mutableStateOf(AppPreferences.configUrl) }
+    var importing by remember { mutableStateOf(false) }
+    var importMsg by remember { mutableStateOf<String?>(null) }
+    var remoteJson by remember { mutableStateOf<String?>(null) }
+    var accountOptions by remember { mutableStateOf<List<String>>(emptyList()) }
+    var accountMenuExpanded by remember { mutableStateOf(false) }
+    var selectedAccount by remember { mutableStateOf<String?>(null) }
+    var loadingAccounts by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+
+    fun refreshFromPrefs() {
+        deepSeekKey = AppPreferences.deepSeekApiKey
+        deepSeekBaseUrl = AppPreferences.deepSeekBaseUrl
+        deepSeekModel = AppPreferences.deepSeekModel
+        ovUrl = AppPreferences.openVikingUrl
+        ovKey = AppPreferences.openVikingKey
+        ovUser = AppPreferences.openVikingUser
+        maxRounds = AppPreferences.maxToolRounds.toString()
+        ovScoreThreshold = AppPreferences.ovScoreThreshold
+        ovSearchDisplayCount = AppPreferences.ovSearchDisplayCount.toString()
+        ovPeerId = AppPreferences.ovPeerId
+        ovWorkspacePeer = AppPreferences.ovWorkspacePeer
+        ovRecallDedup = AppPreferences.ovRecallDedup
+        ovProfileEnabled = AppPreferences.ovProfileEnabled
+        ovAutoCapture = AppPreferences.ovAutoCapture
+        backgroundEnabled = AppPreferences.backgroundServiceEnabled
+        systemPrompt = AppPreferences.systemPrompt
+        configUrl = AppPreferences.configUrl
+    }
 
     Scaffold(
         topBar = {
@@ -201,6 +244,141 @@ fun SettingsScreen(
                 }
             }
 
+            // ========== 配置导入 ==========
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Text("⚙️ 配置导入", style = MaterialTheme.typography.titleSmall)
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = "填入返回 JSON 的配置地址，可包含多个账号（顶层 key 为账号名，其对象为设置）。加载后选择账号一键应用，免去逐项输入。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    OutlinedTextField(
+                        value = configUrl,
+                        onValueChange = { configUrl = it },
+                        label = { Text("配置地址 (JSON)") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = {
+                                loadingAccounts = true
+                                importMsg = null
+                                scope.launch {
+                                    try {
+                                        val json = withContext(Dispatchers.IO) { fetchConfigText(configUrl) }
+                                        AppPreferences.configUrl = configUrl
+                                        remoteJson = json
+                                        val accounts = AppPreferences.listConfigAccounts(json)
+                                        accountOptions = accounts
+                                        selectedAccount = if (accounts.size == 1) accounts[0] else null
+                                        importMsg = if (accounts.isEmpty()) {
+                                            "已加载（扁平配置），可直接应用"
+                                        } else {
+                                            "找到 ${accounts.size} 个账号，请选择后应用"
+                                        }
+                                    } catch (e: Exception) {
+                                        importMsg = "加载失败: ${e.message ?: e.javaClass.simpleName}"
+                                    } finally {
+                                        loadingAccounts = false
+                                    }
+                                }
+                            },
+                            enabled = !loadingAccounts && configUrl.isNotBlank()
+                        ) {
+                            if (loadingAccounts) {
+                                CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                            } else {
+                                Text("加载")
+                            }
+                        }
+                        if (accountOptions.isNotEmpty()) {
+                            ExposedDropdownMenuBox(
+                                expanded = accountMenuExpanded,
+                                onExpandedChange = { accountMenuExpanded = it },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                OutlinedTextField(
+                                    value = selectedAccount ?: "选择账号",
+                                    onValueChange = {},
+                                    label = { Text("账号") },
+                                    modifier = Modifier.fillMaxWidth().menuAnchor(),
+                                    singleLine = true,
+                                    readOnly = true,
+                                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = accountMenuExpanded) }
+                                )
+                                ExposedDropdownMenu(
+                                    expanded = accountMenuExpanded,
+                                    onDismissRequest = { accountMenuExpanded = false }
+                                ) {
+                                    accountOptions.forEach { a ->
+                                        DropdownMenuItem(
+                                            text = { Text(a) },
+                                            onClick = {
+                                                selectedAccount = a
+                                                accountMenuExpanded = false
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = {
+                                importing = true
+                                importMsg = null
+                                scope.launch {
+                                    try {
+                                        val json = remoteJson
+                                            ?: withContext(Dispatchers.IO) { fetchConfigText(configUrl) }
+                                        val applied = AppPreferences.applyRemoteConfig(json, selectedAccount)
+                                        refreshFromPrefs()
+                                        importMsg = "已应用 $applied 项配置" +
+                                            if (selectedAccount != null) "（账号: $selectedAccount）" else ""
+                                    } catch (e: Exception) {
+                                        importMsg = "应用失败: ${e.message ?: e.javaClass.simpleName}"
+                                    } finally {
+                                        importing = false
+                                    }
+                                }
+                            },
+                            enabled = !importing && remoteJson != null
+                        ) {
+                            if (importing) {
+                                CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                            } else {
+                                Text("应用配置")
+                            }
+                        }
+                        if (importMsg != null) {
+                            Text(
+                                importMsg!!,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (importMsg!!.startsWith("加载失败") || importMsg!!.startsWith("应用失败")) {
+                                    MaterialTheme.colorScheme.error
+                                } else {
+                                    MaterialTheme.colorScheme.primary
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+
             // ========== 记忆检索 ==========
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(12.dp)) {
@@ -235,6 +413,61 @@ fun SettingsScreen(
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true
                     )
+                }
+            }
+
+            // ========== 记忆高级 ==========
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Text("🧠 记忆高级", style = MaterialTheme.typography.titleSmall)
+                    Spacer(Modifier.height(6.dp))
+                    OutlinedTextField(
+                        value = ovPeerId,
+                        onValueChange = { ovPeerId = it; saved = false },
+                        label = { Text("Peer ID（留空则按应用自动派生）") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                    Spacer(Modifier.height(8.dp))
+
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("按应用派生 Peer", style = MaterialTheme.typography.bodyMedium)
+                            Text("不同应用记忆互相隔离", style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Switch(checked = ovWorkspacePeer, onCheckedChange = { ovWorkspacePeer = it; saved = false })
+                    }
+                    HorizontalDivider(Modifier.padding(vertical = 6.dp))
+
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("召回去重", style = MaterialTheme.typography.bodyMedium)
+                            Text("跨轮不重复注入同一记忆", style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Switch(checked = ovRecallDedup, onCheckedChange = { ovRecallDedup = it; saved = false })
+                    }
+                    HorizontalDivider(Modifier.padding(vertical = 6.dp))
+
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("会话开始注入记忆索引", style = MaterialTheme.typography.bodyMedium)
+                            Text("新建会话时列出可用记忆主题", style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Switch(checked = ovProfileEnabled, onCheckedChange = { ovProfileEnabled = it; saved = false })
+                    }
+                    HorizontalDivider(Modifier.padding(vertical = 6.dp))
+
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("自动捕获对话", style = MaterialTheme.typography.bodyMedium)
+                            Text("对话后自动归档并提取长期记忆", style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Switch(checked = ovAutoCapture, onCheckedChange = { ovAutoCapture = it; saved = false })
+                    }
                 }
             }
 
@@ -311,6 +544,11 @@ fun SettingsScreen(
                         AppPreferences.openVikingUser = ovUser
                         AppPreferences.ovScoreThreshold = ovScoreThreshold
                         AppPreferences.ovSearchDisplayCount = ovSearchDisplayCount.toIntOrNull() ?: 3
+                        AppPreferences.ovPeerId = ovPeerId
+                        AppPreferences.ovWorkspacePeer = ovWorkspacePeer
+                        AppPreferences.ovRecallDedup = ovRecallDedup
+                        AppPreferences.ovProfileEnabled = ovProfileEnabled
+                        AppPreferences.ovAutoCapture = ovAutoCapture
                         AppPreferences.maxToolRounds = maxRounds.toIntOrNull() ?: 8
                         AppPreferences.systemPrompt = systemPrompt
 
@@ -409,6 +647,29 @@ fun SettingsScreen(
             Spacer(Modifier.height(16.dp))
         }
     }
+}
+
+/**
+ * 拉取远程配置文本。仅为「配置导入」这一个场景忽略 TLS 证书校验
+ * （信任任意证书 + 跳过主机名校验），其余 HTTPS 连接（如 DeepSeek）不受影响。
+ * 仅用于访问用户自托管的局域网配置服务器；配置非敏感，且可用 http:// 代替。
+ */
+private fun fetchConfigText(url: String): String {
+    val conn = URL(url).openConnection() as HttpURLConnection
+    if (conn is HttpsURLConnection) {
+        val trustAll = arrayOf<X509TrustManager>(object : X509TrustManager {
+            override fun checkClientTrusted(chain: Array<X509Certificate>, authType: String) {}
+            override fun checkServerTrusted(chain: Array<X509Certificate>, authType: String) {}
+            override fun getAcceptedIssuers(): Array<X509Certificate> = emptyArray()
+        })
+        val ctx = SSLContext.getInstance("TLS")
+        ctx.init(null, trustAll, SecureRandom())
+        conn.sslSocketFactory = ctx.socketFactory
+        conn.hostnameVerifier = HostnameVerifier { _, _ -> true }
+    }
+    conn.connectTimeout = 15000
+    conn.readTimeout = 15000
+    return conn.inputStream.bufferedReader().readText()
 }
 
 private sealed class UpdateState {

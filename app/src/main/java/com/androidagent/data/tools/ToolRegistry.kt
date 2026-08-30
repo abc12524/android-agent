@@ -47,11 +47,15 @@ class ToolRegistry(context: Context) {
         register(OpenVikingAddMessageTool(OpenVikingClient()))
         register(OpenVikingCommitSessionTool(OpenVikingClient()))
         register(OpenVikingDeleteFileTool(OpenVikingClient()))
+        register(OpenVikingAddMessagesBatchTool(OpenVikingClient()))
+        register(OpenVikingGetSessionTool(OpenVikingClient()))
+        register(OpenVikingListSessionsTool(OpenVikingClient()))
         register(SSHTool())
         register(SCPTool())
         register(PythonTool())
         register(NotificationTool())
         register(SoundTool())
+        register(WaitTool())
         register(RenameSessionTool(this, context))
     }
 

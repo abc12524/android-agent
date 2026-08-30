@@ -1,0 +1,48 @@
+name: Android Build
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: android-build:latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build Debug APK
+        run: ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: Prepare Release
+        id: prepare
+        run: |
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          DATE=$(date +%Y%m%d-%H%M%S)
+          SRC=$(ls app/build/outputs/apk/debug/*.apk | head -1)
+          DEST="android-agent-debug-${DATE}-${SHORT_SHA}.apk"
+          cp "$SRC" "$DEST"
+          echo "apk=$DEST" >> "$GITHUB_OUTPUT"
+          echo "tag=build-${DATE}-${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+
+      - name: Publish Release APK
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          API: http://192.168.30.181:3000/api/v1/repos/${{ github.repository }}/releases
+        run: |
+          TAG="${{ steps.prepare.outputs.tag }}"
+          APK="${{ steps.prepare.outputs.apk }}"
+          # 删除同名旧 release（若有）
+          EXISTING=$(curl -s -H "Authorization: token $TOKEN" "$API/tags/$TAG")
+          if echo "$EXISTING" | grep -q '"id"'; then
+            EID=$(echo "$EXISTING" | grep -o '"id":[0-9]*' | head -1 | cut -d: -f2)
+            curl -s -X DELETE -H "Authorization: token $TOKEN" "$API/$EID"
+          fi
+          REL=$(curl -s -X POST -H "Authorization: token $TOKEN" -H "Content-Type: application/json" \
+            -d "{\"tag_name\":\"$TAG\",\"name\":\"Debug Build $TAG\",\"body\":\"Auto-built Debug APK. Commit ${{ github.sha }}\",\"prerelease\":true}" "$API")
+          REL_ID=$(echo "$REL" | grep -o '"id":[0-9]*' | head -1 | cut -d: -f2)
+          curl -s -X POST -H "Authorization: token $TOKEN" -H "Content-Type: application/octet-stream" \
+            --data-binary "@$APK" "$API/$REL_ID/assets?name=$APK"
+          echo "Release $REL_ID published with $APK"
