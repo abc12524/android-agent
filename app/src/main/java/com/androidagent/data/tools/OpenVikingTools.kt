@@ -28,6 +28,35 @@ class OpenVikingSearchTool(private val ov: OpenVikingClient) : Tool {
 }
 
 /**
+ * OpenViking 语义搜索工具（find 接口：纯向量相似度、无会话上下文、低延迟）
+ */
+class OpenVikingFindTool(private val ov: OpenVikingClient) : Tool {
+
+    override val name: String = "openviking_find"
+
+    override val description: String =
+        "在 OpenViking 外置记忆中做语义搜索（find 接口：纯向量相似度、无会话上下文、低延迟），查找之前保存的知识、偏好、项目信息等"
+
+    override val parameters: Map<String, Any> = mapOf(
+        "type" to "object",
+        "properties" to mapOf(
+            "query" to mapOf("type" to "string", "description" to "搜索关键词，描述要查找什么内容"),
+            "target_uri" to mapOf(
+                "type" to "string",
+                "description" to "可选。限定检索范围，如 viking://user/{user}/peers/{peer}/memories/ 或 viking://resources/{project}/"
+            )
+        ),
+        "required" to listOf("query")
+    )
+
+    override suspend fun execute(args: Map<String, Any>): String {
+        val query = args["query"] as? String ?: return "{\"error\": \"缺少 query 参数\"}"
+        val targetUri = args["target_uri"] as? String ?: ""
+        return ov.find(query, targetUri = targetUri)
+    }
+}
+
+/**
  * OpenViking 保存记忆工具
  */
 class OpenVikingRememberTool(private val ov: OpenVikingClient) : Tool {

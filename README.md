@@ -28,9 +28,9 @@
 - 通过 `/system/bin/linker64` 绕过 SELinux 限制
 
 ### 💾 外置记忆（OpenViking）
-- 语义搜索历史知识
+- 语义搜索历史知识（`openviking_search` 走 search 上下文感知接口；`openviking_find` 走 find 纯向量接口，支持 `target_uri` 限定范围）
 - 保存用户偏好、项目配置、操作经验
-- 自动注入相关记忆作为对话上下文
+- 自动注入相关记忆作为对话上下文（默认走 find 接口）
 
 ## 构建
 
@@ -102,6 +102,8 @@ JSON 顶层 key 与应用的设置项一一对应；**顶层值为对象的 key 
     "background_service_enabled": false,
     "ov_score_threshold": 0.4,
     "ov_search_display_count": 3,
+    "ov_find_threshold": 0.4,
+    "ov_find_limit": 3,
     "system_prompt": ""
   },
   "default": {
@@ -122,6 +124,8 @@ JSON 顶层 key 与应用的设置项一一对应；**顶层值为对象的 key 
     "background_service_enabled": false,
     "ov_score_threshold": 0.4,
     "ov_search_display_count": 3,
+    "ov_find_threshold": 0.4,
+    "ov_find_limit": 3,
     "system_prompt": ""
   }
 }

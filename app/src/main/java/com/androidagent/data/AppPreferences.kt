@@ -92,6 +92,15 @@ object AppPreferences {
         get() = prefs.getInt("ov_search_display_count", 3)
         set(value) = prefs.edit().putInt("ov_search_display_count", value).apply()
 
+    // find 接口（纯向量语义搜索）专属阈值与条数
+    var ovFindThreshold: Float
+        get() = prefs.getFloat("ov_find_threshold", 0.4f)
+        set(value) = prefs.edit().putFloat("ov_find_threshold", value).apply()
+
+    var ovFindLimit: Int
+        get() = prefs.getInt("ov_find_limit", 3)
+        set(value) = prefs.edit().putInt("ov_find_limit", value).apply()
+
     // 系统提示词
     var systemPrompt: String
         get() = prefs.getString("system_prompt", "") ?: ""
@@ -161,6 +170,8 @@ object AppPreferences {
         bool("background_service_enabled")?.let { backgroundServiceEnabled = it; count++ }
         float("ov_score_threshold")?.let { ovScoreThreshold = it; count++ }
         int("ov_search_display_count")?.let { ovSearchDisplayCount = it; count++ }
+        float("ov_find_threshold")?.let { ovFindThreshold = it; count++ }
+        int("ov_find_limit")?.let { ovFindLimit = it; count++ }
         str("system_prompt")?.let { systemPrompt = it; count++ }
         return count
     }

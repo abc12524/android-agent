@@ -138,6 +138,17 @@ class OpenVikingClient {
         return payload
     }
 
+    /** find 接口（纯向量语义搜索）请求体；target_uri 可限定检索范围（如 viking://user/.../memories/） */
+    private fun buildFindPayload(query: String, threshold: Float, limit: Int, targetUri: String = ""): Map<String, Any> {
+        val payload = mutableMapOf<String, Any>(
+            "query" to query,
+            "score_threshold" to threshold,
+            "limit" to limit
+        )
+        if (targetUri.isNotBlank()) payload["target_uri"] = targetUri
+        return payload
+    }
+
     /**
      * 解析 /api/v1/search/search 返回，合并 memories / resources / skills 三段结果，
      * 按 uri 去重（保留首次出现），并按相关度（score）降序排序。
@@ -194,7 +205,7 @@ class OpenVikingClient {
     }
 
     // ========== 语义搜索 ==========
-    suspend fun search(query: String, limit: Int = 5): String {
+    suspend fun search(query: String, limit: Int = AppPreferences.ovSearchDisplayCount): String {
         val threshold = AppPreferences.ovScoreThreshold
         val result = post("/api/v1/search/search", buildSearchPayload(query, threshold, limit))
         return result.fold(
@@ -204,6 +215,42 @@ class OpenVikingClient {
                     // 兜底：阈值过高吞掉相关记忆 → 放宽到 0 再试一次，取结果更多的一次
                     if (threshold > 0 && (top.isEmpty() || (top.size <= 1 && threshold >= 0.3f))) {
                         post("/api/v1/search/search", buildSearchPayload(query, 0f, limit)).onSuccess { fbBody ->
+                            val fbHits = parseSearchHits(fbBody)
+                            if (fbHits.size > top.size) top = fbHits.take(8)
+                        }
+                    }
+                    if (top.isEmpty()) return gson.toJson(
+                        mapOf("success" to true, "results" to emptyList<Any>(), "message" to "未找到相关记忆")
+                    )
+                    val results = top.map { obj ->
+                        mapOf(
+                            "uri" to (obj.get("uri")?.asString ?: ""),
+                            "score" to (obj.get("score")?.asDouble ?: 0.0),
+                            "snippet" to (obj.get("abstract")?.asString ?: "").take(500),
+                            "category" to (obj.get("category")?.asString ?: ""),
+                            "context_type" to (obj.get("context_type")?.asString ?: "")
+                        )
+                    }
+                    gson.toJson(mapOf("success" to true, "results" to results, "total" to top.size))
+                } catch (e: Exception) {
+                    "{\"error\": \"解析搜索结果失败: ${e.message}\"}"
+                }
+            },
+            onFailure = { "{\"error\": \"${it.message}\"}" }
+        )
+    }
+
+    // ========== 语义搜索（find 接口：纯向量相似度，无会话上下文，低延迟） ==========
+    suspend fun find(query: String, limit: Int = AppPreferences.ovFindLimit, targetUri: String = ""): String {
+        val threshold = AppPreferences.ovFindThreshold
+        val result = post("/api/v1/search/find", buildFindPayload(query, threshold, limit, targetUri))
+        return result.fold(
+            onSuccess = { body ->
+                try {
+                    var top = parseSearchHits(body).take(8)
+                    // 兜底：阈值过高吞掉相关记忆 → 放宽到 0 再试一次，取结果更多的一次
+                    if (threshold > 0 && (top.isEmpty() || (top.size <= 1 && threshold >= 0.3f))) {
+                        post("/api/v1/search/find", buildFindPayload(query, 0f, limit, targetUri)).onSuccess { fbBody ->
                             val fbHits = parseSearchHits(fbBody)
                             if (fbHits.size > top.size) top = fbHits.take(8)
                         }
@@ -407,13 +454,13 @@ class OpenVikingClient {
         return result.fold(onSuccess = { it }, onFailure = { "{\"error\": \"${it.message}\"}" })
     }
 
-    /** 加载相关记忆作为上下文（带跨轮去重） */
+    /** 加载相关记忆作为上下文（带跨轮去重）；自动注入走 find 接口（纯向量低延迟） */
     suspend fun loadContext(query: String, sessionId: String = ""): String {
-        val threshold = AppPreferences.ovScoreThreshold
-        val displayCount = AppPreferences.ovSearchDisplayCount
+        val threshold = AppPreferences.ovFindThreshold
+        val displayCount = AppPreferences.ovFindLimit
         if (displayCount <= 0) return ""
         if (query.isBlank()) return ""
-        val result = post("/api/v1/search/search", buildSearchPayload(query, threshold, displayCount))
+        val result = post("/api/v1/search/find", buildFindPayload(query, threshold, displayCount))
         return result.fold(
             onSuccess = { body ->
                 try {

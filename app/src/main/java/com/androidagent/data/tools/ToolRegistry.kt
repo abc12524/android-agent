@@ -39,6 +39,7 @@ class ToolRegistry(context: Context) {
         register(GPSTool(context))
         register(SensorTool(context))
         register(OpenVikingSearchTool(OpenVikingClient()))
+        register(OpenVikingFindTool(OpenVikingClient()))
         register(OpenVikingRememberTool(OpenVikingClient()))
         register(OpenVikingReadTool(OpenVikingClient()))
         register(OpenVikingListDirTool(OpenVikingClient()))
