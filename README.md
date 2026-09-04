@@ -12,14 +12,28 @@
 ### 🛠️ 工具集
 | 工具 | 说明 |
 |------|------|
+| `execute_system_command` | Android Shell 命令执行 |
+| `get_system_info` | 获取设备系统信息 |
+| `get_gps_location` | 获取设备 GPS 定位 |
+| `get_sensor_data` | 读取陀螺仪、加速度计、磁力计等传感器 |
 | `ssh_execute` | SSH 远程命令执行 |
 | `ssh_scp` | SCP 文件上传下载 |
 | `execute_python` | 嵌入 Python 3.13 环境，支持 pip 安装包 |
-| `shell_execute` | Android Shell 命令执行 |
-| `get_system_info` | 获取设备系统信息 |
-| `get_gps_location` | 获取设备 GPS 定位 |
-| `read_sensors` | 读取陀螺仪、加速度计、磁力计等传感器 |
-| `openviking_*` | 外置记忆读写搜索（OpenViking） |
+| `send_notification` | 发送系统通知 |
+| `play_sound` | 播放提示音或远程音频 |
+| `wait` | 延迟执行（0-30 分钟） |
+| `rename_session` | 设置对话标题 |
+| `openviking_search` | OpenViking 语义搜索（上下文感知） |
+| `openviking_remember` | 保存记忆到 OpenViking |
+| `openviking_delete_file` | 删除 OpenViking 文件 |
+| `openviking_*` | OpenViking 综合管理（find/read/write/session 等 10 个 action） |
+| `file_*` | 对象存储 S3 兼容（upload/download/delete/list/copy 等 13 个 action） |
+
+### ☁️ 对象存储（S3 兼容）
+- 支持任何 S3 兼容服务（AWS S3、MinIO、Ceph、阿里云 OSS 等）
+- 支持自定义 Endpoint（IP:port 格式）
+- 13 种操作：upload / download / delete / delete_batch / list / copy / head / list_buckets / create_bucket / delete_bucket / presign / create_folder / delete_folder
+- 连接参数从应用设置自动读取，LLM 调用时无需传入
 
 ### 🧠 嵌入式 Python 环境
 - 内置 **Python 3.13** 完整标准库 + pip
@@ -28,16 +42,16 @@
 - 通过 `/system/bin/linker64` 绕过 SELinux 限制
 
 ### 💾 外置记忆（OpenViking）
-- 语义搜索历史知识（`openviking_search` 走 search 上下文感知接口；`openviking_find` 走 find 纯向量接口，支持 `target_uri` 限定范围）
+- 语义搜索历史知识（`openviking_search` 走 search 上下文感知接口；`openviking_*` 的 find action 走纯向量接口，支持 `target_uri` 限定范围）
 - 保存用户偏好、项目配置、操作经验
 - 自动注入相关记忆作为对话上下文（默认走 find 接口）
 
 ## 构建
 
 ### 环境要求
-- Android Studio Hedgehog (2023.1.1+) 或命令行 Gradle
+- Android Studio Meerkat (2024.3.1+) 或命令行 Gradle
 - JDK 17+
-- Android SDK (compileSdk 34)
+- Android SDK (compileSdk 36)
 
 ### 构建命令
 ```bash
@@ -56,7 +70,7 @@ APK 输出路径：`app/build/outputs/apk/debug/app-debug.apk`
 
 ```bash
 # gradle-wrapper.properties
-distributionUrl=https\://mirrors.cloud.tencent.com/gradle/gradle-8.7-all.zip
+distributionUrl=https\://mirrors.cloud.tencent.com/gradle/gradle-8.11.1-all.zip
 validateDistributionUrl=false
 
 # settings.gradle.kts 添加阿里云镜像
@@ -70,7 +84,8 @@ maven { setUrl("https://maven.aliyun.com/repository/gradle-plugin") }
 1. 安装 APK 后打开应用
 2. 进入 **设置** 配置 **DeepSeek API Key**（必填）
 3. （可选）配置 OpenViking 服务器地址和百度千帆 API Key
-4. 开始对话
+4. （可选）配置对象存储 S3 服务地址和密钥
+5. 开始对话
 
 ### 首次启动
 - Python 环境（~53MB）会在首次启动时自动解压，耗时约 10-30 秒
@@ -104,7 +119,10 @@ JSON 顶层 key 与应用的设置项一一对应；**顶层值为对象的 key 
     "ov_search_display_count": 3,
     "ov_find_threshold": 0.4,
     "ov_find_limit": 3,
-    "system_prompt": ""
+    "system_prompt": "",
+    "s3_endpoint_url": "http://192.168.1.100:9000",
+    "s3_access_key": "your-access-key",
+    "s3_secret_key": "your-secret-key"
   },
   "default": {
     "deepseek_api_key": "sk-xxxx",
@@ -126,19 +144,23 @@ JSON 顶层 key 与应用的设置项一一对应；**顶层值为对象的 key 
     "ov_search_display_count": 3,
     "ov_find_threshold": 0.4,
     "ov_find_limit": 3,
-    "system_prompt": ""
+    "system_prompt": "",
+    "s3_endpoint_url": "",
+    "s3_access_key": "",
+    "s3_secret_key": ""
   }
 }
 ```
 
 ## 技术栈
 
-- **语言**: Kotlin
+- **语言**: Kotlin 2.4.0
 - **UI**: Jetpack Compose + Material 3
 - **数据库**: Room (SQLite)
 - **网络**: OkHttp + Gson
 - **AI API**: DeepSeek Chat Completion (Function Calling)
 - **SSH**: JSch
+- **对象存储**: AWS SDK for Kotlin S3（兼容 MinIO/Ceph 等）
 - **CI**: GitHub Actions（自动构建 Debug APK 并发布 Release）
 
 ## License
