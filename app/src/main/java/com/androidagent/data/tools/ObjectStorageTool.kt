@@ -27,7 +27,7 @@ class ObjectStorageTool : Tool {
     private val gson = Gson()
     private val client = OkHttpClient.Builder().build()
 
-    override val name: String = "file_*"
+    override val name: String = "file_tool"
 
     override val description: String =
         "对象存储（S3 兼容）文件管理工具。支持上传、下载、删除、列举、复制、元数据查询、" +

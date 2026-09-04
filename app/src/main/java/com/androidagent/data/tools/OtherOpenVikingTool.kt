@@ -12,7 +12,7 @@ class OtherOpenVikingTool(private val ov: OpenVikingClient) : Tool {
 
     private val gson = Gson()
 
-    override val name: String = "openviking_*"
+    override val name: String = "openviking_tool"
 
     override val description: String =
         "OpenViking 外置记忆综合管理工具。支持：find（快速语义搜索）、read（读取文件）、" +
