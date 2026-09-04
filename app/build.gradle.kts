@@ -11,7 +11,7 @@ kotlin {
 
 android {
     namespace = "com.androidagent"
-    compileSdk = 36
+    compileSdk = 34
 
     signingConfigs {
         create("release") {
@@ -28,7 +28,6 @@ android {
         targetSdk = 34
         versionCode = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
         versionName = "1.0.${System.getenv("GITHUB_RUN_NUMBER") ?: "0"}"
-        multiDexEnabled = true
     }
 
     buildTypes {
@@ -48,7 +47,6 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
-        isCoreLibraryDesugaringEnabled = true
     }
 
     buildFeatures {
@@ -59,7 +57,7 @@ android {
 
 dependencies {
     // Compose BOM
-    val composeBom = platform("androidx.compose:compose-bom:2024.12.01")
+    val composeBom = platform("androidx.compose:compose-bom:2024.09.00")
     implementation(composeBom)
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
@@ -88,13 +86,8 @@ dependencies {
     implementation("com.github.mwiede:jsch:2.28.3")
 
     // Coroutines
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.1")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
 
     // Markdown
     implementation("com.github.jeziellago:compose-markdown:0.7.2")
-
-    // AWS SDK for Kotlin - S3 (对象存储)
-    implementation("aws.sdk.kotlin:s3:1.8.26")
-    implementation("aws.sdk.kotlin:aws-config:1.8.26")
-    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
 }
