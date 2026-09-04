@@ -6,6 +6,7 @@ import com.google.gson.Gson
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.net.URLEncoder
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -166,7 +167,7 @@ class ObjectStorageTool : Tool {
         val finalQuery = if (queryParams.isNotEmpty()) queryString else (url.query ?: "")
 
         // Build signed headers map (lowercase keys for signing, but keep original case for header names)
-        val signedHeaderLowerKeys = headers.keys.map { it.lowercase() }.toSortedList()
+        val signedHeaderLowerKeys = headers.keys.map { it.lowercase() }.sorted()
         val signedHeaders = signedHeaderLowerKeys.joinToString(";") { it }
 
         // Build canonical headers: original-key: value\n (sorted by lowercase key)
