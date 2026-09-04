@@ -204,7 +204,7 @@ class ChatEngine(private val context: Context) {
 
             // 6. 自动捕获本轮对话到 OpenViking Session（提取长期记忆）
             if (AppPreferences.ovAutoCapture && AppPreferences.openVikingUrl.isNotBlank()) {
-                openViking.captureSession(sessionId, allNewMessages.map { it.role to it.content })
+                openViking.captureSession(sessionId, allNewMessages)
             }
 
             // 7. 更新会话统计
@@ -410,7 +410,7 @@ class ChatEngine(private val context: Context) {
 
             // 5. 自动捕获本轮对话到 OpenViking Session（提取长期记忆）
             if (AppPreferences.ovAutoCapture && AppPreferences.openVikingUrl.isNotBlank()) {
-                openViking.captureSession(sessionId, allNewMessages.map { it.role to it.content })
+                openViking.captureSession(sessionId, allNewMessages)
             }
 
             // 6. 更新会话统计

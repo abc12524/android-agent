@@ -2,6 +2,7 @@ package com.androidagent.data.memory
 
 import com.androidagent.BuildConfig
 import com.androidagent.data.AppPreferences
+import com.androidagent.data.model.Message
 import com.google.gson.Gson
 import com.google.gson.JsonElement
 import com.google.gson.JsonParser
@@ -539,7 +540,7 @@ class OpenVikingClient {
      * 把一段对话捕获到 OpenViking Session 并提取长期记忆（对齐 shell-tool OV_AUTO_CAPTURE）。
      * 失败静默跳过，不影响主对话。
      */
-    suspend fun captureSession(androidSessionId: String, messages: List<Pair<String, String>>) {
+    suspend fun captureSession(androidSessionId: String, messages: List<Message>) {
         if (AppPreferences.openVikingUrl.isBlank() || !AppPreferences.ovAutoCapture) return
         try {
             val ovSession = ovSessions[androidSessionId]
@@ -566,29 +567,85 @@ class OpenVikingClient {
         )
     }
 
-    /** 把聊天消息转成 OV session 的 {role,content} 列表（对齐官方 capture 选择逻辑 + 噪音过滤） */
-    private fun toOvMessages(messages: List<Pair<String, String>>): List<Map<String, String>> {
-        val out = mutableListOf<Map<String, String>>()
-        for ((role, content) in messages) {
-            var c = content
+    /** 把聊天消息转成 OV session 消息列表（对齐 opencode 插件 buildCapturePayload：
+     *  纯文本发 {role, content}，含工具调用发 {role, parts}，assistant 消息带 peer_id，
+     *  tool 消息转成 tool-result part）。噪音过滤对齐 capture-utils.shouldCaptureText。 */
+    private fun toOvMessages(messages: List<Message>): List<Map<String, Any>> {
+        val out = mutableListOf<Map<String, Any>>()
+        for (m in messages) {
+            val content = m.content
             // 跳过自动注入的召回 / profile 块，防止记忆回声
-            if (c.contains(RECALL_MARKER, ignoreCase = true) ||
-                c.contains(RECALL_MARKER_ANDROID, ignoreCase = true) ||
-                c.contains(PROFILE_MARKER, ignoreCase = true)) continue
-            if (role == "tool") {
-                c = c.take(2000) // OV_CAPTURE_TOOL_MAX_CHARS
-                if (c.isBlank()) continue
-                out.add(mapOf("role" to "user", "content" to "[工具结果] $c"))
+            if (content.contains(RECALL_MARKER, ignoreCase = true) ||
+                content.contains(RECALL_MARKER_ANDROID, ignoreCase = true) ||
+                content.contains(PROFILE_MARKER, ignoreCase = true)) continue
+
+            if (m.role == "tool") {
+                val result = content.take(2000) // OV_CAPTURE_TOOL_MAX_CHARS
+                if (result.isBlank()) continue
+                val part = mutableMapOf<String, Any>(
+                    "type" to "tool",
+                    "tool_id" to (m.toolCallId ?: ""),
+                    "tool_name" to (m.toolName ?: ""),
+                    "tool_status" to "completed",
+                    "tool_output" to result,
+                )
+                val args = m.toolArgs
+                if (!args.isNullOrBlank()) part["tool_input"] = parseJsonValue(args)
+                out.add(mapOf("role" to "assistant", "parts" to listOf(part), "peer_id" to peerId()))
                 continue
             }
-            c = c.take(4000) // OV_CAPTURE_MAX_LENGTH
-            if (!shouldCapture(c, role)) continue
-            val ovRole = if (role == "assistant") "assistant" else "user"
-            val msg = mutableMapOf("role" to ovRole, "content" to c)
-            if (ovRole == "assistant") msg["peer_id"] = peerId() // 对齐 hermes：assistant 消息带 peer_id
+
+            val c = content.take(4000) // OV_CAPTURE_MAX_LENGTH
+            if (m.role == "assistant" && !m.toolCalls.isNullOrBlank()) {
+                // 含工具调用：文本 + 工具调用 parts
+                val textCaptured = shouldCapture(c, m.role)
+                val parts = mutableListOf<Map<String, Any>>()
+                if (textCaptured) parts.add(mapOf("type" to "text", "text" to c))
+                parts.addAll(buildToolCallParts(m.toolCalls))
+                if (parts.isEmpty()) continue
+                out.add(mapOf("role" to "assistant", "parts" to parts, "peer_id" to peerId()))
+                continue
+            }
+
+            if (m.role != "user" && m.role != "assistant") continue
+            if (!shouldCapture(c, m.role)) continue
+            val ovRole = if (m.role == "assistant") "assistant" else "user"
+            val msg = mutableMapOf<String, Any>("role" to ovRole, "content" to c)
+            if (ovRole == "assistant") msg["peer_id"] = peerId()
             out.add(msg)
         }
         return out
+    }
+
+    /** 把 assistant 消息的 tool_calls(JSON) 解析成 tool-call parts（对齐 hermes.json 的 tool 结构）。 */
+    private fun buildToolCallParts(toolCallsJson: String): List<Map<String, Any>> {
+        val parts = mutableListOf<Map<String, Any>>()
+        runCatching {
+            val arr = JsonParser.parseString(toolCallsJson).asJsonArray
+            for (el in arr) {
+                if (!el.isJsonObject) continue
+                val obj = el.asJsonObject
+                val id = runCatching { obj.get("id").asString }.getOrNull() ?: ""
+                val name = runCatching { obj.getAsJsonObject("function").get("name").asString }.getOrNull() ?: ""
+                if (name.isBlank()) continue
+                val part = mutableMapOf<String, Any>(
+                    "type" to "tool",
+                    "tool_id" to id,
+                    "tool_name" to name,
+                    "tool_status" to "completed",
+                )
+                val args = runCatching { obj.getAsJsonObject("function").get("arguments").asString }.getOrNull()
+                if (!args.isNullOrBlank()) part["tool_input"] = parseJsonValue(args)
+                parts.add(part)
+            }
+        }
+        return parts
+    }
+
+    /** 尽量把 JSON 字符串还原为对象/数组；失败则保留原始字符串。 */
+    private fun parseJsonValue(text: String): Any {
+        val el = runCatching { JsonParser.parseString(text) }.getOrNull() ?: return text
+        return if (el.isJsonObject || el.isJsonArray) el else el.asString
     }
 
     /** 对齐官方 capture-utils.shouldCaptureText 的轻量噪音过滤 */
