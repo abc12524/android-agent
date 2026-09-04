@@ -10,7 +10,7 @@ kotlin {
 
 android {
     namespace = "com.androidagent"
-    compileSdk = 34
+    compileSdk = 36
 
     signingConfigs {
         create("release") {
