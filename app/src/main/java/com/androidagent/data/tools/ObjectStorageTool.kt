@@ -221,6 +221,7 @@ class ObjectStorageTool : Tool {
         headers.forEach { (k, v) -> requestBuilder.addHeader(k, v) }
 
         return requestBuilder.build()
+    }
 
     private fun hmacSha256(key: ByteArray, data: ByteArray): ByteArray {
         val mac = Mac.getInstance("HmacSHA256")
