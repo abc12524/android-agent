@@ -584,7 +584,9 @@ class OpenVikingClient {
             c = c.take(4000) // OV_CAPTURE_MAX_LENGTH
             if (!shouldCapture(c, role)) continue
             val ovRole = if (role == "assistant") "assistant" else "user"
-            out.add(mapOf("role" to ovRole, "content" to c))
+            val msg = mutableMapOf("role" to ovRole, "content" to c)
+            if (ovRole == "assistant") msg["peer_id"] = peerId() // 对齐 hermes：assistant 消息带 peer_id
+            out.add(msg)
         }
         return out
     }
