@@ -5,7 +5,6 @@ import com.androidagent.data.HttpClientProvider
 import com.google.gson.Gson
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import java.net.URLEncoder
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -158,13 +157,8 @@ class ObjectStorageTool : Tool {
             headers["content-type"] = contentType
         }
 
-        // Build canonical query string with proper encoding (like Python urllib.parse.quote)
-        val sortedQueryEntries = queryParams.entries.sortedBy { it.key }
-        val queryString = sortedQueryEntries.joinToString("&") { (k, v) ->
-            "${URLEncoder.encode(k, "UTF-8")}=${URLEncoder.encode(v.toString(), "UTF-8")}"
-        }
-        // If no query params but path has query, preserve it
-        val finalQuery = if (queryParams.isNotEmpty()) queryString else (url.query ?: "")
+        // Build canonical query string (sorted + RFC3986 encoded, like Python urllib.parse.quote)
+        val finalQuery = canonicalQuery(queryParams)
 
         // Build signed headers map (lowercase keys for signing, but keep original case for header names)
         val signedHeaderLowerKeys = headers.keys.map { it.lowercase() }.sorted()
@@ -180,10 +174,9 @@ class ObjectStorageTool : Tool {
 
         val payloadHash = headers["x-amz-content-sha256"] ?: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 
+        val canonPath = if (path.startsWith("/")) path else "/" + path
         val canonicalRequest = buildString {
             append(method).append("\n")
-            // Path: if path starts with / use it, otherwise prepend /
-            val canonPath = if (path.startsWith("/")) path else "/" + path
             append(canonPath).append("\n")
             append(finalQuery).append("\n")
             append(canonicalHeaders)
@@ -214,8 +207,9 @@ class ObjectStorageTool : Tool {
         val authorization = "AWS4-HMAC-SHA256 Credential=$accessKey/$credentialScope, SignedHeaders=$signedHeaders, Signature=$signature"
         headers["authorization"] = authorization
 
+        val requestUrl = "$endpoint$canonPath" + if (finalQuery.isNotEmpty()) "?$finalQuery" else ""
         val requestBuilder = Request.Builder()
-            .url(url.toString())
+            .url(requestUrl)
             .method(method, if (body.isNotEmpty()) body.toRequestBody(contentType.toMediaType()) else null)
 
         // Add all headers - including the ones we set for signing
@@ -228,6 +222,30 @@ class ObjectStorageTool : Tool {
         val mac = Mac.getInstance("HmacSHA256")
         mac.init(SecretKeySpec(key, "HmacSHA256"))
         return mac.doFinal(data)
+    }
+
+    // RFC3986 percent-encoding (like urllib.parse.quote(s, safe="")) — 用于 S3 签名规范化
+    private fun canonicalEncode(s: String): String {
+        val out = StringBuilder()
+        for (b in s.toByteArray(Charsets.UTF_8)) {
+            val c = b.toInt() and 0xff
+            val ch = c.toChar()
+            if ((ch in 'A'..'Z') || (ch in 'a'..'z') || (ch in '0'..'9') ||
+                ch == '-' || ch == '_' || ch == '.' || ch == '~'
+            ) {
+                out.append(ch)
+            } else {
+                out.append('%').append("%02X".format(c))
+            }
+        }
+        return out.toString()
+    }
+
+    // 构建规范化 query：按 key 排序，value 为空时省略 "="（如 S3 子资源 ?delete）
+    private fun canonicalQuery(params: Map<String, String>): String {
+        return params.entries.sortedBy { it.key }.joinToString("&") { (k, v) ->
+            if (v.isEmpty()) canonicalEncode(k) else "${canonicalEncode(k)}=${canonicalEncode(v)}"
+        }
     }
 
     // ==================== 工具方法 ====================
@@ -329,7 +347,7 @@ class ObjectStorageTool : Tool {
                 append("</Delete>")
             }
             val headers = mutableMapOf<String, String>()
-            val req = signRequest("POST", endpoint, "/$bucket?delete", region, ak, sk, headers, xmlBody.toByteArray(), "application/xml")
+            val req = signRequest("POST", endpoint, "/$bucket", region, ak, sk, headers, xmlBody.toByteArray(), "application/xml", mapOf("delete" to ""))
             val resp = client.newCall(req).execute()
             val body = resp.body?.string() ?: ""
             resp.close()
@@ -348,13 +366,13 @@ class ObjectStorageTool : Tool {
         val maxKeys = (args["max_keys"] as? Double)?.toInt() ?: 100
 
         return withContext(Dispatchers.IO) {
-            val query = buildString {
-                append("list-type=2")
-                if (prefix.isNotBlank()) append("&prefix=$prefix")
-                append("&max-keys=$maxKeys")
+            val queryParams = if (prefix.isNotBlank()) {
+                mapOf("list-type" to "2", "max-keys" to maxKeys.toString(), "prefix" to prefix)
+            } else {
+                mapOf("list-type" to "2", "max-keys" to maxKeys.toString())
             }
             val headers = mutableMapOf<String, String>()
-            val req = signRequest("GET", endpoint, "/$bucket?$query", region, ak, sk, headers)
+            val req = signRequest("GET", endpoint, "/$bucket", region, ak, sk, headers, queryParams = queryParams)
             val resp = client.newCall(req).execute()
             val xml = resp.body?.string() ?: ""
             resp.close()
@@ -492,17 +510,23 @@ class ObjectStorageTool : Tool {
             val amzDate = dateFormat.format(now)
 
             val credentialScope = "$dateStamp/$region/s3/aws4_request"
+            // 预签名 URL 的 payload hash 必须是 UNSIGNED-PAYLOAD（AWS/MinIO/rustfs 约定）
+            val presignQuery = listOf(
+                "X-Amz-Algorithm" to "AWS4-HMAC-SHA256",
+                "X-Amz-Credential" to "$ak/$credentialScope",
+                "X-Amz-Date" to amzDate,
+                "X-Amz-Expires" to expiresSeconds.toString(),
+                "X-Amz-SignedHeaders" to "host"
+            ).sortedBy { it.first }.joinToString("&") { (k, v) ->
+                "${canonicalEncode(k)}=${canonicalEncode(v)}"
+            }
             val canonicalRequest = buildString {
                 append(method).append("\n")
                 append("/$bucket/$key").append("\n")
-                append("X-Amz-Algorithm=${URLEncoder.encode("AWS4-HMAC-SHA256", "UTF-8")}")
-                append("&X-Amz-Credential=${URLEncoder.encode("$ak/$credentialScope", "UTF-8")}")
-                append("&X-Amz-Date=${URLEncoder.encode(amzDate, "UTF-8")}")
-                append("&X-Amz-Expires=${URLEncoder.encode(expiresSeconds.toString(), "UTF-8")}")
-                append("&X-Amz-SignedHeaders=${URLEncoder.encode("host", "UTF-8")}").append("\n")
+                append(presignQuery).append("\n")
                 append("host:$host").append("\n")
                 append("host").append("\n")
-                append("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")
+                append("UNSIGNED-PAYLOAD")
             }
 
             val stringToSign = buildString {
@@ -520,11 +544,7 @@ class ObjectStorageTool : Tool {
 
             val presignUrl = buildString {
                 append(endpoint).append("/$bucket/$key")
-                append("?X-Amz-Algorithm=${URLEncoder.encode("AWS4-HMAC-SHA256", "UTF-8")}")
-                append("&X-Amz-Credential=${URLEncoder.encode("$ak/$credentialScope", "UTF-8")}")
-                append("&X-Amz-Date=${URLEncoder.encode(amzDate, "UTF-8")}")
-                append("&X-Amz-Expires=${URLEncoder.encode(expiresSeconds.toString(), "UTF-8")}")
-                append("&X-Amz-SignedHeaders=${URLEncoder.encode("host", "UTF-8")}")
+                append("?$presignQuery")
                 append("&X-Amz-Signature=$signature")
             }
 
@@ -560,12 +580,13 @@ class ObjectStorageTool : Tool {
             var continuationToken: String? = null
 
             do {
-                val query = buildString {
-                    append("list-type=2&prefix=$prefix")
-                    if (continuationToken != null) append("&continuation-token=$continuationToken")
+                val queryParams = buildMap<String, String> {
+                    put("list-type", "2")
+                    put("prefix", prefix)
+                    if (continuationToken != null) put("continuation-token", continuationToken)
                 }
                 val headers = mutableMapOf<String, String>()
-                val req = signRequest("GET", endpoint, "/$bucket?$query", region, ak, sk, headers)
+                val req = signRequest("GET", endpoint, "/$bucket", region, ak, sk, headers, queryParams = queryParams)
                 val resp = client.newCall(req).execute()
                 val xml = resp.body?.string() ?: ""
                 resp.close()
@@ -585,7 +606,7 @@ class ObjectStorageTool : Tool {
                     append("</Delete>")
                 }
                 val headers = mutableMapOf<String, String>()
-                val req = signRequest("POST", endpoint, "/$bucket?delete", region, ak, sk, headers, xmlBody.toByteArray(), "application/xml")
+                val req = signRequest("POST", endpoint, "/$bucket", region, ak, sk, headers, xmlBody.toByteArray(), "application/xml", mapOf("delete" to ""))
                 val resp = client.newCall(req).execute()
                 resp.close()
             }
