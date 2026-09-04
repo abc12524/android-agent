@@ -58,6 +58,7 @@ fun SettingsScreen(
     var s3Endpoint by remember { mutableStateOf(AppPreferences.s3EndpointUrl) }
     var s3AccessKey by remember { mutableStateOf(AppPreferences.s3AccessKey) }
     var s3SecretKey by remember { mutableStateOf(AppPreferences.s3SecretKey) }
+    var skipSsl by remember { mutableStateOf(AppPreferences.skipSslVerification) }
     var systemPrompt by remember { mutableStateOf(
         AppPreferences.systemPrompt.ifBlank {
             """你是 Android Agent，一个运行在 Android 设备上的 AI 助手。
@@ -106,6 +107,7 @@ fun SettingsScreen(
         s3Endpoint = AppPreferences.s3EndpointUrl
         s3AccessKey = AppPreferences.s3AccessKey
         s3SecretKey = AppPreferences.s3SecretKey
+        skipSsl = AppPreferences.skipSslVerification
         systemPrompt = AppPreferences.systemPrompt
         configUrl = AppPreferences.configUrl
     }
@@ -280,6 +282,25 @@ fun SettingsScreen(
                         singleLine = true,
                         visualTransformation = if (showKeys) VisualTransformation.None else PasswordVisualTransformation()
                     )
+                    Spacer(Modifier.height(6.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Switch(
+                            checked = skipSsl,
+                            onCheckedChange = { skipSsl = it; saved = false }
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Column {
+                            Text("跳过证书验证", style = MaterialTheme.typography.bodyMedium)
+                            Text(
+                                "适用于自签名 HTTPS 证书（如内网 MinIO/Ceph）",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
                 }
             }
 
@@ -593,6 +614,7 @@ fun SettingsScreen(
                         AppPreferences.s3EndpointUrl = s3Endpoint
                         AppPreferences.s3AccessKey = s3AccessKey
                         AppPreferences.s3SecretKey = s3SecretKey
+                        AppPreferences.skipSslVerification = skipSsl
 
                         val wasEnabled = AppPreferences.backgroundServiceEnabled
                         AppPreferences.backgroundServiceEnabled = backgroundEnabled

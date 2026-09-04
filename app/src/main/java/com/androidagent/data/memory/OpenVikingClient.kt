@@ -2,6 +2,7 @@ package com.androidagent.data.memory
 
 import com.androidagent.BuildConfig
 import com.androidagent.data.AppPreferences
+import com.androidagent.data.HttpClientProvider
 import com.androidagent.data.model.Message
 import com.google.gson.Gson
 import com.google.gson.JsonElement
@@ -15,7 +16,6 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.IOException
 import java.net.URLEncoder
 import java.security.MessageDigest
-import java.util.concurrent.TimeUnit
 
 /**
  * OpenViking 外置记忆系统 HTTP 客户端
@@ -28,11 +28,7 @@ import java.util.concurrent.TimeUnit
 class OpenVikingClient {
 
     private val gson = Gson()
-    private val client = OkHttpClient.Builder()
-        .connectTimeout(10, TimeUnit.SECONDS)
-        .readTimeout(60, TimeUnit.SECONDS)
-        .writeTimeout(15, TimeUnit.SECONDS)
-        .build()
+    private val client = HttpClientProvider.get()
 
     private val jsonMediaType = "application/json".toMediaType()
 

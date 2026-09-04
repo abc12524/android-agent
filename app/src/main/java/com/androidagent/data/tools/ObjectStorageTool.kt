@@ -1,6 +1,7 @@
 package com.androidagent.data.tools
 
 import com.androidagent.data.AppPreferences
+import com.androidagent.data.HttpClientProvider
 import com.google.gson.Gson
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -25,7 +26,7 @@ import javax.crypto.spec.SecretKeySpec
 class ObjectStorageTool : Tool {
 
     private val gson = Gson()
-    private val client = OkHttpClient.Builder().build()
+    private val client = HttpClientProvider.get()
 
     override val name: String = "file_tool"
 
