@@ -11,7 +11,6 @@ import com.google.gson.Gson
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
-import java.time.Instant
 
 /**
  * 对象存储工具（S3 兼容）
@@ -67,15 +66,15 @@ class ObjectStorageTool : Tool {
 
     override suspend fun execute(args: Map<String, Any>): String {
         val action = args["action"] as? String
-            ?: return """{"error": "缺少 action 参数"}"""
+            ?: return err("缺少 action 参数")
 
         val endpointUrl = AppPreferences.s3EndpointUrl
         val accessKey = AppPreferences.s3AccessKey
         val secretKey = AppPreferences.s3SecretKey
 
-        if (endpointUrl.isBlank()) return """{"error": "未配置对象存储服务地址 (Endpoint URL)"}"""
-        if (accessKey.isBlank()) return """{"error": "未配置对象存储 Access Key"}"""
-        if (secretKey.isBlank()) return """{"error": "未配置对象存储 Secret Key"}"""
+        if (endpointUrl.isBlank()) return err("未配置对象存储服务地址 (Endpoint URL)")
+        if (accessKey.isBlank()) return err("未配置对象存储 Access Key")
+        if (secretKey.isBlank()) return err("未配置对象存储 Secret Key")
 
         return try {
             val client = buildS3Client(endpointUrl, accessKey, secretKey)
@@ -94,15 +93,19 @@ class ObjectStorageTool : Tool {
                     "presign" -> doPresign(client, args)
                     "create_folder" -> doCreateFolder(client, args)
                     "delete_folder" -> doDeleteFolder(client, args)
-                    else -> """{"error": "未知操作: $action"}"""
+                    else -> err("未知操作: $action")
                 }
             } finally {
                 client.close()
             }
         } catch (e: Exception) {
-            """{"error": "对象存储操作失败: ${e.message}"}"""
+            err("对象存储操作失败: ${e.message}")
         }
     }
+
+    private fun err(msg: String): String = gson.toJson(mapOf("error" to msg))
+
+    private fun ok(vararg pairs: Pair<String, Any>): String = gson.toJson(mapOf("success" to true) + pairs.toMap())
 
     private fun buildS3Client(endpointUrl: String, accessKey: String, secretKey: String): S3Client {
         val endpoint = endpointUrl.trimEnd('/')
@@ -133,12 +136,12 @@ class ObjectStorageTool : Tool {
     }
 
     private suspend fun doUpload(client: S3Client, args: Map<String, Any>): String {
-        val bucket = args["bucket"] as? String ?: return """{"error": "缺少 bucket 参数"}"""
-        val key = args["key"] as? String ?: return """{"error": "缺少 key 参数"}"""
-        val localPath = args["local_path"] as? String ?: return """{"error": "缺少 local_path 参数"}"""
+        val bucket = args["bucket"] as? String ?: return err("缺少 bucket 参数")
+        val key = args["key"] as? String ?: return err("缺少 key 参数")
+        val localPath = args["local_path"] as? String ?: return err("缺少 local_path 参数")
 
         val file = File(localPath)
-        if (!file.exists()) return """{"error": "本地文件不存在: $localPath"}"""
+        if (!file.exists()) return err("本地文件不存在: $localPath")
 
         return withContext(Dispatchers.IO) {
             client.putObject {
@@ -146,18 +149,17 @@ class ObjectStorageTool : Tool {
                 this.key = key
                 body = file.asByteStream()
             }
-            val size = file.length()
-            """{"success":true,"message":"已上传: $localPath -> s3://$bucket/$key ($size 字节)"}"""
+            ok("message" to "已上传: $localPath -> s3://$bucket/$key (${file.length()} 字节)")
         }
     }
 
     private suspend fun doDownload(client: S3Client, args: Map<String, Any>): String {
-        val bucket = args["bucket"] as? String ?: return """{"error": "缺少 bucket 参数"}"""
-        val key = args["key"] as? String ?: return """{"error": "缺少 key 参数"}"""
-        val localPath = args["local_path"] as? String ?: return """{"error": "缺少 local_path 参数"}"""
+        val bucket = args["bucket"] as? String ?: return err("缺少 bucket 参数")
+        val key = args["key"] as? String ?: return err("缺少 key 参数")
+        val localPath = args["local_path"] as? String ?: return err("缺少 local_path 参数")
 
         return withContext(Dispatchers.IO) {
-            val response = client.getObject(GetObjectRequest {
+            val size = client.getObject(GetObjectRequest {
                 this.bucket = bucket
                 this.key = key
             }) { resp ->
@@ -167,29 +169,29 @@ class ObjectStorageTool : Tool {
                 file.writeBytes(bytes)
                 bytes.size.toLong()
             }
-            """{"success":true,"message":"已下载: s3://$bucket/$key -> $localPath ($response 字节)"}"""
+            ok("message" to "已下载: s3://$bucket/$key -> $localPath ($size 字节)")
         }
     }
 
     private suspend fun doDelete(client: S3Client, args: Map<String, Any>): String {
-        val bucket = args["bucket"] as? String ?: return """{"error": "缺少 bucket 参数"}"""
-        val key = args["key"] as? String ?: return """{"error": "缺少 key 参数"}"""
+        val bucket = args["bucket"] as? String ?: return err("缺少 bucket 参数")
+        val key = args["key"] as? String ?: return err("缺少 key 参数")
 
         return withContext(Dispatchers.IO) {
             client.deleteObject {
                 this.bucket = bucket
                 this.key = key
             }
-            """{"success":true,"message":"已删除: s3://$bucket/$key"}"""
+            ok("message" to "已删除: s3://$bucket/$key")
         }
     }
 
     private suspend fun doDeleteBatch(client: S3Client, args: Map<String, Any>): String {
-        val bucket = args["bucket"] as? String ?: return """{"error": "缺少 bucket 参数"}"""
+        val bucket = args["bucket"] as? String ?: return err("缺少 bucket 参数")
         val rawKeys = args["keys"] as? List<*>
-            ?: return """{"error": "缺少 keys 参数（字符串数组）"}"""
+            ?: return err("缺少 keys 参数（字符串数组）")
         val keys = rawKeys.filterIsInstance<String>()
-        if (keys.isEmpty()) return """{"error": "keys 不能为空"}"""
+        if (keys.isEmpty()) return err("keys 不能为空")
 
         return withContext(Dispatchers.IO) {
             val response = client.deleteObjects {
@@ -201,15 +203,15 @@ class ObjectStorageTool : Tool {
             val deleted = response.deleted?.size ?: 0
             val errors = response.errors?.map { "${it.key}: ${it.message}" } ?: emptyList()
             if (errors.isNotEmpty()) {
-                """{"success":false,"deleted":$deleted,"errors":${gson.toJson(errors)}}"""
+                gson.toJson(mapOf("success" to false, "deleted" to deleted, "errors" to errors))
             } else {
-                """{"success":true,"message":"已批量删除 $deleted 个对象","deleted":$deleted}"""
+                ok("message" to "已批量删除 $deleted 个对象", "deleted" to deleted)
             }
         }
     }
 
     private suspend fun doList(client: S3Client, args: Map<String, Any>): String {
-        val bucket = args["bucket"] as? String ?: return """{"error": "缺少 bucket 参数"}"""
+        val bucket = args["bucket"] as? String ?: return err("缺少 bucket 参数")
         val prefix = args["prefix"] as? String ?: ""
         val maxKeys = (args["max_keys"] as? Double)?.toInt() ?: 100
 
@@ -229,23 +231,22 @@ class ObjectStorageTool : Tool {
                 )
             } ?: emptyList()
 
-            val result = mapOf(
+            gson.toJson(mapOf(
                 "success" to true,
                 "bucket" to bucket,
                 "prefix" to prefix,
                 "count" to objects.size,
                 "truncated" to (response.isTruncated ?: false),
                 "objects" to objects
-            )
-            gson.toJson(result)
+            ))
         }
     }
 
     private suspend fun doCopy(client: S3Client, args: Map<String, Any>): String {
-        val bucket = args["bucket"] as? String ?: return """{"error": "缺少 bucket 参数（目标）"}"""
-        val key = args["key"] as? String ?: return """{"error": "缺少 key 参数（目标）"}"""
+        val bucket = args["bucket"] as? String ?: return err("缺少 bucket 参数（目标）")
+        val key = args["key"] as? String ?: return err("缺少 key 参数（目标）")
         val sourceBucket = args["source_bucket"] as? String ?: bucket
-        val sourceKey = args["source_key"] as? String ?: return """{"error": "缺少 source_key 参数"}"""
+        val sourceKey = args["source_key"] as? String ?: return err("缺少 source_key 参数")
 
         return withContext(Dispatchers.IO) {
             client.copyObject {
@@ -254,20 +255,20 @@ class ObjectStorageTool : Tool {
                 this.bucket = bucket
                 this.key = key
             }
-            """{"success":true,"message":"已复制: s3://$sourceBucket/$sourceKey -> s3://$bucket/$key"}"""
+            ok("message" to "已复制: s3://$sourceBucket/$sourceKey -> s3://$bucket/$key")
         }
     }
 
     private suspend fun doHead(client: S3Client, args: Map<String, Any>): String {
-        val bucket = args["bucket"] as? String ?: return """{"error": "缺少 bucket 参数"}"""
-        val key = args["key"] as? String ?: return """{"error": "缺少 key 参数"}"""
+        val bucket = args["bucket"] as? String ?: return err("缺少 bucket 参数")
+        val key = args["key"] as? String ?: return err("缺少 key 参数")
 
         return withContext(Dispatchers.IO) {
             val response = client.headObject {
                 this.bucket = bucket
                 this.key = key
             }
-            val result = mapOf(
+            gson.toJson(mapOf(
                 "success" to true,
                 "key" to key,
                 "size" to (response.contentLength ?: 0),
@@ -275,8 +276,7 @@ class ObjectStorageTool : Tool {
                 "etag" to (response.eTag ?: ""),
                 "last_modified" to (response.lastModified?.toString() ?: ""),
                 "metadata" to (response.metadata ?: emptyMap())
-            )
-            gson.toJson(result)
+            ))
         }
     }
 
@@ -289,40 +289,35 @@ class ObjectStorageTool : Tool {
                     "created" to (b.creationDate?.toString() ?: "")
                 )
             } ?: emptyList()
-            val result = mapOf(
-                "success" to true,
-                "count" to buckets.size,
-                "buckets" to buckets
-            )
-            gson.toJson(result)
+            ok("count" to buckets.size, "buckets" to buckets)
         }
     }
 
     private suspend fun doCreateBucket(client: S3Client, args: Map<String, Any>): String {
-        val bucket = args["bucket"] as? String ?: return """{"error": "缺少 bucket 参数"}"""
+        val bucket = args["bucket"] as? String ?: return err("缺少 bucket 参数")
 
         return withContext(Dispatchers.IO) {
             client.createBucket {
                 this.bucket = bucket
             }
-            """{"success":true,"message":"已创建 bucket: $bucket"}"""
+            ok("message" to "已创建 bucket: $bucket")
         }
     }
 
     private suspend fun doDeleteBucket(client: S3Client, args: Map<String, Any>): String {
-        val bucket = args["bucket"] as? String ?: return """{"error": "缺少 bucket 参数"}"""
+        val bucket = args["bucket"] as? String ?: return err("缺少 bucket 参数")
 
         return withContext(Dispatchers.IO) {
             client.deleteBucket {
                 this.bucket = bucket
             }
-            """{"success":true,"message":"已删除 bucket: $bucket"}"""
+            ok("message" to "已删除 bucket: $bucket")
         }
     }
 
     private suspend fun doPresign(client: S3Client, args: Map<String, Any>): String {
-        val bucket = args["bucket"] as? String ?: return """{"error": "缺少 bucket 参数"}"""
-        val key = args["key"] as? String ?: return """{"error": "缺少 key 参数"}"""
+        val bucket = args["bucket"] as? String ?: return err("缺少 bucket 参数")
+        val key = args["key"] as? String ?: return err("缺少 key 参数")
         val method = (args["method"] as? String ?: "GET").uppercase()
         val expiresSeconds = (args["expires"] as? Double)?.toInt() ?: 3600
 
@@ -344,13 +339,13 @@ class ObjectStorageTool : Tool {
                     client.presignGetObject(req, duration) { }
                 }
             }
-            """{"success":true,"url":"${url.url.buildString()}","method":"$method","expires":$expiresSeconds}"""
+            ok("url" to url.url.buildString(), "method" to method, "expires" to expiresSeconds)
         }
     }
 
     private suspend fun doCreateFolder(client: S3Client, args: Map<String, Any>): String {
-        val bucket = args["bucket"] as? String ?: return """{"error": "缺少 bucket 参数"}"""
-        val folder = args["folder"] as? String ?: return """{"error": "缺少 folder 参数"}"
+        val bucket = args["bucket"] as? String ?: return err("缺少 bucket 参数")
+        val folder = args["folder"] as? String ?: return err("缺少 folder 参数")
         val folderKey = folder.trimEnd('/') + "/"
 
         return withContext(Dispatchers.IO) {
@@ -359,13 +354,13 @@ class ObjectStorageTool : Tool {
                 this.key = folderKey
                 body = ByteStream.fromString("")
             }
-            """{"success":true,"message":"已创建文件夹: s3://$bucket/$folderKey"}"""
+            ok("message" to "已创建文件夹: s3://$bucket/$folderKey")
         }
     }
 
     private suspend fun doDeleteFolder(client: S3Client, args: Map<String, Any>): String {
-        val bucket = args["bucket"] as? String ?: return """{"error": "缺少 bucket 参数"}"""
-        val folder = args["folder"] as? String ?: return """{"error": "缺少 folder 参数"}"
+        val bucket = args["bucket"] as? String ?: return err("缺少 bucket 参数")
+        val folder = args["folder"] as? String ?: return err("缺少 folder 参数")
         val prefix = folder.trimEnd('/') + "/"
 
         return withContext(Dispatchers.IO) {
@@ -386,7 +381,7 @@ class ObjectStorageTool : Tool {
             } while (continuationToken != null)
 
             if (allKeys.isEmpty()) {
-                return@withContext """{"success":true,"message":"文件夹为空，无需删除: s3://$bucket/$prefix"}"""
+                return@withContext ok("message" to "文件夹为空，无需删除: s3://$bucket/$prefix")
             }
 
             val batchSize = 1000
@@ -400,7 +395,7 @@ class ObjectStorageTool : Tool {
                 totalCount += batch.size
             }
 
-            """{"success":true,"message":"已删除文件夹 s3://$bucket/$prefix 及其下 $totalCount 个对象"}"""
+            ok("message" to "已删除文件夹 s3://$bucket/$prefix 及其下 $totalCount 个对象")
         }
     }
 }
