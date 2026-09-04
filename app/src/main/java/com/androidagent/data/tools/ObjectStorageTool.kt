@@ -103,7 +103,7 @@ class ObjectStorageTool : Tool {
                 "delete_folder" -> doDeleteFolder(endpoint, region, accessKey, secretKey, args)
                 else -> err("未知操作: $action")
             }
-            android.util.Log.d("ObjectStorage", "action=$action resp=${result.contains(\"error\")}")
+            android.util.Log.d("ObjectStorage", "action=$action result=${result.take(500)}")
             result
         } catch (e: Exception) {
             err("对象存储操作失败: ${e.message}")
