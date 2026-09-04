@@ -495,11 +495,11 @@ class ObjectStorageTool : Tool {
             val canonicalRequest = buildString {
                 append(method).append("\n")
                 append("/$bucket/$key").append("\n")
-                append("X-Amz-Algorithm=AWS4-HMAC-SHA256")
-                append("&X-Amz-Credential=$ak/$credentialScope")
-                append("&X-Amz-Date=$amzDate")
-                append("&X-Amz-Expires=$expiresSeconds")
-                append("&X-Amz-SignedHeaders=host").append("\n")
+                append("X-Amz-Algorithm=${URLEncoder.encode("AWS4-HMAC-SHA256", "UTF-8")}")
+                append("&X-Amz-Credential=${URLEncoder.encode("$ak/$credentialScope", "UTF-8")}")
+                append("&X-Amz-Date=${URLEncoder.encode(amzDate, "UTF-8")}")
+                append("&X-Amz-Expires=${URLEncoder.encode(expiresSeconds.toString(), "UTF-8")}")
+                append("&X-Amz-SignedHeaders=${URLEncoder.encode("host", "UTF-8")}").append("\n")
                 append("host:$host").append("\n")
                 append("host").append("\n")
                 append("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")
@@ -520,11 +520,11 @@ class ObjectStorageTool : Tool {
 
             val presignUrl = buildString {
                 append(endpoint).append("/$bucket/$key")
-                append("?X-Amz-Algorithm=AWS4-HMAC-SHA256")
-                append("&X-Amz-Credential=$ak/$credentialScope")
-                append("&X-Amz-Date=$amzDate")
-                append("&X-Amz-Expires=$expiresSeconds")
-                append("&X-Amz-SignedHeaders=host")
+                append("?X-Amz-Algorithm=${URLEncoder.encode("AWS4-HMAC-SHA256", "UTF-8")}")
+                append("&X-Amz-Credential=${URLEncoder.encode("$ak/$credentialScope", "UTF-8")}")
+                append("&X-Amz-Date=${URLEncoder.encode(amzDate, "UTF-8")}")
+                append("&X-Amz-Expires=${URLEncoder.encode(expiresSeconds.toString(), "UTF-8")}")
+                append("&X-Amz-SignedHeaders=${URLEncoder.encode("host", "UTF-8")}")
                 append("&X-Amz-Signature=$signature")
             }
 
