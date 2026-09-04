@@ -317,7 +317,7 @@ class ObjectStorageTool : Tool {
                 file.parentFile?.mkdirs()
                 file.writeBytes(bytes)
                 resp.close()
-                ok("message" to "已下载: s3://$bucket/$key -> $localPath ($bytes.size 字节)")
+                ok("message" to "已下载: s3://$bucket/$key -> $localPath (${bytes.size} 字节)")
             } else {
                 resp.close()
                 err("下载失败: ${resp.code} ${resp.message}")
