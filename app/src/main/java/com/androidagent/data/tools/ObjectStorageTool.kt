@@ -5,7 +5,7 @@ import com.androidagent.data.HttpClientProvider
 import com.google.gson.Gson
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import okhttp3.MediaType.Companion.toMediaType
+import java.net.URLEncoder
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -103,7 +103,7 @@ class ObjectStorageTool : Tool {
                 "delete_folder" -> doDeleteFolder(endpoint, region, accessKey, secretKey, args)
                 else -> err("未知操作: $action")
             }
-            android.util.Log.d("ObjectStorage", "action=$action result=${result.take(500)}")
+            android.util.Log.d("ObjectStorage", "action=$action resp=${result.contains(\"error\")}")
             result
         } catch (e: Exception) {
             err("对象存储操作失败: ${e.message}")
@@ -135,7 +135,8 @@ class ObjectStorageTool : Tool {
         secretKey: String,
         headers: MutableMap<String, String>,
         body: ByteArray = ByteArray(0),
-        contentType: String = ""
+        contentType: String = "",
+        queryParams: Map<String, String> = emptyMap()
     ): Request {
         val url = java.net.URI(endpoint + path)
         val host = url.host + if (url.port > 0 && url.port != 80 && url.port != 443) ":${url.port}" else ""
@@ -145,26 +146,45 @@ class ObjectStorageTool : Tool {
         val dateStamp = SimpleDateFormat("yyyyMMdd", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }.format(now)
         val amzDate = dateFormat.format(now)
 
-        headers["host"] = host
-        headers["x-amz-date"] = amzDate
-
+        // Always include x-amz-content-sha256 (required by MinIO/rustfs)
         val sha256 = MessageDigest.getInstance("SHA-256").digest(body)
         headers["x-amz-content-sha256"] = sha256.joinToString("") { "%02x".format(it) }
+
+        headers["host"] = host
+        headers["x-amz-date"] = amzDate
 
         if (contentType.isNotBlank()) {
             headers["content-type"] = contentType
         }
 
-        val signedHeaderKeys = headers.keys.sorted()
-        val signedHeaders = signedHeaderKeys.joinToString(";") { it }
+        // Build canonical query string with proper encoding (like Python urllib.parse.quote)
+        val sortedQueryEntries = queryParams.entries.sortedBy { it.key }
+        val queryString = sortedQueryEntries.joinToString("&") { (k, v) ->
+            "${URLEncoder.encode(k, "UTF-8")}=${URLEncoder.encode(v.toString(), "UTF-8")}"
+        }
+        // If no query params but path has query, preserve it
+        val finalQuery = if (queryParams.isNotEmpty()) queryString else (url.query ?: "")
 
-        val canonicalHeaders = signedHeaderKeys.joinToString("\n") { "${it}:${headers[it]}" } + "\n"
+        // Build signed headers map (lowercase keys for signing, but keep original case for header names)
+        val signedHeaderLowerKeys = headers.keys.map { it.lowercase() }.toSortedList()
+        val signedHeaders = signedHeaderLowerKeys.joinToString(";") { it }
+
+        // Build canonical headers: original-key: value\n (sorted by lowercase key)
+        val canonicalHeaders = signedHeaderLowerKeys.joinToString("\n") { lowercaseKey ->
+            // Find original key (case-insensitive match)
+            val originalKey = headers.keys.find { it.lowercase() == lowercaseKey }
+                ?: lowercaseKey
+            "$originalKey:${headers[originalKey]}"
+        } + "\n"
+
         val payloadHash = headers["x-amz-content-sha256"] ?: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 
         val canonicalRequest = buildString {
             append(method).append("\n")
-            append(url.path.ifEmpty { "/" }).append("\n")
-            append(url.query ?: "").append("\n")
+            // Path: if path starts with / use it, otherwise prepend /
+            val canonPath = if (path.startsWith("/")) path else "/" + path
+            append(canonPath).append("\n")
+            append(finalQuery).append("\n")
             append(canonicalHeaders)
             append(signedHeaders).append("\n")
             append(payloadHash)
@@ -190,16 +210,17 @@ class ObjectStorageTool : Tool {
         )
         val signature = hmacSha256(signingKey, stringToSign.toByteArray()).joinToString("") { "%02x".format(it) }
 
-        headers["authorization"] = "AWS4-HMAC-SHA256 Credential=$accessKey/$credentialScope, SignedHeaders=$signedHeaders, Signature=$signature"
+        val authorization = "AWS4-HMAC-SHA256 Credential=$accessKey/$credentialScope, SignedHeaders=$signedHeaders, Signature=$signature"
+        headers["authorization"] = authorization
 
         val requestBuilder = Request.Builder()
             .url(url.toString())
             .method(method, if (body.isNotEmpty()) body.toRequestBody(contentType.toMediaType()) else null)
 
+        // Add all headers - including the ones we set for signing
         headers.forEach { (k, v) -> requestBuilder.addHeader(k, v) }
 
         return requestBuilder.build()
-    }
 
     private fun hmacSha256(key: ByteArray, data: ByteArray): ByteArray {
         val mac = Mac.getInstance("HmacSHA256")
