@@ -27,6 +27,7 @@ android {
         targetSdk = 34
         versionCode = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
         versionName = "1.0.${System.getenv("GITHUB_RUN_NUMBER") ?: "0"}"
+        multiDexEnabled = true
     }
 
     buildTypes {
@@ -46,6 +47,7 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+        isCoreLibraryDesugaringEnabled = true
     }
 
     buildFeatures {
@@ -93,4 +95,9 @@ dependencies {
 
     // Markdown
     implementation("com.github.jeziellago:compose-markdown:0.7.2")
+
+    // AWS SDK for Kotlin - S3 (对象存储)
+    implementation("aws.sdk.kotlin:s3:1.8.26")
+    implementation("aws.sdk.kotlin:aws-config:1.8.26")
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
 }

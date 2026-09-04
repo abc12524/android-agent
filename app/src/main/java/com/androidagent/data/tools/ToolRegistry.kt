@@ -58,6 +58,7 @@ class ToolRegistry(context: Context) {
         register(SoundTool())
         register(WaitTool())
         register(RenameSessionTool(this, context))
+        register(ObjectStorageTool())
     }
 
     fun register(tool: Tool) {

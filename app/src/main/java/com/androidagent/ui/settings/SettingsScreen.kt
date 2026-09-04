@@ -55,6 +55,9 @@ fun SettingsScreen(
     var ovProfileEnabled by remember { mutableStateOf(AppPreferences.ovProfileEnabled) }
     var ovAutoCapture by remember { mutableStateOf(AppPreferences.ovAutoCapture) }
     var backgroundEnabled by remember { mutableStateOf(AppPreferences.backgroundServiceEnabled) }
+    var s3Endpoint by remember { mutableStateOf(AppPreferences.s3EndpointUrl) }
+    var s3AccessKey by remember { mutableStateOf(AppPreferences.s3AccessKey) }
+    var s3SecretKey by remember { mutableStateOf(AppPreferences.s3SecretKey) }
     var systemPrompt by remember { mutableStateOf(
         AppPreferences.systemPrompt.ifBlank {
             """你是 Android Agent，一个运行在 Android 设备上的 AI 助手。
@@ -100,6 +103,9 @@ fun SettingsScreen(
         ovProfileEnabled = AppPreferences.ovProfileEnabled
         ovAutoCapture = AppPreferences.ovAutoCapture
         backgroundEnabled = AppPreferences.backgroundServiceEnabled
+        s3Endpoint = AppPreferences.s3EndpointUrl
+        s3AccessKey = AppPreferences.s3AccessKey
+        s3SecretKey = AppPreferences.s3SecretKey
         systemPrompt = AppPreferences.systemPrompt
         configUrl = AppPreferences.configUrl
     }
@@ -241,6 +247,39 @@ fun SettingsScreen(
                             singleLine = true
                         )
                     }
+                }
+            }
+
+            // ========== 对象存储 (S3) ==========
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Text("☁️ 对象存储 (S3)", style = MaterialTheme.typography.titleSmall)
+                    Spacer(Modifier.height(6.dp))
+                    OutlinedTextField(
+                        value = s3Endpoint,
+                        onValueChange = { s3Endpoint = it; saved = false },
+                        label = { Text("服务地址 (如 http://192.168.1.100:9000)") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    OutlinedTextField(
+                        value = s3AccessKey,
+                        onValueChange = { s3AccessKey = it; saved = false },
+                        label = { Text("Access Key") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        visualTransformation = if (showKeys) VisualTransformation.None else PasswordVisualTransformation()
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    OutlinedTextField(
+                        value = s3SecretKey,
+                        onValueChange = { s3SecretKey = it; saved = false },
+                        label = { Text("Secret Key") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        visualTransformation = if (showKeys) VisualTransformation.None else PasswordVisualTransformation()
+                    )
                 }
             }
 
@@ -551,6 +590,9 @@ fun SettingsScreen(
                         AppPreferences.ovAutoCapture = ovAutoCapture
                         AppPreferences.maxToolRounds = maxRounds.toIntOrNull() ?: 8
                         AppPreferences.systemPrompt = systemPrompt
+                        AppPreferences.s3EndpointUrl = s3Endpoint
+                        AppPreferences.s3AccessKey = s3AccessKey
+                        AppPreferences.s3SecretKey = s3SecretKey
 
                         val wasEnabled = AppPreferences.backgroundServiceEnabled
                         AppPreferences.backgroundServiceEnabled = backgroundEnabled

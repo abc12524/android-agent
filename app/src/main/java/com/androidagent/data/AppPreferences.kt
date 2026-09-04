@@ -106,6 +106,19 @@ object AppPreferences {
         get() = prefs.getString("system_prompt", "") ?: ""
         set(value) = prefs.edit().putString("system_prompt", value).apply()
 
+    // 对象存储 (S3)
+    var s3EndpointUrl: String
+        get() = prefs.getString("s3_endpoint_url", "") ?: ""
+        set(value) = prefs.edit().putString("s3_endpoint_url", value).apply()
+
+    var s3AccessKey: String
+        get() = prefs.getString("s3_access_key", "") ?: ""
+        set(value) = prefs.edit().putString("s3_access_key", value).apply()
+
+    var s3SecretKey: String
+        get() = prefs.getString("s3_secret_key", "") ?: ""
+        set(value) = prefs.edit().putString("s3_secret_key", value).apply()
+
     // 远程配置地址（一键导入设置用）
     var configUrl: String
         get() = prefs.getString("config_url", "") ?: ""
@@ -173,6 +186,9 @@ object AppPreferences {
         float("ov_find_threshold")?.let { ovFindThreshold = it; count++ }
         int("ov_find_limit")?.let { ovFindLimit = it; count++ }
         str("system_prompt")?.let { systemPrompt = it; count++ }
+        str("s3_endpoint_url")?.let { s3EndpointUrl = it; count++ }
+        str("s3_access_key")?.let { s3AccessKey = it; count++ }
+        str("s3_secret_key")?.let { s3SecretKey = it; count++ }
         return count
     }
 }
