@@ -282,24 +282,29 @@ fun SettingsScreen(
                         singleLine = true,
                         visualTransformation = if (showKeys) VisualTransformation.None else PasswordVisualTransformation()
                     )
-                    Spacer(Modifier.height(6.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Switch(
-                            checked = skipSsl,
-                            onCheckedChange = { skipSsl = it; saved = false }
+                }
+            }
+
+            // ========== 全局安全设置 ==========
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Switch(
+                        checked = skipSsl,
+                        onCheckedChange = { skipSsl = it; saved = false }
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Column {
+                        Text("跳过证书验证", style = MaterialTheme.typography.bodyMedium)
+                        Text(
+                            "适用于自签名 HTTPS（OpenViking / 对象存储等全局生效）",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        Spacer(Modifier.width(8.dp))
-                        Column {
-                            Text("跳过证书验证", style = MaterialTheme.typography.bodyMedium)
-                            Text(
-                                "适用于自签名 HTTPS 证书（如内网 MinIO/Ceph）",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
                     }
                 }
             }
