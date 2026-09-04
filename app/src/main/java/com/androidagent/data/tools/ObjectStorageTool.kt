@@ -179,7 +179,8 @@ class ObjectStorageTool : Tool {
             append(method).append("\n")
             append(canonPath).append("\n")
             append(finalQuery).append("\n")
-            append(canonicalHeaders)
+            // canonicalHeaders 已以 \n 结尾，sigv4 还需一个分隔空行（\n\n↔SignedHeaders）
+            append(canonicalHeaders).append("\n")
             append(signedHeaders).append("\n")
             append(payloadHash)
         }
@@ -208,12 +209,19 @@ class ObjectStorageTool : Tool {
         headers["authorization"] = authorization
 
         val requestUrl = "$endpoint$canonPath" + if (finalQuery.isNotEmpty()) "?$finalQuery" else ""
+        // PUT/POST/PATCH 必须有 body：空 body 时用空字节数组 + 兜底 content-type（避免 OkHttp 抛 "must have a request body"）
+        val requestBody: okhttp3.RequestBody? = when {
+            body.isNotEmpty() -> body.toRequestBody(contentType.toMediaType())
+            method == "PUT" || method == "POST" || method == "PATCH" ->
+                ByteArray(0).toRequestBody(contentType.ifBlank { "application/octet-stream" }.toMediaType())
+            else -> null
+        }
         val requestBuilder = Request.Builder()
             .url(requestUrl)
-            .method(method, if (body.isNotEmpty()) body.toRequestBody(contentType.toMediaType()) else null)
+            .method(method, requestBody)
 
-        // Add all headers - including the ones we set for signing
-        headers.forEach { (k, v) -> requestBuilder.addHeader(k, v) }
+        // 用 header() 覆盖（而非 addHeader() 追加），避免 Host/Content-Type 重复导致签名校验失败
+        headers.forEach { (k, v) -> requestBuilder.header(k, v) }
 
         return requestBuilder.build()
     }
@@ -241,10 +249,10 @@ class ObjectStorageTool : Tool {
         return out.toString()
     }
 
-    // 构建规范化 query：按 key 排序，value 为空时省略 "="（如 S3 子资源 ?delete）
+    // 构建规范化 query：按 key 排序。子资源/空值参数必须输出 "key="（AWS 规范，如 ?delete => delete=）
     private fun canonicalQuery(params: Map<String, String>): String {
         return params.entries.sortedBy { it.key }.joinToString("&") { (k, v) ->
-            if (v.isEmpty()) canonicalEncode(k) else "${canonicalEncode(k)}=${canonicalEncode(v)}"
+            "${canonicalEncode(k)}=${canonicalEncode(v)}"
         }
     }
 
@@ -524,7 +532,8 @@ class ObjectStorageTool : Tool {
                 append(method).append("\n")
                 append("/$bucket/$key").append("\n")
                 append(presignQuery).append("\n")
-                append("host:$host").append("\n")
+                // canonical headers 已以 \n 结尾，sigv4 还需一个分隔空行（\n\n↔SignedHeaders）
+                append("host:$host").append("\n\n")
                 append("host").append("\n")
                 append("UNSIGNED-PAYLOAD")
             }
