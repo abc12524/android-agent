@@ -87,7 +87,7 @@ class ObjectStorageTool : Tool {
         val region = extractRegion(endpoint)
 
         return try {
-            when (action) {
+            val result = when (action) {
                 "upload" -> doUpload(endpoint, region, accessKey, secretKey, args)
                 "download" -> doDownload(endpoint, region, accessKey, secretKey, args)
                 "delete" -> doDelete(endpoint, region, accessKey, secretKey, args)
@@ -103,6 +103,8 @@ class ObjectStorageTool : Tool {
                 "delete_folder" -> doDeleteFolder(endpoint, region, accessKey, secretKey, args)
                 else -> err("未知操作: $action")
             }
+            android.util.Log.d("ObjectStorage", "action=$action result=${result.take(500)}")
+            result
         } catch (e: Exception) {
             err("对象存储操作失败: ${e.message}")
         }
@@ -146,10 +148,8 @@ class ObjectStorageTool : Tool {
         headers["host"] = host
         headers["x-amz-date"] = amzDate
 
-        if (body.isNotEmpty() || method == "PUT") {
-            val sha256 = MessageDigest.getInstance("SHA-256").digest(body)
-            headers["x-amz-content-sha256"] = sha256.joinToString("") { "%02x".format(it) }
-        }
+        val sha256 = MessageDigest.getInstance("SHA-256").digest(body)
+        headers["x-amz-content-sha256"] = sha256.joinToString("") { "%02x".format(it) }
 
         if (contentType.isNotBlank()) {
             headers["content-type"] = contentType
