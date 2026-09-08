@@ -239,17 +239,22 @@ fun ChatScreen(
                     LazyColumn(
                         state = listState,
                         modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(14.dp),
                         contentPadding = PaddingValues(top = 8.dp, bottom = 72.dp)
                     ) {
                         items(chatItems.size, key = { index ->
                             when (val it = chatItems[index]) {
                                 is ChatItem.Bubble -> it.msg.id
+                                is ChatItem.Reason -> it.key
                                 is ChatItem.ToolRun -> it.key
                             }
                         }) { index ->
                             when (val it = chatItems[index]) {
                                 is ChatItem.Bubble -> SelectionContainer { MessageBubble(it.msg) }
+                                is ChatItem.Reason -> ReasoningCard(
+                                    reasoning = it.msg.reasoningContent.orEmpty(),
+                                    title = "深度思考",
+                                )
                                 is ChatItem.ToolRun -> SelectionContainer { ToolRunCard(it.steps) }
                             }
                         }
@@ -776,15 +781,18 @@ private fun isYest(now: Calendar, d: Calendar): Boolean {
 
 // ==================== 消息分组：气泡 / 工具执行时间线卡 ====================
 
-/** 聊天项目：要么是单条消息气泡，要么是一组「工具执行」步骤合并成的一张卡片 */
+/** 聊天项目：消息气泡 / 思考卡 / 工具执行卡，三者分开、并列呈现 */
 private sealed class ChatItem {
     data class Bubble(val msg: Message) : ChatItem()
+    data class Reason(val msg: Message) : ChatItem() {
+        val key: Long get() = msg.id
+    }
     data class ToolRun(val steps: List<Message>) : ChatItem() {
         val key: Long get() = steps.first().id
     }
 }
 
-/** 将按时间排序的消息聚合成渲染项：assistant 的推理 + 紧随其后的工具结果并入同一张时间线卡 */
+/** 将按时间排序的消息聚合成渲染项：推理与工具结果拆为独立卡片，便于并列分隔 */
 private fun groupChatItems(messages: List<Message>): List<ChatItem> {
     val out = mutableListOf<ChatItem>()
     var i = 0
@@ -792,18 +800,21 @@ private fun groupChatItems(messages: List<Message>): List<ChatItem> {
         val m = messages[i]
         val isToolTurn = m.role == "assistant" && m.toolCalls != null && m.content.isBlank()
         if (isToolTurn) {
-            val steps = mutableListOf(m)
+            // 推理独立成卡
+            if (!m.reasoningContent.isNullOrBlank()) {
+                out.add(ChatItem.Reason(m))
+            }
+            // 紧随其后的工具结果独立成卡
+            val tools = mutableListOf<Message>()
             var j = i + 1
             while (j < messages.size && messages[j].role == "tool") {
-                steps.add(messages[j]); j++
+                tools.add(messages[j]); j++
             }
-            val hasReasoning = steps.any { !it.reasoningContent.isNullOrBlank() }
-            val hasTool = steps.any { it.role == "tool" && it.toolName != null }
-            if (hasReasoning || hasTool) {
-                out.add(ChatItem.ToolRun(steps))
-                i = j
-                continue
+            if (tools.any { it.toolName != null }) {
+                out.add(ChatItem.ToolRun(tools))
             }
+            i = j
+            continue
         } else if (m.role == "tool") {
             out.add(ChatItem.ToolRun(listOf(m)))
             i++

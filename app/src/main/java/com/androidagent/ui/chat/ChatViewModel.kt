@@ -154,33 +154,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             streamingContent = "", streamingReasoning = ""
         )
         viewModelScope.launch {
-            val contentBuilder = StringBuilder()
-            val reasoningBuilder = StringBuilder()
-            var lastPublish = 0L
-            val throttleMs = 60L
-            // 节流发布：累积到统一的 content/reasoning 快照，避免逐 delta 触发整条重排
-            fun publish() {
-                val now = System.currentTimeMillis()
-                if (now - lastPublish >= throttleMs) {
-                    lastPublish = now
-                    uiState = uiState.copy(
-                        streamingContent = contentBuilder.toString(),
-                        streamingReasoning = reasoningBuilder.toString(),
-                    )
-                }
-            }
             try {
-                val result = engine.sendMessageStream(
-                    currentSessionId, text, imageFilePath,
-                    onDelta = { delta ->
-                        contentBuilder.append(delta)
-                        publish()
-                    },
-                    onReasoningDelta = { delta ->
-                        reasoningBuilder.append(delta)
-                        publish()
-                    },
-                )
+                // 使用可靠的非流式路径发送（此前线上可用），确保一定有响应。
+                // sendMessageStream 为休眠代码，待诊断后再启用流式。
+                val result = engine.sendMessage(currentSessionId, text, imageFilePath)
                 result.fold(
                     onSuccess = { chatResult ->
                         uiState = uiState.copy(
