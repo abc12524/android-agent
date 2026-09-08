@@ -25,7 +25,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -43,14 +42,13 @@ data class ToolCallEntry(val name: String, val detail: String)
 @Composable
 internal fun ToolCallCard(entries: List<ToolCallEntry>, modifier: Modifier = Modifier) {
     val cs = MaterialTheme.colorScheme
-    val dark = cs.surface.luminance() < 0.5f
     if (entries.isEmpty()) return
     var detail by remember { mutableStateOf<ToolCallEntry?>(null) }
 
     Surface(
         modifier = modifier.fillMaxWidth().animateContentSize(tween(200)),
         shape = AppRadii.timelineCard,
-        color = cs.surface.copy(alpha = if (dark) 0.06f else 0.75f),
+        color = cs.background,
         shadowElevation = AppElevation.soft,
         border = BorderStroke(0.8.dp, cs.outlineVariant.copy(alpha = 0.12f)),
     ) {

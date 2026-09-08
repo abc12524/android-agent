@@ -673,7 +673,6 @@ private fun ReasoningCard(
     icon: ImageVector = Icons.Outlined.Psychology,
 ) {
     val cs = MaterialTheme.colorScheme
-    val dark = cs.surface.luminance() < 0.5f
     var expanded by remember { mutableStateOf(false) }
     val rotation by animateFloatAsState(if (expanded) 180f else 0f, label = "reasonChevron")
 
@@ -683,7 +682,7 @@ private fun ReasoningCard(
             .animateContentSize(tween(200))
             .clickable { if (!expanded) expanded = true },
         shape = AppRadii.card,
-        color = cs.surface.copy(alpha = if (dark) 0.06f else 0.75f),
+        color = cs.background,
         shadowElevation = AppElevation.soft,
         border = BorderStroke(0.8.dp, cs.outlineVariant.copy(alpha = 0.12f)),
     ) {
