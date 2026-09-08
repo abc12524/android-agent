@@ -38,7 +38,7 @@ class OpenVikingClient {
         private val ovSessions = mutableMapOf<String, String>() // androidSessionId -> ov session_id
         private var peerCache: String? = null
 
-        private const val RECALL_MARKER = "## 📖 相关记忆"
+        private const val RECALL_MARKER = "## 相关记忆"
         private const val RECALL_MARKER_ANDROID = "[自动检索的候选记忆"
         private const val PROFILE_MARKER = "<openviking-context source=\"profile\">"
     }
@@ -476,7 +476,7 @@ class OpenVikingClient {
                     top.joinToString("\n") { obj ->
                         val uri = obj.get("uri")?.asString ?: ""
                         val snippet = (obj.get("abstract")?.asString ?: "").take(200)
-                        "> 📖 [$uri] ${obj.get("score")?.asDouble?.let { "(${String.format("%.2f", it)})" } ?: ""}\n  $snippet"
+                        "> [$uri] ${obj.get("score")?.asDouble?.let { "(${String.format("%.2f", it)})" } ?: ""}\n  $snippet"
                     }
                 } catch (e: Exception) { "" }
             },

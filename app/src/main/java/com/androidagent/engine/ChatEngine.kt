@@ -233,7 +233,8 @@ class ChatEngine(private val context: Context) {
         sessionId: String,
         userMessage: String,
         imageFilePath: String? = null,
-        onDelta: (content: String) -> Unit
+        onDelta: (content: String) -> Unit,
+        onReasoningDelta: (content: String) -> Unit = {}
     ): Result<ChatResult> = withContext(Dispatchers.IO) {
         val apiKey = AppPreferences.deepSeekApiKey
         if (apiKey.isBlank()) {
@@ -305,6 +306,7 @@ class ChatEngine(private val context: Context) {
                         }
                         is StreamEvent.ReasoningDelta -> {
                             reasoningBuilder.append(event.delta)
+                            onReasoningDelta(event.delta)
                         }
                         is StreamEvent.Done -> {
                             doneEvent = event
@@ -479,7 +481,7 @@ class ChatEngine(private val context: Context) {
             val role = m.role
             val text = (m.content as? String) ?: ""
             if (text.contains("[自动检索的候选记忆") ||
-                text.contains("## 📖 相关记忆") ||
+                text.contains("## 相关记忆") ||
                 text.contains("<openviking-context source=\"profile\">")
             ) continue
             when (role) {

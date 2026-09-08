@@ -20,6 +20,8 @@ data class ChatUiState(
     val messages: List<Message> = emptyList(),
     val isLoading: Boolean = false,
     val error: String? = null,
+    val streamingContent: String = "",
+    val streamingReasoning: String = "",
     val sessionTitle: String = "新对话",
     val promptTokens: Int = 0,
     val completionTokens: Int = 0,
@@ -147,25 +149,65 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     fun sendMessage(text: String, imageFilePath: String? = null) {
         if ((text.isBlank() && imageFilePath.isNullOrBlank()) || uiState.isLoading) return
-        uiState = uiState.copy(isLoading = true, error = null)
+        uiState = uiState.copy(
+            isLoading = true, error = null,
+            streamingContent = "", streamingReasoning = ""
+        )
         viewModelScope.launch {
+            val contentBuilder = StringBuilder()
+            val reasoningBuilder = StringBuilder()
+            var lastPublish = 0L
+            val throttleMs = 60L
+            // 节流发布：累积到统一的 content/reasoning 快照，避免逐 delta 触发整条重排
+            fun publish() {
+                val now = System.currentTimeMillis()
+                if (now - lastPublish >= throttleMs) {
+                    lastPublish = now
+                    uiState = uiState.copy(
+                        streamingContent = contentBuilder.toString(),
+                        streamingReasoning = reasoningBuilder.toString(),
+                    )
+                }
+            }
             try {
-                val result = engine.sendMessage(currentSessionId, text, imageFilePath)
+                val result = engine.sendMessageStream(
+                    currentSessionId, text, imageFilePath,
+                    onDelta = { delta ->
+                        contentBuilder.append(delta)
+                        publish()
+                    },
+                    onReasoningDelta = { delta ->
+                        reasoningBuilder.append(delta)
+                        publish()
+                    },
+                )
                 result.fold(
                     onSuccess = { chatResult ->
                         uiState = uiState.copy(
                             isLoading = false,
                             error = null,
+                            streamingContent = "",
+                            streamingReasoning = "",
                             lastUsage = chatResult.usage
                         )
                         refreshBalance()
                     },
                     onFailure = { e ->
-                        uiState = uiState.copy(isLoading = false, error = e.message ?: "未知错误")
+                        uiState = uiState.copy(
+                            isLoading = false,
+                            error = e.message ?: "未知错误",
+                            streamingContent = "",
+                            streamingReasoning = ""
+                        )
                     }
                 )
             } catch (e: Throwable) {
-                uiState = uiState.copy(isLoading = false, error = "发送失败: ${e.message}")
+                uiState = uiState.copy(
+                    isLoading = false,
+                    error = "发送失败: ${e.message}",
+                    streamingContent = "",
+                    streamingReasoning = ""
+                )
             }
         }
     }

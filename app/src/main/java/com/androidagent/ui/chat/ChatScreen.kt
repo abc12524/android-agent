@@ -7,20 +7,34 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.background
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AttachFile
-import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Send
-import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.Image
+import androidx.compose.material.icons.outlined.Menu
+import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.Psychology
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -62,6 +76,7 @@ fun ChatScreen(
     var pendingImageName by remember { mutableStateOf<String?>(null) }
     val listState = rememberLazyListState()
     val context = LocalContext.current
+    val haptics = rememberHaptics()
 
     val filePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
@@ -86,12 +101,6 @@ fun ChatScreen(
         }
     }
 
-    LaunchedEffect(state.messages.size) {
-        if (state.messages.isNotEmpty() && !state.isLoading) {
-            listState.animateScrollToItem(state.messages.size - 1)
-        }
-    }
-
     ModalNavigationDrawer(
         drawerState = drawerState, gesturesEnabled = true,
         drawerContent = {
@@ -105,19 +114,24 @@ fun ChatScreen(
             topBar = {
                 TopAppBar(
                     title = {
-                        Text(state.sessionTitle, fontSize = 16.sp, fontWeight = FontWeight.Medium,
+                        Text(state.sessionTitle, fontSize = 16.sp, fontWeight = FontWeight.SemiBold,
                             maxLines = 1, overflow = TextOverflow.Ellipsis)
                     },
                     navigationIcon = {
-                        IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                            Icon(Icons.Default.History, contentDescription = "历史")
+                        IconButton(onClick = { scope.launch { drawerState.open() }; haptics(HapticsType.Light) }) {
+                            Icon(Icons.Outlined.Menu, contentDescription = "会话列表")
                         }
                     },
                     actions = {
-                        IconButton(onClick = { viewModel.startNewSession() }) {
-                            Icon(Icons.Default.Add, contentDescription = "新对话")
+                        IconButton(onClick = { viewModel.startNewSession(); haptics(HapticsType.Light) }) {
+                            Icon(Icons.Outlined.Edit, contentDescription = "新对话")
                         }
-                    }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = Color.Transparent,
+                        scrolledContainerColor = Color.Transparent,
+                        titleContentColor = MaterialTheme.colorScheme.onSurface,
+                    )
                 )
             },
             bottomBar = {
@@ -134,8 +148,10 @@ fun ChatScreen(
                                     Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Text("🖼️",
-                                        fontSize = 13.sp)
+                                    Icon(Icons.Outlined.Image,
+                                        contentDescription = "图片",
+                                        modifier = Modifier.size(18.dp),
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant)
                                     Spacer(Modifier.width(6.dp))
                                     Text(pendingImageName ?: "",
                                         fontSize = 12.sp,
@@ -197,44 +213,60 @@ fun ChatScreen(
                         }
                     }
                 } else {
+                    // 过滤掉 system 角色消息（OV 检索记忆作为用户侧消息显示）
+                    val displayMessages = state.messages.filter { msg ->
+                        msg.role != "system"
+                    }
+                    // 分组：把每次 assistant 的推理+工具调用聚合成「工具执行」时间线卡
+                    val chatItems = remember(displayMessages) {
+                        groupChatItems(displayMessages)
+                    }
+                    val lastRealIndex = (chatItems.size - 1).coerceAtLeast(0)
+
+                    // 会话加载 / 回复完成：滚动到最近一条真实消息
+                    LaunchedEffect(chatItems.size, state.isLoading) {
+                        if (!state.isLoading && chatItems.isNotEmpty()) {
+                            listState.animateScrollToItem(lastRealIndex)
+                        }
+                    }
+                    // 流式输出：持续贴合最新内容（瞬间滚动，降低跳动感）
+                    LaunchedEffect(state.streamingContent.length) {
+                        if (state.isLoading) {
+                            listState.scrollToItem(chatItems.size)
+                        }
+                    }
+
                     LazyColumn(
                         state = listState,
                         modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                         contentPadding = PaddingValues(top = 8.dp, bottom = 72.dp)
                     ) {
-                        // 过滤掉 system 角色消息（OV 检索记忆作为用户侧消息显示）
-                        val displayMessages = state.messages.filter { msg ->
-                            msg.role != "system"
+                        items(chatItems.size, key = { index ->
+                            when (val it = chatItems[index]) {
+                                is ChatItem.Bubble -> it.msg.id
+                                is ChatItem.ToolRun -> it.key
+                            }
+                        }) { index ->
+                            when (val it = chatItems[index]) {
+                                is ChatItem.Bubble -> SelectionContainer { MessageBubble(it.msg) }
+                                is ChatItem.ToolRun -> SelectionContainer { ToolRunCard(it.steps) }
+                            }
                         }
-                        items(displayMessages, key = { it.id }) { msg ->
-                            SelectionContainer { MessageBubble(msg) }
+                        // 流式输出（进行中的回复）
+                        if (state.isLoading) {
+                            item(key = "streaming") {
+                                StreamingReply(
+                                    content = state.streamingContent,
+                                    reasoning = state.streamingReasoning,
+                                )
+                            }
                         }
                         // 底部 token 统计
                         if (state.lastUsage != null) {
                             item(key = "token_footer") {
                             TokenFooter(state.promptTokens, state.completionTokens, state.cacheHitTokens, state.cacheMissTokens, state.balance)
                             }
-                        }
-                    }
-                }
-
-                // loading overlay
-                if (state.isLoading) {
-                    Surface(
-                        modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 8.dp),
-                        shape = RoundedCornerShape(20.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f),
-                        tonalElevation = 4.dp
-                    ) {
-                        Row(Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
-                            Spacer(Modifier.width(8.dp))
-                            if (state.messages.isNotEmpty())
-                                Text("AI 思考中...", fontSize = 13.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                 }
@@ -268,7 +300,7 @@ private fun TokenFooter(sessionIn: Int, sessionOut: Int,
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
     ) {
         Column(Modifier.padding(12.dp)) {
-            Text("📊 Token 消耗", fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
+            Text("Token 消耗", fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.height(4.dp))
             Text("  会话 token：${sessionIn + sessionOut}  hit：$cacheHit  |  命中率 ${hitRate(cacheHit, cacheMiss)}",
@@ -286,77 +318,264 @@ private fun SessionDrawer(
     sessions: List<ChatSession>, currentId: String,
     onSelect: (String) -> Unit, onNew: () -> Unit, onSettings: () -> Unit
 ) {
+    val cs = MaterialTheme.colorScheme
     val validSessions = sessions.filter { it.messageCount > 0 }
     val groups = groupSessions(validSessions)
-    ModalDrawerSheet(Modifier.width(300.dp)) {
-        Surface(Modifier.fillMaxWidth().clickable { onNew() },
-            color = MaterialTheme.colorScheme.primaryContainer
-        ) {
-            Row(Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(Icons.Default.Add, contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onPrimaryContainer)
-                Spacer(Modifier.width(12.dp))
-                Text("新对话", fontSize = 16.sp, fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer)
-            }
+
+    ModalDrawerSheet(
+        modifier = Modifier.width(300.dp),
+        drawerContainerColor = cs.surface,
+        drawerContentColor = cs.onSurface,
+    ) {
+        // 头部：品牌名 + 新对话
+        Column(Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
+            Text("Android Agent",
+                fontSize = 18.sp, fontWeight = FontWeight.Bold,
+                color = cs.onSurface)
+            Text("AI 助手 · 本地工具",
+                fontSize = 12.sp, color = cs.onSurface.copy(alpha = 0.55f))
+            Spacer(Modifier.height(14.dp))
+            NewChatPill(onClick = onNew)
         }
-        HorizontalDivider()
+
+        HorizontalDivider(color = cs.outlineVariant.copy(alpha = 0.5f))
+
         LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(vertical = 8.dp)) {
             groups.forEach { (label, list) ->
-                item {
-                    Text(label, Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
-                        fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                item(key = "hdr_$label") {
+                    Text(label,
+                        Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
+                        fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
+                        color = cs.onSurfaceVariant.copy(alpha = 0.8f))
                 }
                 items(list, key = { it.id }) { session ->
-                    val active = session.id == currentId
-                    Surface(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp)
-                            .clip(RoundedCornerShape(12.dp)).clickable { onSelect(session.id) },
-                        color = if (active) MaterialTheme.colorScheme.secondaryContainer
-                                else MaterialTheme.colorScheme.surface
-                    ) {
-                        Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
-                            Text(
-                                if (session.title != "新对话") session.title
-                                else fmtSessionTime(session.createdAt),
-                                fontSize = 14.sp,
-                                fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
-                                color = if (active) MaterialTheme.colorScheme.onSecondaryContainer
-                                        else MaterialTheme.colorScheme.onSurface,
-                                maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text("${session.messageCount} 条",
-                                    fontSize = 11.sp,
-                                    color = if (active) MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.6f)
-                                            else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
-                                if (session.title != "新对话") {
-                                    Text(" · ${fmtSessionTime(session.createdAt)}",
-                                        fontSize = 11.sp,
-                                        color = if (active) MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.5f)
-                                                else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
-                                }
-                            }
-                        }
-                    }
+                    SessionTile(
+                        session = session,
+                        active = session.id == currentId,
+                        onClick = { onSelect(session.id) },
+                    )
+                }
+                item(key = "gap_$label") { Spacer(Modifier.height(6.dp)) }
+            }
+        }
+
+        HorizontalDivider(color = cs.outlineVariant.copy(alpha = 0.5f))
+        DrawerFooterRow(
+            icon = Icons.Outlined.Settings,
+            label = "设置",
+            onClick = onSettings,
+        )
+    }
+}
+
+// ---- 侧边栏「新对话」按钮 ----
+@Composable
+private fun NewChatPill(onClick: () -> Unit) {
+    val cs = MaterialTheme.colorScheme
+    val haptics = rememberHaptics()
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val bg by animateColorAsState(
+        if (pressed) cs.primary.copy(alpha = 0.78f) else cs.primary,
+        label = "newChat",
+    )
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(AppRadii.card)
+            .background(bg)
+            .clickable(interactionSource = interaction, indication = null) {
+                haptics(HapticsType.Medium); onClick()
+            }
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(Icons.Outlined.Add, contentDescription = null, tint = cs.onPrimary)
+        Spacer(Modifier.width(8.dp))
+        Text("新对话", fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
+            color = cs.onPrimary)
+    }
+}
+
+// ---- 会话列表卡片（按压反馈 + 激活高亮） ----
+@Composable
+private fun SessionTile(session: ChatSession, active: Boolean, onClick: () -> Unit) {
+    val cs = MaterialTheme.colorScheme
+    val haptics = rememberHaptics()
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val bg by animateColorAsState(
+        when {
+            active -> cs.primary.copy(alpha = 0.12f)
+            pressed -> cs.onSurface.copy(alpha = 0.06f)
+            else -> Color.Transparent
+        },
+        label = "sessionTile",
+    )
+    val title = if (session.title != "新对话") session.title else fmtSessionTime(session.createdAt)
+
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp, vertical = 2.dp)
+            .clip(AppRadii.card)
+            .background(bg)
+            .clickable(interactionSource = interaction, indication = null) {
+                haptics(HapticsType.Light); onClick()
+            }
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(title,
+                fontSize = 14.sp,
+                fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
+                color = cs.onSurface,
+                maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Spacer(Modifier.height(2.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("${session.messageCount} 条", fontSize = 11.sp,
+                    color = cs.onSurface.copy(alpha = 0.55f))
+                if (session.title != "新对话") {
+                    Text(" · ${fmtSessionTime(session.createdAt)}", fontSize = 11.sp,
+                        color = cs.onSurface.copy(alpha = 0.45f))
                 }
             }
         }
-        // 底部：设置按钮
-        HorizontalDivider()
-        Surface(Modifier.fillMaxWidth().clickable { onSettings() }) {
-            Row(Modifier.padding(horizontal = 20.dp, vertical = 14.dp),
-                verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.Settings, contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                Spacer(Modifier.width(12.dp))
-                Text("设置", fontSize = 15.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (active) {
+            Spacer(Modifier.width(6.dp))
+            Box(Modifier.size(6.dp).clip(CircleShape).background(cs.primary))
+        }
+    }
+}
+
+// ---- 侧边栏底部设置行 ----
+@Composable
+private fun DrawerFooterRow(icon: ImageVector, label: String, onClick: () -> Unit) {
+    val cs = MaterialTheme.colorScheme
+    val haptics = rememberHaptics()
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val bg by animateColorAsState(
+        if (pressed) cs.onSurface.copy(alpha = 0.06f) else Color.Transparent,
+        label = "footer",
+    )
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .background(bg)
+            .clickable(interactionSource = interaction, indication = null) {
+                haptics(HapticsType.Light); onClick()
+            }
+            .padding(horizontal = 20.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(icon, contentDescription = null, tint = cs.onSurfaceVariant)
+        Spacer(Modifier.width(12.dp))
+        Text(label, fontSize = 15.sp, color = cs.onSurfaceVariant)
+    }
+}
+
+// ==================== 流式回复（进行中的 AI 输出） ====================
+
+@Composable
+private fun StreamingReply(content: String, reasoning: String) {
+    val cs = MaterialTheme.colorScheme
+    Column(
+        Modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.Start,
+    ) {
+        // 流式推理（进行中的思考，实时滚动）
+        if (reasoning.isNotBlank()) {
+            StreamingReasoning(reasoning, modifier = Modifier.padding(bottom = 4.dp))
+        }
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth(0.92f)
+                .animateContentSize(tween(220)),
+            shape = RoundedCornerShape(
+                topStart = 16.dp, topEnd = 16.dp,
+                bottomStart = 4.dp, bottomEnd = 16.dp,
+            ),
+            color = BubbleAssistant,
+        ) {
+            if (content.isBlank()) {
+                // 首包前：思考中
+                Row(
+                    Modifier.padding(horizontal = 14.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    StreamingDots()
+                    Spacer(Modifier.width(10.dp))
+                    Text("正在思考…", fontSize = 13.sp, color = BubbleAssistantText.copy(alpha = 0.6f))
+                }
+            } else {
+                val blocks = remember(content) {
+                    try { markdownBlocks(content) }
+                    catch (_: Exception) { listOf(MdBlock.Text(content)) }
+                }
+                Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+                    blocks.forEachIndexed { index, block ->
+                        when (block) {
+                            is MdBlock.Text -> MarkdownText(
+                                markdown = block.text,
+                                style = TextStyle(color = BubbleAssistantText, fontSize = 15.sp),
+                                syntaxHighlightColor = Color(0x80FFEB3B),
+                            )
+                            is MdBlock.Table -> MarkdownTable(
+                                table = block.table,
+                                textStyle = TextStyle(color = BubbleAssistantText, fontSize = 15.sp),
+                            )
+                        }
+                        if (index != blocks.lastIndex) Spacer(Modifier.height(6.dp))
+                    }
+                    // 光标脉冲
+                    BlinkingCursor(color = cs.onSurface.copy(alpha = 0.6f))
+                }
             }
         }
     }
+}
+
+// 微型「正在思考」三点动画
+@Composable
+private fun StreamingDots() {
+    val transition = rememberInfiniteTransition(label = "streamDots")
+    val alpha = transition.animateFloat(
+        initialValue = 0.25f,
+        targetValue = 0.9f,
+        animationSpec = infiniteRepeatable(tween(420), RepeatMode.Reverse),
+        label = "dotAlpha",
+    )
+    Row {
+        repeat(3) { i ->
+            if (i > 0) Spacer(Modifier.width(3.dp))
+            Box(
+                Modifier
+                    .size(7.dp)
+                    .clip(CircleShape)
+                    .background(BubbleAssistantText.copy(alpha = alpha.value)),
+            )
+        }
+    }
+}
+
+// 光标闪烁指示
+@Composable
+private fun BlinkingCursor(color: Color) {
+    val transition = rememberInfiniteTransition(label = "cursorBlink")
+    val alpha = transition.animateFloat(
+        initialValue = 0.2f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(500), RepeatMode.Reverse),
+        label = "cursorAlpha",
+    )
+    Text(
+        "▍",
+        fontSize = 15.sp,
+        color = color.copy(alpha = alpha.value),
+        modifier = Modifier.padding(top = 2.dp),
+    )
 }
 
 // ==================== 消息气泡 ====================
@@ -364,21 +583,15 @@ private fun SessionDrawer(
 @Composable
 fun MessageBubble(msg: Message) {
     val isUser = msg.role == "user"
-    val isTool = msg.role == "tool"
-    val hasToolCalls = msg.role == "assistant" && msg.toolCalls != null
-            && msg.content.isBlank()
     val isOvContext = msg.role == "user" && msg.content.startsWith("[自动检索的候选记忆")
-    val bc = when { isUser -> BubbleUser; isTool -> BubbleAssistant; else -> BubbleAssistant }
-    val tc = when { isUser -> BubbleUserText; isTool -> BubbleAssistantText; else -> BubbleAssistantText }
-
-    // 工具结果折叠状态
-    var resultExpanded by remember { mutableStateOf(false) }
+    val bc = if (isUser) BubbleUser else BubbleAssistant
+    val tc = if (isUser) BubbleUserText else BubbleAssistantText
 
     Column(Modifier.fillMaxWidth(),
         horizontalAlignment = if (isUser) Alignment.End else Alignment.Start
     ) {
         // 推理内容（统一用「深度思考」折叠卡片展示）
-        if (msg.reasoningContent != null && msg.reasoningContent.isNotBlank() && !hasToolCalls) {
+        if (msg.reasoningContent != null && msg.reasoningContent.isNotBlank()) {
             ReasoningCard(msg.reasoningContent, Modifier.padding(bottom = 4.dp))
         }
 
@@ -391,91 +604,7 @@ fun MessageBubble(msg: Message) {
                     val end = c.lastIndexOf('\n')
                     if (start >= 0 && end > start) c.substring(start + 1, end).trim() else c
                 }
-                ReasoningCard(ovContent, Modifier.padding(bottom = 4.dp), title = "ov-search", icon = "🔧")
-            }
-
-            // ---- 工具调用（折叠：仅工具名；展开：参数 + 结果） ----
-            isTool && msg.toolName != null -> {
-                Surface(
-                    modifier = Modifier.widthIn(max = 320.dp)
-                        .clickable { resultExpanded = !resultExpanded },
-                    shape = RoundedCornerShape(10.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
-                    tonalElevation = 1.dp
-                ) {
-                    Column(Modifier.padding(12.dp)) {
-                        // 头部：仅工具名（折叠态不显示参数）
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(if (resultExpanded) "▼" else "🔧",
-                                fontSize = 13.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Spacer(Modifier.width(6.dp))
-                            Text(msg.toolName,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Spacer(Modifier.weight(1f))
-                            Text(if (resultExpanded) "收起" else "详情",
-                                fontSize = 11.sp,
-                                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f))
-                        }
-
-                        // 展开：参数 + 结果
-                        if (resultExpanded) {
-                            Spacer(Modifier.height(8.dp))
-                            HorizontalDivider(
-                                color = MaterialTheme.colorScheme.outlineVariant
-                            )
-                            Spacer(Modifier.height(8.dp))
-
-                            // 参数展示
-                            val argsText = if (!msg.toolArgs.isNullOrBlank()) {
-                                try {
-                                    val gson = com.google.gson.GsonBuilder().create()
-                                    val obj = gson.fromJson(msg.toolArgs, Map::class.java)
-                                    obj.entries.joinToString("\n") { (k, v) ->
-                                        "• $k: $v"
-                                    }
-                                } catch (_: Exception) {
-                                    msg.toolArgs
-                                }
-                            } else ""
-                            if (argsText.isNotBlank()) {
-                                Text("参数",
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
-                                Spacer(Modifier.height(2.dp))
-                                Text(argsText,
-                                    fontSize = 12.sp,
-                                    lineHeight = 18.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                Spacer(Modifier.height(8.dp))
-                            }
-
-                            // 结果
-                            val displayText = msg.content.ifBlank { "(空)" }
-                            Text("结果",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
-                            Spacer(Modifier.height(2.dp))
-                            // 结果原文显示（不解析 Markdown）
-                            Text(displayText,
-                                fontSize = 12.sp,
-                                fontFamily = FontFamily.Monospace,
-                                lineHeight = 17.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    }
-                }
-            }
-
-            // ---- 仅工具调用（无文本回复）- 显示推理内容 ----
-            hasToolCalls -> {
-                if (!msg.reasoningContent.isNullOrBlank()) {
-                    ReasoningCard(msg.reasoningContent!!)
-                }
+                ReasoningCard(ovContent, Modifier.padding(bottom = 4.dp), title = "ov-search", icon = Icons.Outlined.Search)
             }
 
             // ---- 普通消息 (user / assistant) ----
@@ -528,44 +657,96 @@ fun MessageBubble(msg: Message) {
 /**
  * 「深度思考」折叠卡片：默认收起，点击展开/收起推理内容
  */
+/**
+ * 「深度思考 / OV 检索」摘要卡 — 默认收起，点击 → 弹出完整详情（[DetailSheet]）。
+ * 供正文推理前奏、OV 自动注入卡复用。
+ */
 @Composable
-private fun ReasoningCard(reasoning: String, modifier: Modifier = Modifier, title: String = "深度思考", icon: String = "🧠") {
-    var expanded by remember { mutableStateOf(false) }
+private fun ReasoningCard(
+    reasoning: String,
+    modifier: Modifier = Modifier,
+    title: String = "深度思考",
+    icon: ImageVector = Icons.Outlined.Psychology,
+) {
+    val cs = MaterialTheme.colorScheme
+    val dark = cs.surface.luminance() < 0.5f
+    val haptics = rememberHaptics()
+    var showDetail by remember { mutableStateOf(false) }
+
     Surface(
-        modifier = modifier.widthIn(max = 320.dp)
-            .clickable { expanded = !expanded },
-        shape = RoundedCornerShape(10.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
-        tonalElevation = 1.dp
+        modifier = modifier
+            .fillMaxWidth()
+            .animateContentSize(tween(200))
+            .clickable { haptics(HapticsType.Light); showDetail = true },
+        shape = AppRadii.card,
+        color = cs.primaryContainer.copy(alpha = if (dark) 0.25f else 0.30f),
+        shadowElevation = AppElevation.soft,
     ) {
-        Column(Modifier.padding(12.dp)) {
-            // 头部
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(if (expanded) "▼" else icon,
-                    fontSize = 13.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Spacer(Modifier.width(6.dp))
+        Row(
+            Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                Modifier.size(26.dp).clip(CircleShape)
+                    .background(cs.surface.copy(alpha = 0.20f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(icon, contentDescription = null, tint = cs.tertiary, modifier = Modifier.size(15.dp))
+            }
+            Spacer(Modifier.width(10.dp))
+            Column(Modifier.weight(1f)) {
                 Text(title,
                     fontSize = 13.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Spacer(Modifier.weight(1f))
-                Text(if (expanded) "收起" else "详情",
+                    fontWeight = FontWeight.SemiBold,
+                    color = cs.onSurface)
+                Text("点击查看完整内容",
                     fontSize = 11.sp,
-                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f))
+                    color = cs.onSurface.copy(alpha = 0.55f))
             }
+            Icon(
+                Icons.Filled.KeyboardArrowRight,
+                contentDescription = "查看详情",
+                tint = cs.onSurface.copy(alpha = 0.5f),
+                modifier = Modifier.size(20.dp),
+            )
+        }
+    }
 
-            // 展开：推理内容
-            if (expanded) {
-                Spacer(Modifier.height(8.dp))
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                Spacer(Modifier.height(8.dp))
-                Text(reasoning,
+    if (showDetail) {
+        DetailSheet(title = title, body = reasoning, onDismiss = { showDetail = false })
+    }
+}
+
+// 流式推理：内联实时显示（非点击弹层，边生成边看）
+@Composable
+private fun StreamingReasoning(reasoning: String, modifier: Modifier = Modifier) {
+    val cs = MaterialTheme.colorScheme
+    val dark = cs.surface.luminance() < 0.5f
+    Surface(
+        modifier = modifier.fillMaxWidth().animateContentSize(tween(200)),
+        shape = AppRadii.card,
+        color = cs.primaryContainer.copy(alpha = if (dark) 0.25f else 0.30f),
+        shadowElevation = AppElevation.soft,
+    ) {
+        Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Outlined.Psychology, contentDescription = null, tint = cs.tertiary, modifier = Modifier.size(15.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("深度思考",
                     fontSize = 12.sp,
-                    fontFamily = FontFamily.Monospace,
-                    lineHeight = 17.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    fontWeight = FontWeight.SemiBold,
+                    color = cs.onSurface)
+                Spacer(Modifier.weight(1f))
+                BlinkingCursor(color = cs.primary.copy(alpha = 0.7f))
             }
+            Spacer(Modifier.height(6.dp))
+            Text(reasoning,
+                fontSize = 12.sp,
+                fontFamily = FontFamily.Monospace,
+                lineHeight = 17.sp,
+                color = cs.onSurfaceVariant,
+                maxLines = 8,
+                overflow = TextOverflow.Ellipsis)
         }
     }
 }
@@ -591,6 +772,47 @@ private fun sameDay(a: Calendar, b: Calendar) =
 private fun isYest(now: Calendar, d: Calendar): Boolean {
     val y = Calendar.getInstance().also { it.timeInMillis = now.timeInMillis - 86400000L }
     return sameDay(y, d)
+}
+
+// ==================== 消息分组：气泡 / 工具执行时间线卡 ====================
+
+/** 聊天项目：要么是单条消息气泡，要么是一组「工具执行」步骤合并成的一张卡片 */
+private sealed class ChatItem {
+    data class Bubble(val msg: Message) : ChatItem()
+    data class ToolRun(val steps: List<Message>) : ChatItem() {
+        val key: Long get() = steps.first().id
+    }
+}
+
+/** 将按时间排序的消息聚合成渲染项：assistant 的推理 + 紧随其后的工具结果并入同一张时间线卡 */
+private fun groupChatItems(messages: List<Message>): List<ChatItem> {
+    val out = mutableListOf<ChatItem>()
+    var i = 0
+    while (i < messages.size) {
+        val m = messages[i]
+        val isToolTurn = m.role == "assistant" && m.toolCalls != null && m.content.isBlank()
+        if (isToolTurn) {
+            val steps = mutableListOf(m)
+            var j = i + 1
+            while (j < messages.size && messages[j].role == "tool") {
+                steps.add(messages[j]); j++
+            }
+            val hasReasoning = steps.any { !it.reasoningContent.isNullOrBlank() }
+            val hasTool = steps.any { it.role == "tool" && it.toolName != null }
+            if (hasReasoning || hasTool) {
+                out.add(ChatItem.ToolRun(steps))
+                i = j
+                continue
+            }
+        } else if (m.role == "tool") {
+            out.add(ChatItem.ToolRun(listOf(m)))
+            i++
+            continue
+        }
+        out.add(ChatItem.Bubble(m))
+        i++
+    }
+    return out
 }
 
 private data class SG(val label: String, val sessions: List<ChatSession>)

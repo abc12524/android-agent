@@ -1,5 +1,6 @@
 package com.androidagent.ui.settings
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -10,12 +11,15 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.androidagent.BuildConfig
+import com.androidagent.ui.theme.AppRadii
 import com.androidagent.data.AppPreferences
 import com.androidagent.data.api.DeepSeekClient
 import com.androidagent.data.updater.AppUpdater
@@ -115,12 +119,16 @@ fun SettingsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("设置") },
+                title = { Text("设置", fontWeight = FontWeight.SemiBold) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "返回")
                     }
-                }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Color.Transparent,
+                    scrolledContainerColor = Color.Transparent,
+                )
             )
         }
     ) { padding ->
@@ -133,9 +141,19 @@ fun SettingsScreen(
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             // ========== API 配置 ==========
-            Card(modifier = Modifier.fillMaxWidth()) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = AppRadii.card,
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f)),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+                border = BorderStroke(0.8.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.12f)),
+            ) {
                 Column(modifier = Modifier.padding(12.dp)) {
-                    Text("🤖 DeepSeek API", style = MaterialTheme.typography.titleSmall)
+                    Text("DeepSeek API", style = MaterialTheme.typography.titleSmall.copy(
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.80f),
+                    ))
                     Spacer(Modifier.height(6.dp))
                     OutlinedTextField(
                         value = deepSeekKey,
@@ -220,42 +238,23 @@ fun SettingsScreen(
                             color = MaterialTheme.colorScheme.error)
                     }
 
-                    HorizontalDivider(Modifier.padding(vertical = 8.dp))
-
-                    Text("🧠 OpenViking 外置记忆", style = MaterialTheme.typography.titleSmall)
-                    Spacer(Modifier.height(6.dp))
-                    OutlinedTextField(
-                        value = ovUrl,
-                        onValueChange = { ovUrl = it; saved = false },
-                        label = { Text("服务器地址") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true
-                    )
-                    Spacer(Modifier.height(6.dp))
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        OutlinedTextField(
-                            value = ovKey,
-                            onValueChange = { ovKey = it; saved = false },
-                            label = { Text("API Key") },
-                            modifier = Modifier.weight(1f),
-                            singleLine = true,
-                            visualTransformation = if (showKeys) VisualTransformation.None else PasswordVisualTransformation()
-                        )
-                        OutlinedTextField(
-                            value = ovUser,
-                            onValueChange = { ovUser = it; saved = false },
-                            label = { Text("用户名") },
-                            modifier = Modifier.weight(1f),
-                            singleLine = true
-                        )
-                    }
                 }
             }
 
             // ========== 对象存储 (S3) ==========
-            Card(modifier = Modifier.fillMaxWidth()) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = AppRadii.card,
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f)),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+                border = BorderStroke(0.8.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.12f)),
+            ) {
                 Column(modifier = Modifier.padding(12.dp)) {
-                    Text("☁️ 对象存储 (S3)", style = MaterialTheme.typography.titleSmall)
+                    Text("对象存储 (S3)", style = MaterialTheme.typography.titleSmall.copy(
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.80f),
+                    ))
                     Spacer(Modifier.height(6.dp))
                     OutlinedTextField(
                         value = s3Endpoint,
@@ -286,7 +285,13 @@ fun SettingsScreen(
             }
 
             // ========== 全局安全设置 ==========
-            Card(modifier = Modifier.fillMaxWidth()) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = AppRadii.card,
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f)),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+                border = BorderStroke(0.8.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.12f)),
+            ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -310,9 +315,19 @@ fun SettingsScreen(
             }
 
             // ========== 配置导入 ==========
-            Card(modifier = Modifier.fillMaxWidth()) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = AppRadii.card,
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f)),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+                border = BorderStroke(0.8.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.12f)),
+            ) {
                 Column(modifier = Modifier.padding(12.dp)) {
-                    Text("⚙️ 配置导入", style = MaterialTheme.typography.titleSmall)
+                    Text("配置导入", style = MaterialTheme.typography.titleSmall.copy(
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.80f),
+                    ))
                     Spacer(Modifier.height(4.dp))
                     Text(
                         text = "填入返回 JSON 的配置地址，可包含多个账号（顶层 key 为账号名，其对象为设置）。加载后选择账号一键应用，免去逐项输入。",
@@ -444,11 +459,58 @@ fun SettingsScreen(
                 }
             }
 
-            // ========== 记忆检索 ==========
-            Card(modifier = Modifier.fillMaxWidth()) {
+            // ========== OpenViking 记忆 ==========
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = AppRadii.card,
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f)),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+                border = BorderStroke(0.8.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.12f)),
+            ) {
                 Column(modifier = Modifier.padding(12.dp)) {
-                    Text("🧠 记忆检索", style = MaterialTheme.typography.titleSmall)
-                    Spacer(Modifier.height(4.dp))
+                    Text("OpenViking 记忆", style = MaterialTheme.typography.titleSmall.copy(
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.80f),
+                    ))
+                    Spacer(Modifier.height(6.dp))
+
+                    // 服务器配置
+                    OutlinedTextField(
+                        value = ovUrl,
+                        onValueChange = { ovUrl = it; saved = false },
+                        label = { Text("服务器地址") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        OutlinedTextField(
+                            value = ovKey,
+                            onValueChange = { ovKey = it; saved = false },
+                            label = { Text("API Key") },
+                            modifier = Modifier.weight(1f),
+                            singleLine = true,
+                            visualTransformation = if (showKeys) VisualTransformation.None else PasswordVisualTransformation()
+                        )
+                        OutlinedTextField(
+                            value = ovUser,
+                            onValueChange = { ovUser = it; saved = false },
+                            label = { Text("用户名") },
+                            modifier = Modifier.weight(1f),
+                            singleLine = true
+                        )
+                    }
+
+                    HorizontalDivider(Modifier.padding(vertical = 10.dp))
+
+                    // 记忆检索
+                    Text("记忆检索", style = MaterialTheme.typography.titleSmall.copy(
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.80f),
+                    ))
+                    Spacer(Modifier.height(6.dp))
                     Text(
                         text = "匹配阈值: ${String.format("%.2f", ovScoreThreshold)}",
                         style = MaterialTheme.typography.bodySmall
@@ -463,7 +525,7 @@ fun SettingsScreen(
                     Text("阈值越高召回越精准。", style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
 
-                    Spacer(Modifier.height(8.dp))
+                    Spacer(Modifier.height(6.dp))
 
                     OutlinedTextField(
                         value = ovSearchDisplayCount,
@@ -478,13 +540,15 @@ fun SettingsScreen(
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true
                     )
-                }
-            }
 
-            // ========== 记忆高级 ==========
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(12.dp)) {
-                    Text("🧠 记忆高级", style = MaterialTheme.typography.titleSmall)
+                    HorizontalDivider(Modifier.padding(vertical = 10.dp))
+
+                    // 记忆高级
+                    Text("记忆高级", style = MaterialTheme.typography.titleSmall.copy(
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.80f),
+                    ))
                     Spacer(Modifier.height(6.dp))
                     OutlinedTextField(
                         value = ovPeerId,
@@ -537,9 +601,19 @@ fun SettingsScreen(
             }
 
             // ========== 功能设置 ==========
-            Card(modifier = Modifier.fillMaxWidth()) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = AppRadii.card,
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f)),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+                border = BorderStroke(0.8.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.12f)),
+            ) {
                 Column(modifier = Modifier.padding(12.dp)) {
-                    Text("⚙️ 功能", style = MaterialTheme.typography.titleSmall)
+                    Text("功能", style = MaterialTheme.typography.titleSmall.copy(
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.80f),
+                    ))
                     Spacer(Modifier.height(8.dp))
 
                     // 工具轮次
@@ -572,9 +646,19 @@ fun SettingsScreen(
             }
 
             // ========== 系统提示词 ==========
-            Card(modifier = Modifier.fillMaxWidth()) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = AppRadii.card,
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f)),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+                border = BorderStroke(0.8.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.12f)),
+            ) {
                 Column(modifier = Modifier.padding(12.dp)) {
-                    Text("💬 系统提示词", style = MaterialTheme.typography.titleSmall)
+                    Text("系统提示词", style = MaterialTheme.typography.titleSmall.copy(
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.80f),
+                    ))
                     Spacer(Modifier.height(4.dp))
                     Text(
                         text = "自定义系统提示词，留空则使用默认。修改后新对话生效。",
@@ -632,14 +716,24 @@ fun SettingsScreen(
                     },
                     enabled = !saved
                 ) {
-                    Text(if (saved) "✓ 已保存" else "保存")
+                    Text(if (saved) "已保存" else "保存")
                 }
             }
 
             // ========== 说明 ==========
-            Card(modifier = Modifier.fillMaxWidth()) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = AppRadii.card,
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f)),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+                border = BorderStroke(0.8.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.12f)),
+            ) {
                 Column(modifier = Modifier.padding(12.dp)) {
-                    Text("📝 说明", style = MaterialTheme.typography.titleSmall)
+                    Text("说明", style = MaterialTheme.typography.titleSmall.copy(
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.80f),
+                    ))
                     Spacer(Modifier.height(4.dp))
                     Text(
                         text = "• DeepSeek API Key 是必填项\n" +
@@ -653,12 +747,22 @@ fun SettingsScreen(
             }
 
             // ========== 版本与更新 ==========
-            Card(modifier = Modifier.fillMaxWidth()) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = AppRadii.card,
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f)),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+                border = BorderStroke(0.8.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.12f)),
+            ) {
                 Column(modifier = Modifier.padding(12.dp)) {
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text("版本 ${BuildConfig.VERSION_NAME}",
-                                style = MaterialTheme.typography.titleSmall)
+                                style = MaterialTheme.typography.titleSmall.copy(
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.80f),
+                    ))
                             Text("Build ${BuildConfig.VERSION_CODE}",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant)
