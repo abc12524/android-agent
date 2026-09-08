@@ -2,6 +2,7 @@ package com.androidagent.ui.chat
 
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -51,6 +52,7 @@ internal fun ToolCallCard(entries: List<ToolCallEntry>, modifier: Modifier = Mod
         shape = AppRadii.timelineCard,
         color = cs.surface.copy(alpha = if (dark) 0.06f else 0.75f),
         shadowElevation = AppElevation.soft,
+        border = BorderStroke(0.8.dp, cs.outlineVariant.copy(alpha = 0.12f)),
     ) {
         Column(Modifier.padding(vertical = 4.dp)) {
             entries.forEachIndexed { i, e ->

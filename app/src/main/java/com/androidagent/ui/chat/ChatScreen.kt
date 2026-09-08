@@ -13,6 +13,7 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -682,12 +683,13 @@ private fun ReasoningCard(
             .animateContentSize(tween(200))
             .clickable { if (!expanded) expanded = true },
         shape = AppRadii.card,
-        color = cs.primaryContainer.copy(alpha = if (dark) 0.25f else 0.30f),
+        color = cs.surface.copy(alpha = if (dark) 0.06f else 0.75f),
         shadowElevation = AppElevation.soft,
+        border = BorderStroke(0.8.dp, cs.outlineVariant.copy(alpha = 0.12f)),
     ) {
         Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(icon, contentDescription = null, tint = cs.tertiary, modifier = Modifier.size(18.dp))
+                Icon(icon, contentDescription = null, tint = cs.primary, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(10.dp))
                 Text(title,
                     fontSize = 13.sp,
