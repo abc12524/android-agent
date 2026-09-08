@@ -682,7 +682,7 @@ private fun ReasoningCard(
             .animateContentSize(tween(200))
             .clickable { if (!expanded) expanded = true },
         shape = AppRadii.card,
-        color = cs.background,
+        color = if (cs.surface.luminance() < 0.5f) Color(0xFF2B2B2E) else BubbleAssistant,
         shadowElevation = AppElevation.soft,
         border = BorderStroke(0.8.dp, cs.outlineVariant.copy(alpha = 0.12f)),
     ) {

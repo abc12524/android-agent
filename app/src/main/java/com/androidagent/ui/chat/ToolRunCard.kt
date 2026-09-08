@@ -25,12 +25,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.androidagent.data.model.Message
 import com.androidagent.ui.theme.AppElevation
 import com.androidagent.ui.theme.AppRadii
+import com.androidagent.ui.theme.BubbleAssistant
 
 /** 一条「工具调用」：名称 + 弹出详情正文 */
 data class ToolCallEntry(val name: String, val detail: String)
@@ -48,7 +51,7 @@ internal fun ToolCallCard(entries: List<ToolCallEntry>, modifier: Modifier = Mod
     Surface(
         modifier = modifier.fillMaxWidth().animateContentSize(tween(200)),
         shape = AppRadii.timelineCard,
-        color = cs.background,
+        color = if (cs.surface.luminance() < 0.5f) Color(0xFF2B2B2E) else BubbleAssistant,
         shadowElevation = AppElevation.soft,
         border = BorderStroke(0.8.dp, cs.outlineVariant.copy(alpha = 0.12f)),
     ) {
