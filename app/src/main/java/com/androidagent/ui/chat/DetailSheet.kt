@@ -26,7 +26,7 @@ import androidx.compose.ui.unit.sp
  * 通用「完整详情」底部面板 — 对标 kelivo 的 showModalBottomSheet
  * （约 60% 高、可滚动/选中全文、顶部拖拽把手）。
  *
- * 供工具执行卡、思考卡、OV 自动注入卡等复用：点击对应卡片 → 弹出完整正文。
+ * 供工具执行结果与 ov-search 复用：点击对应卡片行 → 弹出完整正文。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

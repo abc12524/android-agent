@@ -18,13 +18,13 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AttachFile
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Menu
 import androidx.compose.material.icons.outlined.Add
-import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Psychology
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.*
@@ -32,6 +32,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -601,7 +602,7 @@ fun MessageBubble(msg: Message) {
         }
 
         when {
-            // ---- OV 检索记忆：用户侧，复用思考卡片样式 ----
+            // ---- OV 检索记忆：复用「工具调用」样式，点击弹详情 ----
             isOvContext -> {
                 val ovContent = remember(msg.content) {
                     val c = msg.content
@@ -609,7 +610,7 @@ fun MessageBubble(msg: Message) {
                     val end = c.lastIndexOf('\n')
                     if (start >= 0 && end > start) c.substring(start + 1, end).trim() else c
                 }
-                ReasoningCard(ovContent, Modifier.padding(bottom = 4.dp), title = "ov-search", icon = Icons.Outlined.Search)
+                ToolCallCard(listOf(ToolCallEntry("ov-search", ovContent)))
             }
 
             // ---- 普通消息 (user / assistant) ----
@@ -660,11 +661,8 @@ fun MessageBubble(msg: Message) {
 // ==================== 深度思考折叠卡片 ====================
 
 /**
- * 「深度思考」折叠卡片：默认收起，点击展开/收起推理内容
- */
-/**
- * 「深度思考 / OV 检索」摘要卡 — 默认收起，点击 → 弹出完整详情（[DetailSheet]）。
- * 供正文推理前奏、OV 自动注入卡复用。
+ * 「深度思考」卡片：底色统一。最右侧是向下的箭头，点击即展开；
+ * 展开后只有再点箭头才收起，点击卡片其它处不复原。
  */
 @Composable
 private fun ReasoningCard(
@@ -675,50 +673,54 @@ private fun ReasoningCard(
 ) {
     val cs = MaterialTheme.colorScheme
     val dark = cs.surface.luminance() < 0.5f
-    val haptics = rememberHaptics()
-    var showDetail by remember { mutableStateOf(false) }
+    var expanded by remember { mutableStateOf(false) }
+    val rotation by animateFloatAsState(if (expanded) 180f else 0f, label = "reasonChevron")
 
     Surface(
         modifier = modifier
             .fillMaxWidth()
             .animateContentSize(tween(200))
-            .clickable { haptics(HapticsType.Light); showDetail = true },
+            .clickable { if (!expanded) expanded = true },
         shape = AppRadii.card,
         color = cs.primaryContainer.copy(alpha = if (dark) 0.25f else 0.30f),
         shadowElevation = AppElevation.soft,
     ) {
-        Row(
-            Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Box(
-                Modifier.size(26.dp).clip(CircleShape)
-                    .background(cs.surface.copy(alpha = 0.20f)),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(icon, contentDescription = null, tint = cs.tertiary, modifier = Modifier.size(15.dp))
-            }
-            Spacer(Modifier.width(10.dp))
-            Column(Modifier.weight(1f)) {
+        Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(icon, contentDescription = null, tint = cs.tertiary, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(10.dp))
                 Text(title,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold,
-                    color = cs.onSurface)
-                Text("点击查看完整内容",
-                    fontSize = 11.sp,
-                    color = cs.onSurface.copy(alpha = 0.55f))
+                    color = cs.onSurface,
+                    modifier = Modifier.weight(1f))
+                // 仅箭头可切换展开/收起（点击卡片其它处不再收起）
+                Box(
+                    Modifier
+                        .size(30.dp)
+                        .clip(CircleShape)
+                        .clickable { expanded = !expanded },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        Icons.Filled.KeyboardArrowDown,
+                        contentDescription = if (expanded) "收起" else "展开",
+                        tint = cs.onSurface.copy(alpha = 0.7f),
+                        modifier = Modifier.size(22.dp).rotate(rotation),
+                    )
+                }
             }
-            Icon(
-                Icons.Filled.KeyboardArrowRight,
-                contentDescription = "查看详情",
-                tint = cs.onSurface.copy(alpha = 0.5f),
-                modifier = Modifier.size(20.dp),
-            )
+            if (expanded) {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    reasoning,
+                    fontSize = 12.sp,
+                    fontFamily = FontFamily.Monospace,
+                    lineHeight = 17.sp,
+                    color = cs.onSurfaceVariant,
+                )
+            }
         }
-    }
-
-    if (showDetail) {
-        DetailSheet(title = title, body = reasoning, onDismiss = { showDetail = false })
     }
 }
 
