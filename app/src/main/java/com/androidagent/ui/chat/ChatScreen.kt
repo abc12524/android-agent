@@ -611,7 +611,10 @@ fun MessageBubble(msg: Message) {
                     val end = c.lastIndexOf('\n')
                     if (start >= 0 && end > start) c.substring(start + 1, end).trim() else c
                 }
-                ToolCallCard(listOf(ToolCallEntry("ov-search", ovContent)))
+                ToolCallCard(
+                    listOf(ToolCallEntry("ov-search", ovContent)),
+                    containerColor = Color(250, 244, 224),
+                )
             }
 
             // ---- 普通消息 (user / assistant) ----
@@ -679,8 +682,7 @@ private fun ReasoningCard(
     Surface(
         modifier = modifier
             .fillMaxWidth()
-            .animateContentSize(tween(200))
-            .clickable { if (!expanded) expanded = true },
+            .animateContentSize(tween(200)),
         shape = AppRadii.card,
         color = if (cs.surface.luminance() < 0.5f) Color(0xFF2B2B2E) else BubbleAssistant,
         shadowElevation = AppElevation.soft,
@@ -695,7 +697,7 @@ private fun ReasoningCard(
                     fontWeight = FontWeight.SemiBold,
                     color = cs.onSurface,
                     modifier = Modifier.weight(1f))
-                // 仅箭头可切换展开/收起（点击卡片其它处不再收起）
+                // 仅箭头可切换展开/收起（点击卡片其它处不触发）
                 Box(
                     Modifier
                         .size(30.dp)

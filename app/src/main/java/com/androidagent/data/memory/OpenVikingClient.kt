@@ -21,7 +21,7 @@ import java.security.MessageDigest
  * OpenViking 外置记忆系统 HTTP 客户端
  * 对齐 shell-tool/core/tools/ov_tools.py 的接口与行为：
  *  - peer_id 派生（显式 > 按包名派生 ws-* > 默认 default）
- *  - 搜索阈值兜底放宽、跨轮召回去重
+ *  - 搜索阈值/条数严格遵守设置，不做兜底放宽；跨轮召回去重
  *  - 批量读取 / 批量写消息 / session 查询
  *  - 会话开始注入记忆索引（profile）、自动捕获对话到 OV Session
  */
@@ -202,20 +202,17 @@ class OpenVikingClient {
     }
 
     // ========== 语义搜索 ==========
-    suspend fun search(query: String, limit: Int = AppPreferences.ovSearchDisplayCount): String {
-        val threshold = AppPreferences.ovScoreThreshold
+    /** search 接口（带会话上下文）。threshold/limit 由调用方指定，未指定时用设置中的默认值，不做任何兜底放宽。 */
+    suspend fun search(
+        query: String,
+        threshold: Float = AppPreferences.ovScoreThreshold,
+        limit: Int = AppPreferences.ovSearchDisplayCount
+    ): String {
         val result = post("/api/v1/search/search", buildSearchPayload(query, threshold, limit))
         return result.fold(
             onSuccess = { body ->
                 try {
-                    var top = parseSearchHits(body).take(8)
-                    // 兜底：阈值过高吞掉相关记忆 → 放宽到 0 再试一次，取结果更多的一次
-                    if (threshold > 0 && (top.isEmpty() || (top.size <= 1 && threshold >= 0.3f))) {
-                        post("/api/v1/search/search", buildSearchPayload(query, 0f, limit)).onSuccess { fbBody ->
-                            val fbHits = parseSearchHits(fbBody)
-                            if (fbHits.size > top.size) top = fbHits.take(8)
-                        }
-                    }
+                    val top = parseSearchHits(body).take(limit.coerceAtLeast(0))
                     if (top.isEmpty()) return gson.toJson(
                         mapOf("success" to true, "results" to emptyList<Any>(), "message" to "未找到相关记忆")
                     )
@@ -238,20 +235,18 @@ class OpenVikingClient {
     }
 
     // ========== 语义搜索（find 接口：纯向量相似度，无会话上下文，低延迟） ==========
-    suspend fun find(query: String, limit: Int = AppPreferences.ovFindLimit, targetUri: String = ""): String {
-        val threshold = AppPreferences.ovFindThreshold
+    /** find 接口。threshold/limit 由调用方指定，未指定时用设置中的默认值，不做任何兜底放宽。 */
+    suspend fun find(
+        query: String,
+        limit: Int = AppPreferences.ovFindLimit,
+        targetUri: String = "",
+        threshold: Float = AppPreferences.ovFindThreshold
+    ): String {
         val result = post("/api/v1/search/find", buildFindPayload(query, threshold, limit, targetUri))
         return result.fold(
             onSuccess = { body ->
                 try {
-                    var top = parseSearchHits(body).take(8)
-                    // 兜底：阈值过高吞掉相关记忆 → 放宽到 0 再试一次，取结果更多的一次
-                    if (threshold > 0 && (top.isEmpty() || (top.size <= 1 && threshold >= 0.3f))) {
-                        post("/api/v1/search/find", buildFindPayload(query, 0f, limit, targetUri)).onSuccess { fbBody ->
-                            val fbHits = parseSearchHits(fbBody)
-                            if (fbHits.size > top.size) top = fbHits.take(8)
-                        }
-                    }
+                    val top = parseSearchHits(body).take(limit.coerceAtLeast(0))
                     if (top.isEmpty()) return gson.toJson(
                         mapOf("success" to true, "results" to emptyList<Any>(), "message" to "未找到相关记忆")
                     )

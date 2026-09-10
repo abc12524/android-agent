@@ -1,5 +1,6 @@
 package com.androidagent.data.tools
 
+import com.androidagent.data.AppPreferences
 import com.androidagent.data.memory.OpenVikingClient
 import com.google.gson.Gson
 
@@ -34,6 +35,8 @@ class OtherOpenVikingTool(private val ov: OpenVikingClient) : Tool {
             ),
             "query" to mapOf("type" to "string", "description" to "搜索关键词（find 时使用）"),
             "target_uri" to mapOf("type" to "string", "description" to "限定检索范围 URI（find 时可选）"),
+            "score_threshold" to mapOf("type" to "number", "description" to "相似度阈值 0-1（find 时可选，不传则用设置中的默认值）"),
+            "limit" to mapOf("type" to "integer", "description" to "返回条数 0-10（find 时可选，不传则用设置中的默认值）"),
             "uri" to mapOf("type" to "string", "description" to "文件/目录 URI（read/list_dir/write_file 时使用）"),
             "content" to mapOf("type" to "string", "description" to "要写入的内容（write_file 时使用）"),
             "mode" to mapOf(
@@ -87,7 +90,11 @@ class OtherOpenVikingTool(private val ov: OpenVikingClient) : Tool {
     private suspend fun doFind(args: Map<String, Any>): String {
         val query = args["query"] as? String ?: return """{"error": "缺少 query 参数"}"""
         val targetUri = args["target_uri"] as? String ?: ""
-        return ov.find(query, targetUri = targetUri)
+        val threshold = (args["score_threshold"] as? Double)?.toFloat()?.coerceIn(0f, 1f)
+            ?: AppPreferences.ovFindThreshold
+        val limit = (args["limit"] as? Double)?.toInt()?.coerceIn(0, 10)
+            ?: AppPreferences.ovFindLimit
+        return ov.find(query, limit = limit, targetUri = targetUri, threshold = threshold)
     }
 
     private suspend fun doRead(args: Map<String, Any>): String {

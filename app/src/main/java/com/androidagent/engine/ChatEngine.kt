@@ -83,8 +83,8 @@ class ChatEngine(private val context: Context) {
                 }
             }
 
-            // 3. 搜索 OpenViking 记忆（仅在显示条数 >0 时注入），作为背景线索附在用户问题之后
-            if (AppPreferences.ovSearchDisplayCount > 0) {
+            // 3. 搜索 OpenViking 记忆（仅在自动注入条数 >0 时注入），作为背景线索附在用户问题之后
+            if (AppPreferences.ovFindLimit > 0) {
                 val ovContext = openViking.loadContext(userMessage, sessionId)
                 if (ovContext.isNotBlank()) {
                     val ovMsg = "[自动检索的候选记忆(相关性未经验证可能无关，仅作为背景线索)]\n" +
@@ -104,12 +104,17 @@ class ChatEngine(private val context: Context) {
             var finalReasoning: String? = null
             var finalUsage: DeepSeekClient.Usage? = null
             val maxRounds = AppPreferences.maxToolRounds
+            // 思考熔断：单轮思考耗时超过阈值后注入提示（不入库、不掐断连接），让模型直接作答
+            val thinkingTimeoutMs = AppPreferences.thinkingTimeoutMinutes * 60_000L
+            var thinkingBreakerFired = false
 
             for (round in 0..maxRounds + 1) {
+                val roundStartMs = System.currentTimeMillis()
                 val result = deepSeek.chat(
                     messages = messages,
                     tools = toolRegistry.toToolDefinitions()
                 )
+                val roundElapsedMs = System.currentTimeMillis() - roundStartMs
 
                 if (result.isFailure) {
                     val err = result.exceptionOrNull()
@@ -156,8 +161,18 @@ class ChatEngine(private val context: Context) {
 
                 messages.add(assistantMsg)
 
+                // 本轮是否触发思考熔断（仅触发一次）
+                val overthinking = thinkingTimeoutMs > 0 && !thinkingBreakerFired &&
+                    roundElapsedMs >= thinkingTimeoutMs
+
                 val toolCalls = assistantMsg.toolCalls
                 if (toolCalls.isNullOrEmpty() || finishReason == "stop") {
+                    if (overthinking && round < maxRounds + 1) {
+                        // 思考超时：注入提示（不入库）后再来一轮，让模型直接作答
+                        thinkingBreakerFired = true
+                        messages.add(DeepSeekClient.ChatMessage(role = "user", content = "请不要过度思考"))
+                        continue
+                    }
                     finalContent = assistantMsg.content as? String ?: ""
                     finalReasoning = reasoning
                     break
@@ -199,6 +214,12 @@ class ChatEngine(private val context: Context) {
                         role = "user",
                         content = "这是最后一次工具调用。请根据已有结果报告当前进度，总结完成情况，然后停止调用。"
                     ))
+                }
+
+                // 思考熔断：本轮思考超时 → 在工具结果之后注入提示（不入库），下一轮直接作答
+                if (overthinking) {
+                    thinkingBreakerFired = true
+                    messages.add(DeepSeekClient.ChatMessage(role = "user", content = "请不要过度思考"))
                 }
             }
 
@@ -271,8 +292,8 @@ class ChatEngine(private val context: Context) {
                 }
             }
 
-            // 3. 搜索 OpenViking 记忆（仅在显示条数 >0 时注入），作为背景线索附在用户问题之后
-            if (AppPreferences.ovSearchDisplayCount > 0) {
+            // 3. 搜索 OpenViking 记忆（仅在自动注入条数 >0 时注入），作为背景线索附在用户问题之后
+            if (AppPreferences.ovFindLimit > 0) {
                 val ovContext = openViking.loadContext(userMessage, sessionId)
                 if (ovContext.isNotBlank()) {
                     val ovMsg = "[自动检索的候选记忆(相关性未经验证可能无关，仅作为背景线索)]\n" +
@@ -290,8 +311,12 @@ class ChatEngine(private val context: Context) {
             var finalReasoning: String? = null
             var finalUsage: DeepSeekClient.Usage? = null
             val maxRounds = AppPreferences.maxToolRounds
+            // 思考熔断：单轮思考耗时超过阈值后注入提示（不入库、不掐断连接），让模型直接作答
+            val thinkingTimeoutMs = AppPreferences.thinkingTimeoutMinutes * 60_000L
+            var thinkingBreakerFired = false
 
             for (round in 0..maxRounds + 1) {
+                val roundStartMs = System.currentTimeMillis()
                 val contentBuilder = StringBuilder()
                 val reasoningBuilder = StringBuilder()
                 var streamError: Exception? = null
@@ -321,6 +346,8 @@ class ChatEngine(private val context: Context) {
                     rollbackMessages(db, insertedIds)
                     return@withContext Result.failure(streamError!!)
                 }
+
+                val roundElapsedMs = System.currentTimeMillis() - roundStartMs
 
                 val de = doneEvent
                 if (de == null) {
@@ -366,8 +393,18 @@ class ChatEngine(private val context: Context) {
                     toolCalls = toolCalls
                 ))
 
+                // 本轮是否触发思考熔断（仅触发一次）
+                val overthinking = thinkingTimeoutMs > 0 && !thinkingBreakerFired &&
+                    roundElapsedMs >= thinkingTimeoutMs
+
                 // 检查是否结束
                 if (toolCalls.isNullOrEmpty() || de.finishReason == "stop") {
+                    if (overthinking && round < maxRounds + 1) {
+                        // 思考超时：注入提示（不入库）后再来一轮，让模型直接作答
+                        thinkingBreakerFired = true
+                        messages.add(DeepSeekClient.ChatMessage(role = "user", content = "请不要过度思考"))
+                        continue
+                    }
                     finalContent = fullContent
                     finalReasoning = reasoning
                     break
@@ -407,6 +444,12 @@ class ChatEngine(private val context: Context) {
                         role = "user",
                         content = "这是最后一次工具调用。请根据已有结果报告当前进度，总结完成情况，然后停止调用。"
                     ))
+                }
+
+                // 思考熔断：本轮思考超时 → 在工具结果之后注入提示（不入库），下一轮直接作答
+                if (overthinking) {
+                    thinkingBreakerFired = true
+                    messages.add(DeepSeekClient.ChatMessage(role = "user", content = "请不要过度思考"))
                 }
             }
 
@@ -514,7 +557,7 @@ class ChatEngine(private val context: Context) {
         insertedIds: MutableList<Long>,
         allNewMessages: MutableList<Message>
     ) {
-        if (AppPreferences.ovSearchDisplayCount <= 0) return
+        if (AppPreferences.ovFindLimit <= 0) return
         val query = buildRecallQuery(messages)
         if (query.isBlank()) return
         val ovContext = openViking.loadContext(query, sessionId)

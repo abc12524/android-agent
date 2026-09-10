@@ -1,5 +1,6 @@
 package com.androidagent.ui.settings
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -59,8 +60,11 @@ fun SettingsScreen(
     var ovKey by remember { mutableStateOf(AppPreferences.openVikingKey) }
     var ovUser by remember { mutableStateOf(AppPreferences.openVikingUser) }
     var maxRounds by remember { mutableStateOf(AppPreferences.maxToolRounds.toString()) }
-    var ovScoreThreshold by remember { mutableStateOf(AppPreferences.ovScoreThreshold) }
+    var thinkingTimeout by remember { mutableStateOf(AppPreferences.thinkingTimeoutMinutes.toString()) }
+    var ovScoreThreshold by remember { mutableStateOf(AppPreferences.ovScoreThreshold.toString()) }
     var ovSearchDisplayCount by remember { mutableStateOf(AppPreferences.ovSearchDisplayCount.toString()) }
+    var ovFindThreshold by remember { mutableStateOf(AppPreferences.ovFindThreshold.toString()) }
+    var ovFindLimit by remember { mutableStateOf(AppPreferences.ovFindLimit.toString()) }
     var ovPeerId by remember { mutableStateOf(AppPreferences.ovPeerId) }
     var ovWorkspacePeer by remember { mutableStateOf(AppPreferences.ovWorkspacePeer) }
     var ovRecallDedup by remember { mutableStateOf(AppPreferences.ovRecallDedup) }
@@ -102,6 +106,9 @@ fun SettingsScreen(
 
     var page by rememberSaveable { mutableStateOf("root") }
 
+    // 二级菜单按系统返回键时回到一级菜单，而非退出设置
+    BackHandler(enabled = page != "root") { page = "root" }
+
     fun refreshFromPrefs() {
         deepSeekKey = AppPreferences.deepSeekApiKey
         deepSeekBaseUrl = AppPreferences.deepSeekBaseUrl
@@ -110,8 +117,11 @@ fun SettingsScreen(
         ovKey = AppPreferences.openVikingKey
         ovUser = AppPreferences.openVikingUser
         maxRounds = AppPreferences.maxToolRounds.toString()
-        ovScoreThreshold = AppPreferences.ovScoreThreshold
+        thinkingTimeout = AppPreferences.thinkingTimeoutMinutes.toString()
+        ovScoreThreshold = AppPreferences.ovScoreThreshold.toString()
         ovSearchDisplayCount = AppPreferences.ovSearchDisplayCount.toString()
+        ovFindThreshold = AppPreferences.ovFindThreshold.toString()
+        ovFindLimit = AppPreferences.ovFindLimit.toString()
         ovPeerId = AppPreferences.ovPeerId
         ovWorkspacePeer = AppPreferences.ovWorkspacePeer
         ovRecallDedup = AppPreferences.ovRecallDedup
@@ -133,14 +143,17 @@ fun SettingsScreen(
         AppPreferences.openVikingUrl = ovUrl
         AppPreferences.openVikingKey = ovKey
         AppPreferences.openVikingUser = ovUser
-        AppPreferences.ovScoreThreshold = ovScoreThreshold
-        AppPreferences.ovSearchDisplayCount = ovSearchDisplayCount.toIntOrNull() ?: 3
+        AppPreferences.ovScoreThreshold = (ovScoreThreshold.toFloatOrNull() ?: 0.4f).coerceIn(0f, 1f)
+        AppPreferences.ovSearchDisplayCount = ovSearchDisplayCount.toIntOrNull() ?: 2
+        AppPreferences.ovFindThreshold = (ovFindThreshold.toFloatOrNull() ?: 0.5f).coerceIn(0f, 1f)
+        AppPreferences.ovFindLimit = ovFindLimit.toIntOrNull() ?: 2
         AppPreferences.ovPeerId = ovPeerId
         AppPreferences.ovWorkspacePeer = ovWorkspacePeer
         AppPreferences.ovRecallDedup = ovRecallDedup
         AppPreferences.ovProfileEnabled = ovProfileEnabled
         AppPreferences.ovAutoCapture = ovAutoCapture
         AppPreferences.maxToolRounds = maxRounds.toIntOrNull() ?: 8
+        AppPreferences.thinkingTimeoutMinutes = thinkingTimeout.toIntOrNull() ?: 0
         AppPreferences.systemPrompt = systemPrompt
         AppPreferences.s3EndpointUrl = s3Endpoint
         AppPreferences.s3AccessKey = s3AccessKey
@@ -237,6 +250,7 @@ fun SettingsScreen(
                     )
                     "ov" -> OvPage(
                         ovUrl, ovKey, ovUser, ovScoreThreshold, ovSearchDisplayCount,
+                        ovFindThreshold, ovFindLimit,
                         ovPeerId, ovWorkspacePeer, ovRecallDedup, ovProfileEnabled, ovAutoCapture,
                         showKeys,
                         onUrl = { ovUrl = it; saved = false },
@@ -244,6 +258,8 @@ fun SettingsScreen(
                         onUser = { ovUser = it; saved = false },
                         onThreshold = { ovScoreThreshold = it; saved = false },
                         onDisplayCount = { ovSearchDisplayCount = it; saved = false },
+                        onFindThreshold = { ovFindThreshold = it; saved = false },
+                        onFindLimit = { ovFindLimit = it; saved = false },
                         onPeerId = { ovPeerId = it; saved = false },
                         onWorkspacePeer = { ovWorkspacePeer = it; saved = false },
                         onRecallDedup = { ovRecallDedup = it; saved = false },
@@ -257,9 +273,10 @@ fun SettingsScreen(
                         onSecretKey = { s3SecretKey = it; saved = false },
                     )
                     "features" -> FeaturesPage(
-                        skipSsl, maxRounds, backgroundEnabled, systemPrompt,
+                        skipSsl, maxRounds, thinkingTimeout, backgroundEnabled, systemPrompt,
                         onSkipSsl = { skipSsl = it; saved = false },
                         onMaxRounds = { maxRounds = it; saved = false },
+                        onThinkingTimeout = { thinkingTimeout = it; saved = false },
                         onBackgroundEnabled = { backgroundEnabled = it; saved = false },
                         onSystemPrompt = { systemPrompt = it; saved = false },
                     )
@@ -484,11 +501,13 @@ private fun ApiPage(
 @Composable
 private fun OvPage(
     ovUrl: String, ovKey: String, ovUser: String,
-    ovScoreThreshold: Float, ovSearchDisplayCount: String,
+    ovScoreThreshold: String, ovSearchDisplayCount: String,
+    ovFindThreshold: String, ovFindLimit: String,
     ovPeerId: String, ovWorkspacePeer: Boolean, ovRecallDedup: Boolean, ovProfileEnabled: Boolean, ovAutoCapture: Boolean,
     showKeys: Boolean,
     onUrl: (String) -> Unit, onKey: (String) -> Unit, onUser: (String) -> Unit,
-    onThreshold: (Float) -> Unit, onDisplayCount: (String) -> Unit, onPeerId: (String) -> Unit,
+    onThreshold: (String) -> Unit, onDisplayCount: (String) -> Unit,
+    onFindThreshold: (String) -> Unit, onFindLimit: (String) -> Unit, onPeerId: (String) -> Unit,
     onWorkspacePeer: (Boolean) -> Unit, onRecallDedup: (Boolean) -> Unit, onProfileEnabled: (Boolean) -> Unit, onAutoCapture: (Boolean) -> Unit,
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
@@ -505,17 +524,33 @@ private fun OvPage(
 
             HorizontalDivider(Modifier.padding(vertical = 10.dp))
 
-            SubTitle("记忆检索")
+            SubTitle("搜索工具")
             Spacer(Modifier.height(6.dp))
-            Text("匹配阈值: ${String.format("%.2f", ovScoreThreshold)}", style = MaterialTheme.typography.bodySmall)
-            Slider(value = ovScoreThreshold, onValueChange = { onThreshold((it * 20).toInt() / 20f) }, valueRange = 0f..1f, steps = 19, modifier = Modifier.fillMaxWidth())
-            Text("阈值越高召回越精准。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            OutlinedTextField(value = ovScoreThreshold, onValueChange = { v ->
+                onThreshold(v.filter { c -> c.isDigit() || c == '.' })
+            }, label = { Text("匹配阈值 (0-1，如 0.52)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+            Text("阈值越高召回越精准。LLM 调用搜索未指定时使用此值。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.height(6.dp))
             OutlinedTextField(value = ovSearchDisplayCount, onValueChange = { v ->
                 val filtered = v.filter { c -> c.isDigit() }
                 val num = filtered.toIntOrNull() ?: 0
                 if (num in 0..10) onDisplayCount(filtered)
-            }, label = { Text("自动注入条目数 (0=关闭)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+            }, label = { Text("返回条数 (0=关闭)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+
+            HorizontalDivider(Modifier.padding(vertical = 10.dp))
+
+            SubTitle("自动注入")
+            Spacer(Modifier.height(6.dp))
+            OutlinedTextField(value = ovFindThreshold, onValueChange = { v ->
+                onFindThreshold(v.filter { c -> c.isDigit() || c == '.' })
+            }, label = { Text("匹配阈值 (0-1，如 0.5)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+            Text("对话时自动检索并注入相关记忆的阈值。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.height(6.dp))
+            OutlinedTextField(value = ovFindLimit, onValueChange = { v ->
+                val filtered = v.filter { c -> c.isDigit() }
+                val num = filtered.toIntOrNull() ?: 0
+                if (num in 0..10) onFindLimit(filtered)
+            }, label = { Text("注入条数 (0=关闭)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
 
             HorizontalDivider(Modifier.padding(vertical = 10.dp))
 
@@ -554,8 +589,8 @@ private fun StoragePage(
 
 @Composable
 private fun FeaturesPage(
-    skipSsl: Boolean, maxRounds: String, backgroundEnabled: Boolean, systemPrompt: String,
-    onSkipSsl: (Boolean) -> Unit, onMaxRounds: (String) -> Unit, onBackgroundEnabled: (Boolean) -> Unit, onSystemPrompt: (String) -> Unit,
+    skipSsl: Boolean, maxRounds: String, thinkingTimeout: String, backgroundEnabled: Boolean, systemPrompt: String,
+    onSkipSsl: (Boolean) -> Unit, onMaxRounds: (String) -> Unit, onThinkingTimeout: (String) -> Unit, onBackgroundEnabled: (Boolean) -> Unit, onSystemPrompt: (String) -> Unit,
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -577,6 +612,14 @@ private fun FeaturesPage(
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text("最大工具调用轮次", modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
                 OutlinedTextField(value = maxRounds, onValueChange = { onMaxRounds(it.filter { c -> c.isDigit() }) }, modifier = Modifier.width(72.dp), singleLine = true)
+            }
+            HorizontalDivider(Modifier.padding(vertical = 6.dp))
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("思考熔断", style = MaterialTheme.typography.bodyMedium)
+                    Text("思维链超过该分钟数后注入提示直接作答 (0=关闭)", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                OutlinedTextField(value = thinkingTimeout, onValueChange = { onThinkingTimeout(it.filter { c -> c.isDigit() }) }, modifier = Modifier.width(72.dp), singleLine = true)
             }
             HorizontalDivider(Modifier.padding(vertical = 6.dp))
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {

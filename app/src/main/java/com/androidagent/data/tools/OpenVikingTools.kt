@@ -1,5 +1,6 @@
 package com.androidagent.data.tools
 
+import com.androidagent.data.AppPreferences
 import com.androidagent.data.memory.OpenVikingClient
 
 /**
@@ -15,14 +16,26 @@ class OpenVikingSearchTool(private val ov: OpenVikingClient) : Tool {
     override val parameters: Map<String, Any> = mapOf(
         "type" to "object",
         "properties" to mapOf(
-            "query" to mapOf("type" to "string", "description" to "搜索关键词，描述要查找什么内容")
+            "query" to mapOf("type" to "string", "description" to "搜索关键词，描述要查找什么内容"),
+            "score_threshold" to mapOf(
+                "type" to "number",
+                "description" to "相似度阈值 0-1，越高越严格。不传则使用设置中的默认值"
+            ),
+            "limit" to mapOf(
+                "type" to "integer",
+                "description" to "返回条数 0-10。不传则使用设置中的默认值"
+            )
         ),
         "required" to listOf("query")
     )
 
     override suspend fun execute(args: Map<String, Any>): String {
         val query = args["query"] as? String ?: return "{\"error\": \"缺少 query 参数\"}"
-        return ov.search(query)
+        val threshold = (args["score_threshold"] as? Double)?.toFloat()?.coerceIn(0f, 1f)
+            ?: AppPreferences.ovScoreThreshold
+        val limit = (args["limit"] as? Double)?.toInt()?.coerceIn(0, 10)
+            ?: AppPreferences.ovSearchDisplayCount
+        return ov.search(query, threshold, limit)
     }
 }
 

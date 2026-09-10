@@ -78,27 +78,32 @@ object AppPreferences {
         get() = prefs.getInt("session_timeout_minutes", 15)
         set(value) = prefs.edit().putInt("session_timeout_minutes", value).apply()
 
+    // 思考熔断：单轮思维链超过该分钟数后注入提示让其直接作答（0=关闭）
+    var thinkingTimeoutMinutes: Int
+        get() = prefs.getInt("thinking_timeout_minutes", 0)
+        set(value) = prefs.edit().putInt("thinking_timeout_minutes", value).apply()
+
     // 后台保活
     var backgroundServiceEnabled: Boolean
         get() = prefs.getBoolean("background_service_enabled", false)
         set(value) = prefs.edit().putBoolean("background_service_enabled", value).apply()
 
-    // OpenViking 记忆检索设置
+    // 搜索工具（openviking_search）默认阈值与条数：LLM 未显式指定时使用
     var ovScoreThreshold: Float
         get() = prefs.getFloat("ov_score_threshold", 0.4f)
         set(value) = prefs.edit().putFloat("ov_score_threshold", value).apply()
 
     var ovSearchDisplayCount: Int
-        get() = prefs.getInt("ov_search_display_count", 3)
+        get() = prefs.getInt("ov_search_display_count", 2)
         set(value) = prefs.edit().putInt("ov_search_display_count", value).apply()
 
-    // find 接口（纯向量语义搜索）专属阈值与条数
+    // 自动注入（find 接口，纯向量语义搜索）默认阈值与条数
     var ovFindThreshold: Float
-        get() = prefs.getFloat("ov_find_threshold", 0.4f)
+        get() = prefs.getFloat("ov_find_threshold", 0.5f)
         set(value) = prefs.edit().putFloat("ov_find_threshold", value).apply()
 
     var ovFindLimit: Int
-        get() = prefs.getInt("ov_find_limit", 3)
+        get() = prefs.getInt("ov_find_limit", 2)
         set(value) = prefs.edit().putInt("ov_find_limit", value).apply()
 
     // 系统提示词
@@ -185,6 +190,7 @@ object AppPreferences {
         bool("ov_auto_capture")?.let { ovAutoCapture = it; count++ }
         int("max_tool_rounds")?.let { maxToolRounds = it; count++ }
         int("session_timeout_minutes")?.let { sessionTimeoutMinutes = it; count++ }
+        int("thinking_timeout_minutes")?.let { thinkingTimeoutMinutes = it; count++ }
         bool("background_service_enabled")?.let { backgroundServiceEnabled = it; count++ }
         float("ov_score_threshold")?.let { ovScoreThreshold = it; count++ }
         int("ov_search_display_count")?.let { ovSearchDisplayCount = it; count++ }

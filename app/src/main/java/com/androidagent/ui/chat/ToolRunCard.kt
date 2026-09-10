@@ -3,7 +3,6 @@ package com.androidagent.ui.chat
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -40,18 +39,23 @@ data class ToolCallEntry(val name: String, val detail: String)
 
 /**
  * 「工具执行 / ov-search」卡片 — 单个圆角矩形、底色统一，行内每行「工具调用: 名称」。
- * 卡片不内联展开；点击某一行 → 弹出 [DetailSheet] 查看该工具的参数与完整结果。
+ * 整卡可点：点击卡片任意处 → 弹出 [DetailSheet] 查看全部工具的参数与完整结果。
  */
 @Composable
-internal fun ToolCallCard(entries: List<ToolCallEntry>, modifier: Modifier = Modifier) {
+internal fun ToolCallCard(
+    entries: List<ToolCallEntry>,
+    modifier: Modifier = Modifier,
+    containerColor: Color? = null,
+) {
     val cs = MaterialTheme.colorScheme
     if (entries.isEmpty()) return
-    var detail by remember { mutableStateOf<ToolCallEntry?>(null) }
+    var detail by remember { mutableStateOf<List<ToolCallEntry>?>(null) }
 
     Surface(
+        onClick = { detail = entries },
         modifier = modifier.fillMaxWidth().animateContentSize(tween(200)),
         shape = AppRadii.timelineCard,
-        color = if (cs.surface.luminance() < 0.5f) Color(0xFF2B2B2E) else BubbleAssistant,
+        color = containerColor ?: if (cs.surface.luminance() < 0.5f) Color(0xFF2B2B2E) else BubbleAssistant,
         shadowElevation = AppElevation.soft,
         border = BorderStroke(0.8.dp, cs.outlineVariant.copy(alpha = 0.12f)),
     ) {
@@ -59,8 +63,8 @@ internal fun ToolCallCard(entries: List<ToolCallEntry>, modifier: Modifier = Mod
             entries.forEachIndexed { i, e ->
                 Row(
                     Modifier
-                        .padding(horizontal = 16.dp, vertical = if (i == 0) 8.dp else 6.dp)
-                        .clickable { detail = e },
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = if (i == 0) 8.dp else 6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Icon(Icons.Outlined.Build, contentDescription = null, tint = cs.primary, modifier = Modifier.size(16.dp))
@@ -84,8 +88,10 @@ internal fun ToolCallCard(entries: List<ToolCallEntry>, modifier: Modifier = Mod
         }
     }
 
-    detail?.let { e ->
-        DetailSheet(title = "工具调用: ${e.name}", body = e.detail, onDismiss = { detail = null })
+    detail?.let { list ->
+        val title = if (list.size == 1) "工具调用: ${list[0].name}" else "工具调用 (${list.size})"
+        val body = list.joinToString("\n\n") { "工具调用: ${it.name}\n${it.detail}" }
+        DetailSheet(title = title, body = body, onDismiss = { detail = null })
     }
 }
 
