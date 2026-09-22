@@ -15,16 +15,16 @@ import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AttachFile
+import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.Send
-import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Image
-import androidx.compose.material.icons.outlined.Menu
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Psychology
 import androidx.compose.material.icons.outlined.Settings
@@ -35,6 +35,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -114,88 +115,160 @@ fun ChatScreen(
     ) {
         Scaffold(
             topBar = {
-                TopAppBar(
-                    title = {
-                        Text(state.sessionTitle, fontSize = 16.sp, fontWeight = FontWeight.SemiBold,
-                            maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    },
-                    navigationIcon = {
-                        IconButton(onClick = { scope.launch { drawerState.open() }; haptics(HapticsType.Light) }) {
-                            Icon(Icons.Outlined.Menu, contentDescription = "会话列表")
-                        }
-                    },
-                    actions = {
-                        IconButton(onClick = { viewModel.startNewSession(); haptics(HapticsType.Light) }) {
-                            Icon(Icons.Outlined.Edit, contentDescription = "新对话")
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = Color.Transparent,
-                        scrolledContainerColor = Color.Transparent,
-                        titleContentColor = MaterialTheme.colorScheme.onSurface,
-                    )
-                )
+                // 极简顶栏：左侧圆形会话入口 · 右侧新建对话（无标题，对齐参考设计）
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .statusBarsPadding()
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                        .height(40.dp)
+                ) {
+                    IconButton(
+                        onClick = {
+                            scope.launch { drawerState.open() }
+                            haptics(HapticsType.Light)
+                        },
+                        modifier = Modifier
+                            .align(Alignment.CenterStart)
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.04f))
+                            .border(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f), CircleShape)
+                    ) {
+                        Icon(Icons.Default.Menu, contentDescription = "会话列表",
+                            modifier = Modifier.size(20.dp),
+                            tint = MaterialTheme.colorScheme.onSurface)
+                    }
+
+                    // 仅在已有消息时显示会话标题，空状态保持极简
+                    if (state.messages.isNotEmpty()) {
+                        Text(state.sessionTitle,
+                            fontSize = 16.sp, fontWeight = FontWeight.SemiBold,
+                            maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.align(Alignment.Center).padding(horizontal = 60.dp))
+                    }
+
+                    IconButton(
+                        onClick = { viewModel.startNewSession(); haptics(HapticsType.Light) },
+                        modifier = Modifier.align(Alignment.CenterEnd).size(40.dp)
+                    ) {
+                        Icon(Icons.Outlined.Add, contentDescription = "新对话",
+                            modifier = Modifier.size(26.dp),
+                            tint = MaterialTheme.colorScheme.onSurface)
+                    }
+                }
             },
             bottomBar = {
-                Surface(shadowElevation = 8.dp, color = MaterialTheme.colorScheme.surface) {
-                    Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
-                        // 待发送图片附件提示
-                        if (pendingImagePath != null) {
-                            Surface(
-                                shape = RoundedCornerShape(12.dp),
-                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
-                                modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)
+                // 悬浮胶囊输入栏：左侧「+」选文件 · 中间输入 · 右侧圆形发送
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .navigationBarsPadding()
+                        .padding(horizontal = 20.dp, vertical = 8.dp)
+                ) {
+                    // 待发送图片附件提示
+                    if (pendingImagePath != null) {
+                        Surface(
+                            shape = RoundedCornerShape(14.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f)),
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
+                        ) {
+                            Row(
+                                Modifier.padding(start = 12.dp, end = 4.dp, top = 2.dp, bottom = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Row(
-                                    Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                                    verticalAlignment = Alignment.CenterVertically
+                                Icon(Icons.Outlined.Image, contentDescription = "图片",
+                                    modifier = Modifier.size(18.dp),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Spacer(Modifier.width(8.dp))
+                                Text(pendingImageName ?: "",
+                                    fontSize = 12.sp,
+                                    modifier = Modifier.weight(1f),
+                                    maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                IconButton(
+                                    onClick = {
+                                        pendingImagePath = null
+                                        pendingImageName = null
+                                    },
+                                    modifier = Modifier.size(30.dp)
                                 ) {
-                                    Icon(Icons.Outlined.Image,
-                                        contentDescription = "图片",
-                                        modifier = Modifier.size(18.dp),
+                                    Icon(Icons.Default.Close, contentDescription = "移除",
+                                        modifier = Modifier.size(16.dp),
                                         tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    Spacer(Modifier.width(6.dp))
-                                    Text(pendingImageName ?: "",
-                                        fontSize = 12.sp,
-                                        modifier = Modifier.weight(1f),
-                                        maxLines = 1, overflow = TextOverflow.Ellipsis,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    TextButton(
-                                        onClick = {
-                                            pendingImagePath = null
-                                            pendingImageName = null
-                                        }
-                                    ) { Text("移除", fontSize = 12.sp) }
                                 }
                             }
                         }
-                        Row(Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
+                    }
+
+                    val canSend = (inputText.isNotBlank() || pendingImagePath != null) && !state.isLoading
+                    Surface(
+                        shape = RoundedCornerShape(26.dp),
+                        color = MaterialTheme.colorScheme.surface,
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 5.dp),
+                            verticalAlignment = Alignment.Bottom
                         ) {
-                        IconButton(
-                            onClick = { filePickerLauncher.launch(arrayOf("*/*")) },
-                            enabled = !state.isLoading
-                        ) {
-                            Icon(Icons.Default.AttachFile, contentDescription = "选择文件")
-                        }
-                        Spacer(Modifier.width(4.dp))
-                        OutlinedTextField(value = inputText, onValueChange = { inputText = it },
-                            modifier = Modifier.weight(1f), placeholder = { Text("输入消息...") },
-                            shape = RoundedCornerShape(24.dp), maxLines = 4,
-                            enabled = !state.isLoading)
-                        Spacer(Modifier.width(8.dp))
-                        FilledIconButton(
-                            onClick = {
-                                if (inputText.isNotBlank() || pendingImagePath != null) {
-                                    viewModel.sendMessage(inputText.trim(), pendingImagePath)
-                                    inputText = ""
-                                    pendingImagePath = null
-                                    pendingImageName = null
+                            // 左侧「+」：选择文件 / 图片
+                            IconButton(
+                                onClick = { filePickerLauncher.launch(arrayOf("*/*")) },
+                                enabled = !state.isLoading,
+                                modifier = Modifier.size(40.dp)
+                            ) {
+                                Icon(Icons.Outlined.Add, contentDescription = "选择文件",
+                                    modifier = Modifier.size(24.dp),
+                                    tint = MaterialTheme.colorScheme.onSurface)
+                            }
+
+                            // 中间输入区（占位符「发消息」）
+                            Box(
+                                Modifier.weight(1f).padding(horizontal = 8.dp),
+                                contentAlignment = Alignment.CenterStart
+                            ) {
+                                BasicTextField(
+                                    value = inputText,
+                                    onValueChange = { inputText = it },
+                                    enabled = !state.isLoading,
+                                    textStyle = TextStyle(fontSize = 16.sp,
+                                        color = MaterialTheme.colorScheme.onSurface),
+                                    cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                                    maxLines = 5,
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 9.dp)
+                                )
+                                if (inputText.isEmpty()) {
+                                    Text("发消息", fontSize = 16.sp,
+                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f))
                                 }
-                            },
-                            enabled = (inputText.isNotBlank() || pendingImagePath != null) && !state.isLoading,
-                            modifier = Modifier.size(48.dp)
-                        ) { Icon(Icons.Default.Send, contentDescription = "发送") }
+                            }
+
+                            // 右侧圆形发送按钮（↑）
+                            Box(
+                                modifier = Modifier
+                                    .size(38.dp)
+                                    .clip(CircleShape)
+                                    .background(
+                                        if (canSend) MaterialTheme.colorScheme.primary
+                                        else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f)
+                                    )
+                                    .clickable(enabled = canSend) {
+                                        viewModel.sendMessage(inputText.trim(), pendingImagePath)
+                                        inputText = ""
+                                        pendingImagePath = null
+                                        pendingImageName = null
+                                        haptics(HapticsType.Light)
+                                    },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(Icons.Default.ArrowUpward, contentDescription = "发送",
+                                    modifier = Modifier.size(22.dp),
+                                    tint = if (canSend) MaterialTheme.colorScheme.onPrimary
+                                           else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.28f))
+                            }
                         }
                     }
                 }
@@ -206,12 +279,12 @@ fun ChatScreen(
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             SelectionContainer {
-                                Text("Android Agent", fontSize = 28.sp, fontWeight = FontWeight.Light,
-                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f))
+                                Text("有什么想聊的?", fontSize = 30.sp, fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface)
                             }
-                            Spacer(Modifier.height(6.dp))
-                            Text("开始一段新对话", fontSize = 14.sp,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f))
+                            Spacer(Modifier.height(16.dp))
+                            Text("一个问题，一个想法，都可以从这里开始。", fontSize = 15.sp,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.42f))
                         }
                     }
                 } else {
