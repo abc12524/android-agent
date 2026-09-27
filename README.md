@@ -25,9 +25,10 @@
 | `rename_session` | 设置对话标题 |
 | `openviking_search` | OpenViking 语义搜索（上下文感知） |
 | `openviking_remember` | 保存记忆到 OpenViking |
-| `openviking_delete_file` | 删除 OpenViking 文件 |
+| `openviking_forget` | 删除 OpenViking 记忆文件/目录（recursive 可递归删目录） |
 | `openviking_*` | OpenViking 综合管理（find/read/write/session 等 10 个 action） |
 | `file_*` | 对象存储 S3 兼容（upload/download/delete/list/copy 等 13 个 action） |
+| `deepseek_file_tool` | DeepSeek 文件暂存空间（upload/list/retrieve/delete/recognize 识别图像） |
 
 ### ☁️ 对象存储（S3 兼容）
 - 支持任何 S3 兼容服务（AWS S3、MinIO、Ceph、阿里云 OSS 等）

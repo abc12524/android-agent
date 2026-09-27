@@ -344,11 +344,13 @@ class OpenVikingClient {
         return gson.toJson(mapOf("success" to true, "count" to results.size, "results" to results))
     }
 
-    // ========== 删除文件 ==========
-    suspend fun deleteFile(uri: String): String {
-        val result = delete("/api/v1/fs?uri=${URLEncoder.encode(uri, "UTF-8")}")
+    // ========== 删除文件/目录（对齐 MCP forget：支持递归删除） ==========
+    suspend fun deleteFile(uri: String, recursive: Boolean = false): String {
+        val path = "/api/v1/fs?uri=${URLEncoder.encode(uri, "UTF-8")}" +
+            if (recursive) "&recursive=true" else ""
+        val result = delete(path)
         return result.fold(
-            onSuccess = { """{"success":true,"uri":"$uri"}""" },
+            onSuccess = { """{"success":true,"uri":"$uri","recursive":$recursive}""" },
             onFailure = { "{\"error\": \"${it.message}\"}" }
         )
     }

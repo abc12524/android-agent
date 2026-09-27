@@ -72,25 +72,31 @@ class OpenVikingRememberTool(private val ov: OpenVikingClient) : Tool {
 }
 
 /**
- * OpenViking 删除文件工具
+ * OpenViking 删除记忆工具（对齐 MCP forget：支持递归删除目录）
  */
-class OpenVikingDeleteFileTool(private val ov: OpenVikingClient) : Tool {
+class OpenVikingForgetTool(private val ov: OpenVikingClient) : Tool {
 
-    override val name: String = "openviking_delete_file"
+    override val name: String = "openviking_forget"
 
     override val description: String =
-        "通过 URI 删除 OpenViking 记忆中的文件。注意：此操作不可撤销！"
+        "从 OpenViking 中删除记忆文件或目录（对齐 MCP forget）。注意：此操作不可撤销！" +
+        "删除非空目录时必须将 recursive 设为 true"
 
     override val parameters: Map<String, Any> = mapOf(
         "type" to "object",
         "properties" to mapOf(
-            "uri" to mapOf("type" to "string", "description" to "要删除的文件 URI")
+            "uri" to mapOf("type" to "string", "description" to "要删除的文件/目录 URI"),
+            "recursive" to mapOf(
+                "type" to "boolean",
+                "description" to "是否递归删除目录及其所有子项（默认 false）"
+            )
         ),
         "required" to listOf("uri")
     )
 
     override suspend fun execute(args: Map<String, Any>): String {
         val uri = args["uri"] as? String ?: return "{\"error\": \"缺少 uri 参数\"}"
-        return ov.deleteFile(uri)
+        val recursive = args["recursive"] as? Boolean ?: false
+        return ov.deleteFile(uri, recursive)
     }
 }

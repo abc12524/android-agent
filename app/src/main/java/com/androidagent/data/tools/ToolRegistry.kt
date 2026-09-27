@@ -40,7 +40,7 @@ class ToolRegistry(context: Context) {
         register(SensorTool(context))
         register(OpenVikingSearchTool(OpenVikingClient()))
         register(OpenVikingRememberTool(OpenVikingClient()))
-        register(OpenVikingDeleteFileTool(OpenVikingClient()))
+        register(OpenVikingForgetTool(OpenVikingClient()))
         register(OtherOpenVikingTool(OpenVikingClient()))
         register(SSHTool())
         register(SCPTool())
@@ -50,6 +50,7 @@ class ToolRegistry(context: Context) {
         register(WaitTool())
         register(RenameSessionTool(this, context))
         register(ObjectStorageTool())
+        register(DeepSeekFileTool())
     }
 
     fun register(tool: Tool) {

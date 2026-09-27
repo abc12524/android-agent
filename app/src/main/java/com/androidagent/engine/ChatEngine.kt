@@ -587,7 +587,8 @@ class ChatEngine(private val context: Context) {
     /**
      * 构建用户消息。
      * 无图片时返回纯文本 content；带图片时上传 Files API 获取 file_id，
-     * 并返回 OpenAI 风格 content 数组（text + file 块）。仅 vision 模型支持图片。
+     * 并返回 OpenAI 风格 content 数组（text + file 块）。
+     * 当前在线模型均支持识图，不再校验模型名；API 报错原样上报给用户。
      */
     private suspend fun buildUserMessage(
         userMessage: String,
@@ -595,13 +596,6 @@ class ChatEngine(private val context: Context) {
     ): DeepSeekClient.ChatMessage {
         if (imageFilePath.isNullOrBlank()) {
             return DeepSeekClient.ChatMessage(role = "user", content = userMessage)
-        }
-
-        val model = AppPreferences.deepSeekModel
-        if (!model.contains("vision")) {
-            throw IllegalArgumentException(
-                "当前模型 $model 不支持图片识别，请在设置中切换到 deepseek-v4-flash-vision-exp"
-            )
         }
 
         val upload = deepSeek.uploadFile(File(imageFilePath)).getOrElse { throw it }
