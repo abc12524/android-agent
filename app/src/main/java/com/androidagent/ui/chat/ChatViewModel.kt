@@ -7,6 +7,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.androidagent.data.AppPreferences
+import com.androidagent.data.Billing
 import com.androidagent.data.db.AppDatabase
 import com.androidagent.data.api.DeepSeekClient
 import com.androidagent.data.model.ChatSession
@@ -31,6 +32,11 @@ data class ChatUiState(
     val todayCompletionTokens: Int = 0,
     val todayCacheHit: Int = 0,
     val todayCacheMiss: Int = 0,
+    // 会话累计费用（元）：输入缓存命中 / 未命中 / 输出
+    val costHit: Double = 0.0,
+    val costMiss: Double = 0.0,
+    val costOut: Double = 0.0,
+    val modelFamily: String = "flash",
     val lastUsage: DeepSeekClient.Usage? = null,
     val allSessions: List<ChatSession> = emptyList(),
     val balance: String = ""
@@ -117,6 +123,26 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 val todayHit = db.messageDao().getAllCacheHitSince(todayStart)
                 val todayMiss = db.messageDao().getAllCacheMissSince(todayStart)
 
+                // 会话累计费用：按每条 assistant 消息的时间分别判定峰谷价后累加
+                val family = AppPreferences.deepSeekModel
+                var costHit = 0.0
+                var costMiss = 0.0
+                var costOut = 0.0
+                messages.forEach { m ->
+                    if (m.role == "assistant" && (m.promptTokens > 0 || m.completionTokens > 0)) {
+                        val c = Billing.computeCost(
+                            cacheHit = m.promptCacheHitTokens,
+                            cacheMiss = m.promptCacheMissTokens,
+                            output = m.completionTokens,
+                            model = family,
+                            whenMs = m.timestamp,
+                        )
+                        costHit += c.hit
+                        costMiss += c.miss
+                        costOut += c.out
+                    }
+                }
+
                 uiState = uiState.copy(
                     messages = messages,
                     sessionTitle = session?.title ?: "新对话",
@@ -128,6 +154,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     todayCompletionTokens = todayCompletion,
                     todayCacheHit = todayHit,
                     todayCacheMiss = todayMiss,
+                    costHit = costHit,
+                    costMiss = costMiss,
+                    costOut = costOut,
+                    modelFamily = Billing.modelFamily(family),
                     balance = session?.balance ?: "",
                     lastUsage = messages.lastOrNull { it.role == "assistant" && it.promptTokens > 0 }?.let {
                         DeepSeekClient.Usage(

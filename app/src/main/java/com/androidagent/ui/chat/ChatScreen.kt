@@ -346,7 +346,16 @@ fun ChatScreen(
                         // 底部 token 统计
                         if (state.lastUsage != null) {
                             item(key = "token_footer") {
-                            TokenFooter(state.promptTokens, state.completionTokens, state.cacheHitTokens, state.cacheMissTokens, state.balance)
+                            TokenFooter(
+                                cacheHit = state.cacheHitTokens,
+                                cacheMiss = state.cacheMissTokens,
+                                sessionOut = state.completionTokens,
+                                costHit = state.costHit,
+                                costMiss = state.costMiss,
+                                costOut = state.costOut,
+                                family = state.modelFamily,
+                                balance = state.balance,
+                            )
                             }
                         }
                     }
@@ -367,13 +376,12 @@ fun ChatScreen(
 // ==================== Token 统计底部 ====================
 
 @Composable
-private fun TokenFooter(sessionIn: Int, sessionOut: Int,
-                        cacheHit: Int, cacheMiss: Int, balance: String) {
-    fun hitRate(hit: Int, miss: Int): String {
-        val total = hit + miss
-        if (total == 0) return "0%"
-        return "${(hit * 100 / total)}%"
-    }
+private fun TokenFooter(
+    cacheHit: Int, cacheMiss: Int, sessionOut: Int,
+    costHit: Double, costMiss: Double, costOut: Double,
+    family: String, balance: String,
+) {
+    val totalCost = costHit + costMiss + costOut
 
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -381,14 +389,30 @@ private fun TokenFooter(sessionIn: Int, sessionOut: Int,
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
     ) {
         Column(Modifier.padding(12.dp)) {
-            Text("Token 消耗", fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
+            Text("📊 Token 消耗统计 · $family · 合计 ¥${"%.4f".format(totalCost)}",
+                fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.height(6.dp))
+            TokenCostRow("输入(缓存命中)", cacheHit, costHit)
+            TokenCostRow("输入(缓存未命中)", cacheMiss, costMiss)
+            TokenCostRow("输出", sessionOut, costOut)
             Spacer(Modifier.height(4.dp))
-            Text("  会话 token：${sessionIn + sessionOut}  hit：$cacheHit  |  命中率 ${hitRate(cacheHit, cacheMiss)}",
-                fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
             Text("  当前余额：${balance.ifBlank { "无" }}",
                 fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
         }
+    }
+}
+
+@Composable
+private fun TokenCostRow(label: String, tokens: Int, cost: Double) {
+    val color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 1.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Text(label, fontSize = 11.sp, color = color)
+        Text("${"%,d".format(tokens)} tokens  ¥${"%.4f".format(cost)}",
+            fontSize = 11.sp, color = color)
     }
 }
 
