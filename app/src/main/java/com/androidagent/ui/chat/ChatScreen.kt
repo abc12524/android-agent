@@ -1,7 +1,5 @@
 package com.androidagent.ui.chat
 
-import dev.jeziellago.compose.markdowntext.MarkdownText
-
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -615,25 +613,8 @@ private fun StreamingReply(content: String, reasoning: String) {
                     Text("正在思考…", fontSize = 13.sp, color = BubbleAssistantText.copy(alpha = 0.6f))
                 }
             } else {
-                val blocks = remember(content) {
-                    try { markdownBlocks(content) }
-                    catch (_: Exception) { listOf(MdBlock.Text(content)) }
-                }
                 Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
-                    blocks.forEachIndexed { index, block ->
-                        when (block) {
-                            is MdBlock.Text -> MarkdownText(
-                                markdown = block.text,
-                                style = TextStyle(color = BubbleAssistantText, fontSize = 15.sp),
-                                syntaxHighlightColor = Color(0x80FFEB3B),
-                            )
-                            is MdBlock.Table -> MarkdownTable(
-                                table = block.table,
-                                textStyle = TextStyle(color = BubbleAssistantText, fontSize = 15.sp),
-                            )
-                        }
-                        if (index != blocks.lastIndex) Spacer(Modifier.height(6.dp))
-                    }
+                    MarkdownBody(content)
                     // 光标脉冲
                     BlinkingCursor(color = cs.onSurface.copy(alpha = 0.6f))
                 }
@@ -728,24 +709,8 @@ fun MessageBubble(msg: Message) {
                         bottomEnd = if (isUser) 4.dp else 16.dp),
                     color = bc
                 ) {
-                    val blocks = remember(msg.content) { markdownBlocks(msg.content) }
                     Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
-                        blocks.forEachIndexed { index, block ->
-                            when (block) {
-                                is MdBlock.Text -> MarkdownText(
-                                    markdown = block.text,
-                                    style = TextStyle(color = tc, fontSize = 15.sp),
-                                    syntaxHighlightColor = Color(0x80FFEB3B)
-                                )
-                                is MdBlock.Table -> MarkdownTable(
-                                    table = block.table,
-                                    textStyle = TextStyle(color = tc, fontSize = 15.sp)
-                                )
-                            }
-                            if (index != blocks.lastIndex) {
-                                Spacer(Modifier.height(6.dp))
-                            }
-                        }
+                        MarkdownBody(msg.content)
                     }
                 }
             }
