@@ -38,6 +38,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -69,8 +70,14 @@ fun ChatScreen(
 ) {
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
+    val keyboard = LocalSoftwareKeyboardController.current
 
     LaunchedEffect(sessionId) { viewModel.initSession(sessionId) }
+
+    // 打开侧边栏时收起输入法，避免键盘压住抽屉底部（如「设置」）
+    LaunchedEffect(drawerState.isOpen) {
+        if (drawerState.isOpen) keyboard?.hide()
+    }
 
     val state = viewModel.uiState
     var inputText by remember { mutableStateOf("") }
@@ -124,6 +131,7 @@ fun ChatScreen(
                 ) {
                     IconButton(
                         onClick = {
+                            keyboard?.hide()
                             scope.launch { drawerState.open() }
                             haptics(HapticsType.Light)
                         },
@@ -163,7 +171,8 @@ fun ChatScreen(
                 Column(
                     Modifier
                         .fillMaxWidth()
-                        .navigationBarsPadding()
+                        // 键盘弹出时把输入栏顶上去；用 union 取较大值，避免与导航栏内边距叠加
+                        .windowInsetsPadding(WindowInsets.navigationBars.union(WindowInsets.ime))
                         .padding(horizontal = 20.dp, vertical = 8.dp)
                 ) {
                     // 待发送图片附件提示
