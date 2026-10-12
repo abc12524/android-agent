@@ -1,24 +1,28 @@
-# android-agent skill 编写指南
+# android-agent skill 说明文档
 
-本目录（`filesDir/skills/`）是 **skill 自建工具** 的存放位置。每个 `*.py` 脚本就是一个
-可被 LLM 调用的工具；`skill` 工具会自动扫描本目录并注册，**新增脚本即自动生效，无需改核心代码**。
+本目录（`filesDir/skills/`）存放 **skill（自建 Python 工具）**。每个 `*.py` 脚本即一个
+可被 LLM 调用的工具；`skill` 工具会扫描本目录并按脚本头部**自动注册**：
+**放入脚本即自动生效，删除脚本即自动注销，无需改核心代码。**
 
 > 以 `_` 开头的文件（如 `_skill_runner.py`、`_envelope.py`）是运行时内部文件，不会被注册。
+
+`skill` 工具只负责**调用**已注册的 skill（以及 `delete` 注销），不再负责创建脚本。
+新增 skill 的方式是把脚本文件写进本目录（例如用 `system_tool` 的 `python` 动作写文件）。
 
 ## 目录与运行环境
 
 - 运行 Python：应用内置的 **Python 3.13**（完整标准库 + pip，清华源）。可用 `system_tool` 的
   `python_pip` 安装第三方包（如 `requests`）。
 - 脚本工作目录即本目录，可直接 `import` 同目录下的其他脚本或 `_envelope`。
-- 执行方式：`skill` 工具的 `action=run` 会在独立进程中导入脚本并调用 `run(arguments)`。
+- 执行方式：`skill` 工具的调用会在独立进程中导入脚本并调用 `run(arguments)`。
 
-## 脚本结构
+## 如何编写一个 skill
 
 ### 1. 头部元信息（文件最前面连续的 `#` 注释）
 
 ```python
-# skill: diskusage            # 名称（唯一，供 LLM 调用；同时是文件名，建议一致）
-# description: 查看各分区磁盘占用   # 一句话说明（列表与工具描述里展示）
+# skill: diskusage            # 名称（唯一，供 LLM 调用；通常与文件名一致）
+# description: 查看各分区磁盘占用   # 一句话说明（清单与用法里展示）
 # status: enable              # 可选，enable（默认）/ disable；disable 不向 LLM 披露
 # usage:
 #   arguments.path = 要统计的目录（默认 "/"）
@@ -48,37 +52,35 @@ def run(arguments):
     return ok({"path": path, "result": "..."})
 ```
 
-## 通过 `skill` 工具管理（LLM 用法）
+## 如何调用（LLM 用法，两段式逐步披露）
 
-`skill` 工具通过 `action` 分发：
+`skill` 工具通过 `action` 分发；子工具名即 **skill 名**：
 
-| action | 参数 | 说明 |
-|--------|------|------|
-| `list` | — | 列出所有已注册 skill（含绝对目录 `dir` 与每个脚本 `path`）、说明、状态 |
-| `usage` | `skill` | 查看某 skill 的用法 |
-| `run` | `skill`, `arguments` | 执行 skill，把 `arguments` 传给 `run()` |
-| `write` | `skill`, `description`, `usage`, `code` | 新建/覆盖一个 skill 脚本（自动注册） |
-| `delete` | `skill` | 删除 skill 脚本 |
-| `guide` | — | 返回本指南 |
+| 调用 | 说明 |
+|------|------|
+| `skill`（省略 action） | 返回**已注册 skill 清单**（仅名称 + 简短说明），自动反映新增/删除 |
+| `skill` + `action=<skill 名>` | 返回该 skill 的用法（description / usage / path） |
+| `skill` + `action=<skill 名>` + `params` | 执行该 skill，`params` 即传给 `run()` 的参数字典 |
+| `skill` + `action=delete` + `params.skill` | 删除（注销）某个 skill 脚本 |
 
-### 自建一个 skill（示例）
+### 示例
 
-调用 `skill` 工具：
+查看用法：
 
 ```json
-{
-  "action": "write",
-  "skill": "text_stats",
-  "description": "统计一段文本的字符数、词数、行数",
-  "usage": "arguments.text = 要统计的文本",
-  "code": "from _envelope import ok, error\n\ndef run(arguments):\n    text = arguments.get(\"text\")\n    if not isinstance(text, str):\n        return error(\"缺少 text 参数\", code=\"invalid_argument\")\n    return ok({\n        \"chars\": len(text),\n        \"words\": len(text.split()),\n        \"lines\": text.count(chr(10)) + 1,\n    })\n"
-}
+{"action": "text_stats"}
 ```
 
-随后即可：
+执行（`params` 直接作为 `run(arguments)` 的入参）：
 
 ```json
-{"action": "run", "skill": "text_stats", "arguments": {"text": "hello world"}}
+{"action": "text_stats", "params": {"text": "hello world"}}
+```
+
+注销：
+
+```json
+{"action": "delete", "params": {"skill": "text_stats"}}
 ```
 
 ## 约定与建议
@@ -88,4 +90,4 @@ def run(arguments):
 - **错误码**：`invalid_argument` / `not_found` / `unknown_skill` / `io_error` / `internal` 等。
 - **幂等与安全**：涉及删除/写文件等危险操作时，校验参数并在说明中写明。
 - **依赖**：优先标准库；需要第三方库时用 `system_tool` 的 `python_pip` 安装。
-- **状态控制**：临时下线某 skill，把头部 `# status:` 改为 `disable`（仍可 `usage`/`run`，只是不主动披露）。
+- **状态控制**：临时下线某 skill，把头部 `# status:` 改为 `disable`（仍可按名调用，只是不出现在清单里）。

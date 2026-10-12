@@ -85,8 +85,9 @@ fun SettingsScreen(
 【记忆规则】
 - 发现错误记忆 → 立即修正，不留错误
 
-【工具自建】
-需要新能力时，可用 skill 工具自建 Python 工具：先 action=guide 阅读编写规范，再 action=write 新建脚本，action=run 调用。"""
+【工具扩展】
+skill 工具用于调用已注册的自建 Python 工具：省略 action 查看已注册清单，action=<skill 名> 查看用法，action=<skill 名> + params 调用，action=delete 删除。
+需要新增能力时，用 system_tool 的 python 把脚本写入 skills/ 目录即自动注册（编写规范见该目录 README.md）。"""
         }
     ) }
     var showKeys by remember { mutableStateOf(false) }

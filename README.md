@@ -19,7 +19,7 @@
 | `phone_tool` | `system_info` / `gps` / `notify` / `sound` / `sensor` / `rename_session` |
 | `openviking_tool` | `search` / `find` / `remember` / `forget` / `read` / `list_dir` / `write_file` |
 | `file_tool` | `upload` / `download` / `delete` / `delete_batch` / `list` / `copy` / `head` / `list_buckets` / `create_bucket` / `delete_bucket` / `presign` / `create_folder` / `delete_folder` |
-| `skill` | `list` / `usage` / `run` / `write` / `delete` / `guide`（自建 Python 工具，脚本目录 `skills/`） |
+| `skill` | 已注册的自建工具（子工具名即 skill 名，逐步披露）；`delete` 注销。脚本目录 `skills/` |
 
 **两段式调用**（渐进披露，首次只暴露工具名与子工具名，用法按需返回）：
 - 不传 `action` → 返回该大工具下全部子工具及简短说明；
@@ -29,9 +29,10 @@
 > 用户发送图片时自动上传并交由 vision 模型识别，无需 LLM 调用工具。
 
 ### 🧩 skill 自建工具
-- 复刻 shell-tool 的 skill 机制：`skills/` 目录下的 `*.py` 脚本按头部元信息自动注册为可调用工具
+- `skills/` 目录下的 `*.py` 脚本按头部元信息**自动注册**为可调用工具：放入即生效，删除即注销，无需改核心代码
+- `skill` 工具只负责**调用**（不负责创建）：省略 action 返回已注册清单，`action=<skill 名>` 查看用法，`action=<skill 名>` + `params` 执行，`action=delete` 注销
+- 新增 skill 只需把脚本写进 `skills/`（可用 `system_tool` 的 `python` 动作），编写规范见 `skills/README.md`
 - 脚本定义 `run(arguments)` 并返回统一信封 `{"status":"ok","result":{...}}` / `{"status":"error",...}`
-- LLM 可用 `skill` 工具的 `guide` 读取编写指南、`write` 新建脚本、`run` 执行，实现「自我扩展能力」
 - 运行在应用内置的 Python 3.13 环境；`skills/` 初始为空
 
 ### ☁️ 对象存储（S3 兼容）

@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""android-agent skill runner —— 自建工具的自动注册与执行入口。
+"""android-agent skill runner —— 已注册 skill 的调用入口（不负责创建）。
 
-复刻 shell-tool 的 skill 机制：扫描本目录下的 skill 脚本（``*.py``，跳过以 ``_``
-开头的文件），按脚本头部自动注册；脚本定义 ``run(arguments) -> (str | dict)``，
-返回统一信封 ``{"status": "ok", "result": {...}}`` / ``{"status": "error", ...}``。
+扫描本目录下的 skill 脚本（``*.py``，跳过以 ``_`` 开头的文件）按脚本头部自动注册；
+脚本定义 ``run(arguments) -> (str | dict)``，返回统一信封
+``{"status": "ok", "result": {...}}`` / ``{"status": "error", ...}``。
+脚本的编写规范见同目录 README.md。
 
 本文件由 Kotlin 侧 SkillTool 调用，每次调用都是一个全新进程：
 
@@ -12,12 +13,9 @@
 
 ``request.json`` 结构::
 
-    {"action": "list|usage|run|write|delete|guide",
-     "skill": "<名称>",           # usage / run / write / delete 使用
-     "arguments": {...},          # run 时传给脚本 run() 的参数字典
-     "description": "...",        # write 时写入头部
-     "usage": "...",              # write 时写入头部
-     "code": "..."}               # write 时技能源码
+    {"action": "list|usage|run|delete",
+     "skill": "<名称>",           # usage / run / delete 使用
+     "arguments": {...}}          # run 时传给脚本 run() 的参数字典
 
 stdout 只输出一个 JSON 信封。
 """
@@ -212,31 +210,6 @@ def act_run(skill, arguments):
     return payload
 
 
-def act_write(req):
-    name = (req.get("skill") or req.get("name") or "").strip()
-    if not _NAME_RE.match(name):
-        return error("非法 skill 名称（仅允许字母/数字/下划线/连字符，1-64 位）", code="invalid_name")
-    description = (req.get("description") or "").strip() or name
-    usage = (req.get("usage") or "").strip()
-    code = req.get("code") or ""
-    if not code.strip():
-        return error("缺少 code 参数（skill 的 Python 源码）", code="missing_code")
-
-    path = os.path.join(SKILL_DIR, name + ".py")
-    header = ["# skill: %s" % name, "# description: %s" % description, "# status: enable"]
-    if usage:
-        header.append("# usage:")
-        for ln in usage.splitlines():
-            header.append("#   %s" % ln)
-    header.append("")
-    try:
-        with open(path, "w", encoding="utf-8") as f:
-            f.write("\n".join(header) + "\n" + code.rstrip() + "\n")
-    except OSError as e:
-        return error("写入失败 - %s" % e, code="io_error")
-    return ok({"skill": name, "path": path, "created": True})
-
-
 def act_delete(skill):
     name = (skill or "").strip()
     if not _NAME_RE.match(name):
@@ -249,31 +222,6 @@ def act_delete(skill):
     except OSError as e:
         return error("删除失败 - %s" % e, code="io_error")
     return ok({"skill": name, "deleted": True})
-
-
-_FALLBACK_GUIDE = (
-    "# android-agent skill 编写指南\n\n"
-    "1. skill 是放在 skills/ 目录下的单个 Python 脚本（*.py，文件名不要以 '_' 开头）。\n"
-    "2. 文件头部用注释声明元信息：\n"
-    "   # skill: <名称>\n"
-    "   # description: <一句话说明>\n"
-    "   # status: enable   (可选，disable 表示不向 LLM 披露)\n"
-    "   # usage:\n"
-    "   #   <参数与示例，可多行>\n"
-    "3. 文件定义一个函数 run(arguments: dict)，返回 dict（如 {\"ok\": true, ...}）\n"
-    "   或统一信封字符串；不要在 run 里 print。\n"
-    "4. 可 `from _envelope import ok, error` 使用统一信封工具。\n"
-    "5. 通过 skill 工具 action=write 新建脚本，action=run 执行。\n"
-)
-
-
-def act_guide():
-    readme = os.path.join(SKILL_DIR, "README.md")
-    try:
-        with open(readme, encoding="utf-8") as f:
-            return ok({"guide": f.read()})
-    except OSError:
-        return ok({"guide": _FALLBACK_GUIDE})
 
 
 def main():
@@ -295,12 +243,8 @@ def main():
             out = act_usage(req.get("skill") or "")
         elif action == "run":
             out = act_run(req.get("skill") or "", req.get("arguments"))
-        elif action == "write":
-            out = act_write(req)
         elif action == "delete":
             out = act_delete(req.get("skill") or "")
-        elif action == "guide":
-            out = act_guide()
         else:
             out = error("未知操作: %s" % action, code="unknown_action")
     except Exception as e:
