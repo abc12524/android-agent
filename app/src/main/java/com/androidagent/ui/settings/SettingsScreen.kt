@@ -1,16 +1,15 @@
 package com.androidagent.ui.settings
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
@@ -20,8 +19,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -31,7 +32,6 @@ import com.androidagent.BuildConfig
 import com.androidagent.data.AppPreferences
 import com.androidagent.data.api.DeepSeekClient
 import com.androidagent.data.updater.AppUpdater
-import com.androidagent.ui.theme.AppRadii
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -296,7 +296,7 @@ fun SettingsScreen(
     }
 }
 
-// ==================== 根菜单（kelivo 式分组菜单） ====================
+// ==================== 根菜单（分组列表风格） ====================
 
 @Composable
 private fun SettingsRootMenu(
@@ -307,52 +307,40 @@ private fun SettingsRootMenu(
     onSave: () -> Unit,
     onNavigate: (String) -> Unit,
 ) {
-    val cs = MaterialTheme.colorScheme
     Column(
         modifier = modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp),
+            .padding(horizontal = 20.dp),
     ) {
         Spacer(Modifier.height(8.dp))
 
         MenuSectionTitle("通用设置")
-        MenuSection {
-            MenuNavRow(Icons.Outlined.Tune, "功能与提示词", "安全 · 后台保活 · 系统提示词") { onNavigate("features") }
-            MenuDivider(cs)
-            MenuNavRow(Icons.Outlined.Info, "关于", "说明 · 版本与更新") { onNavigate("about") }
-        }
+        MenuNavRow(Icons.Outlined.Tune, "功能与提示词") { onNavigate("features") }
+        MenuDivider()
+        MenuNavRow(Icons.Outlined.Info, "关于") { onNavigate("about") }
 
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(28.dp))
 
         MenuSectionTitle("模型与服务")
-        MenuSection {
-            MenuNavRow(Icons.Outlined.Cloud, "API 配置", "DeepSeek 模型与接口") { onNavigate("api") }
-            MenuDivider(cs)
-            MenuNavRow(Icons.Outlined.Psychology, "OpenViking 记忆", "服务器 · 检索 · 记忆高级") { onNavigate("ov") }
-            MenuDivider(cs)
-            MenuNavRow(Icons.Outlined.Storage, "对象存储 / S3", "rustfs 兼容") { onNavigate("storage") }
-            MenuDivider(cs)
-            MenuNavRow(Icons.Outlined.Download, "配置导入", "远程 JSON 一键导入") { onNavigate("import") }
+        MenuNavRow(Icons.Outlined.Cloud, "API 配置") { onNavigate("api") }
+        MenuDivider()
+        MenuNavRow(Icons.Outlined.Psychology, "OpenViking 记忆") { onNavigate("ov") }
+        MenuDivider()
+        MenuNavRow(Icons.Outlined.Storage, "对象存储 / S3") { onNavigate("storage") }
+        MenuDivider()
+        MenuNavRow(Icons.Outlined.Download, "配置导入") { onNavigate("import") }
+
+        Spacer(Modifier.height(28.dp))
+
+        MenuSectionTitle("其它")
+        MenuNavRow(Icons.Outlined.Image, "显示 API Key", value = if (showKeys) "开" else "关") {
+            onToggleShowKeys(!showKeys)
         }
 
-        Spacer(Modifier.height(16.dp))
-
-        // 显示密钥 + 保存
-        MenuSection {
-            MenuToggleRow(cs, "显示 API Key", "明文展示密钥输入框", showKeys, onToggleShowKeys)
-            MenuDivider(cs)
-            Row(
-                Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Button(onClick = onSave, enabled = !saved, modifier = Modifier.fillMaxWidth()) {
-                    Text(if (saved) "已保存" else "保存")
-                }
-            }
-        }
-
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(20.dp))
+        PillButton(text = if (saved) "已保存" else "保存", enabled = !saved, onClick = onSave)
+        Spacer(Modifier.height(24.dp))
     }
 }
 
@@ -360,83 +348,47 @@ private fun SettingsRootMenu(
 private fun MenuSectionTitle(text: String) {
     Text(
         text,
-        fontSize = 12.sp,
-        fontWeight = FontWeight.SemiBold,
-        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-        modifier = Modifier.padding(start = 6.dp, bottom = 6.dp, top = 2.dp),
+        fontSize = 13.sp,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(start = 2.dp, top = 4.dp, bottom = 6.dp),
     )
 }
 
 @Composable
-private fun MenuSection(content: @Composable ColumnScope.() -> Unit) {
-    val cs = MaterialTheme.colorScheme
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = AppRadii.card,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f)),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-        border = BorderStroke(0.8.dp, cs.outlineVariant.copy(alpha = 0.12f)),
-    ) {
-        Column(content = content)
-    }
-}
-
-@Composable
-private fun MenuDivider(cs: androidx.compose.material3.ColorScheme) {
+private fun MenuDivider() {
     HorizontalDivider(
-        color = cs.outlineVariant.copy(alpha = 0.5f),
-        modifier = Modifier.padding(horizontal = 12.dp),
+        thickness = 0.6.dp,
+        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+        modifier = Modifier.padding(start = 40.dp),
     )
 }
 
 @Composable
-private fun MenuNavRow(icon: ImageVector, label: String, subtitle: String? = null, onClick: () -> Unit) {
+private fun MenuNavRow(icon: ImageVector, label: String, value: String? = null, onClick: () -> Unit) {
     val cs = MaterialTheme.colorScheme
     Row(
-        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 14.dp, vertical = 12.dp),
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable(onClick = onClick)
+            .padding(vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        MenuLeadingIcon(icon, cs)
-        Spacer(Modifier.width(12.dp))
-        Column(Modifier.weight(1f)) {
-            Text(label, fontSize = 15.sp, color = cs.onSurface)
-            if (subtitle != null) Text(subtitle, fontSize = 12.sp, color = cs.onSurface.copy(alpha = 0.5f))
+        Icon(icon, contentDescription = null, tint = cs.onSurface, modifier = Modifier.size(24.dp))
+        Spacer(Modifier.width(16.dp))
+        Text(label, fontSize = 16.sp, color = cs.onSurface, modifier = Modifier.weight(1f))
+        if (value != null) {
+            Text(value, fontSize = 14.sp, color = cs.onSurfaceVariant)
+            Spacer(Modifier.width(4.dp))
         }
         Icon(
-            Icons.Filled.KeyboardArrowRight,
+            Icons.AutoMirrored.Outlined.KeyboardArrowRight,
             contentDescription = null,
             tint = cs.onSurface.copy(alpha = 0.35f),
+            modifier = Modifier.size(20.dp),
         )
-    }
-}
-
-@Composable
-private fun MenuToggleRow(cs: androidx.compose.material3.ColorScheme, title: String, subtitle: String, checked: Boolean, onChecked: (Boolean) -> Unit) {
-    Row(
-        Modifier.fillMaxWidth().clickable { onChecked(!checked) }.padding(horizontal = 14.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(Modifier.weight(1f)) {
-            Text(title, fontSize = 15.sp, color = cs.onSurface)
-            Text(subtitle, fontSize = 12.sp, color = cs.onSurface.copy(alpha = 0.5f))
-        }
-        Switch(checked = checked, onCheckedChange = onChecked)
-    }
-}
-
-@Composable
-private fun MenuLeadingIcon(icon: ImageVector, cs: androidx.compose.material3.ColorScheme) {
-    Box(
-        Modifier.size(30.dp).clip(CircleShape).background(cs.surface.copy(alpha = 0.6f)),
-        contentAlignment = Alignment.Center,
-    ) {
-        Icon(icon, contentDescription = null, tint = cs.primary, modifier = Modifier.size(18.dp))
     }
 }
 
 // ==================== 各分页 ====================
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ApiPage(
     deepSeekKey: String, deepSeekBaseUrl: String, deepSeekModel: String,
@@ -445,50 +397,32 @@ private fun ApiPage(
     onKey: (String) -> Unit, onBaseUrl: (String) -> Unit, onModel: (String) -> Unit,
     onModelMenuExpanded: (Boolean) -> Unit, onRefreshModels: (() -> Unit),
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            SectionTitle("DeepSeek API")
-            Spacer(Modifier.height(6.dp))
-            OutlinedTextField(
-                value = deepSeekKey, onValueChange = onKey,
-                label = { Text("API Key") }, modifier = Modifier.fillMaxWidth(), singleLine = true,
-                visualTransformation = if (showKeys) VisualTransformation.None else PasswordVisualTransformation()
-            )
-            Spacer(Modifier.height(6.dp))
-            OutlinedTextField(
-                value = deepSeekBaseUrl, onValueChange = onBaseUrl,
-                label = { Text("Base URL") }, modifier = Modifier.fillMaxWidth(), singleLine = true
-            )
-            Spacer(Modifier.height(6.dp))
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                ExposedDropdownMenuBox(
-                    expanded = modelMenuExpanded,
-                    onExpandedChange = { if (modelOptions.isNotEmpty()) onModelMenuExpanded(it) },
-                    modifier = Modifier.weight(1f)
-                ) {
-                    OutlinedTextField(
-                        value = deepSeekModel, onValueChange = onModel,
-                        label = { Text("模型") }, modifier = Modifier.fillMaxWidth().menuAnchor(),
-                        singleLine = true,
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = modelMenuExpanded) }
-                    )
-                    ExposedDropdownMenu(expanded = modelMenuExpanded, onDismissRequest = { onModelMenuExpanded(false) }) {
-                        modelOptions.forEach { m ->
-                            DropdownMenuItem(text = { Text(m) }, onClick = { onModel(m); onModelMenuExpanded(false) })
-                        }
-                    }
-                }
+    FormTitle("DeepSeek API")
+    Spacer(Modifier.height(2.dp))
+    FormField("API Key", deepSeekKey, onKey, masked = !showKeys)
+    FormField("Base URL", deepSeekBaseUrl, onBaseUrl)
+    Box {
+        FormField(
+            label = "模型",
+            value = deepSeekModel,
+            onValueChange = {},
+            readOnly = true,
+            onClick = { if (modelOptions.isNotEmpty()) onModelMenuExpanded(true) },
+            trailing = {
                 IconButton(onClick = onRefreshModels, enabled = !modelLoading) {
                     if (modelLoading) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                    else Icon(Icons.Default.Refresh, contentDescription = "刷新模型列表")
+                    else Icon(Icons.Default.Refresh, contentDescription = "刷新模型列表",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-            }
-            if (modelError != null) {
-                Spacer(Modifier.height(2.dp))
-                Text(modelError!!, fontSize = 11.sp, color = MaterialTheme.colorScheme.error)
+            },
+        )
+        DropdownMenu(expanded = modelMenuExpanded, onDismissRequest = { onModelMenuExpanded(false) }) {
+            modelOptions.forEach { m ->
+                DropdownMenuItem(text = { Text(m) }, onClick = { onModel(m); onModelMenuExpanded(false) })
             }
         }
     }
+    if (modelError != null) FormNote(modelError, isError = true)
 }
 
 @Composable
@@ -503,59 +437,40 @@ private fun OvPage(
     onFindThreshold: (String) -> Unit, onFindLimit: (String) -> Unit, onPeerId: (String) -> Unit,
     onWorkspacePeer: (Boolean) -> Unit, onRecallDedup: (Boolean) -> Unit,
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            SectionTitle("OpenViking 记忆")
-            Spacer(Modifier.height(6.dp))
-            OutlinedTextField(value = ovUrl, onValueChange = onUrl, label = { Text("服务器地址") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-            Spacer(Modifier.height(6.dp))
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                OutlinedTextField(value = ovKey, onValueChange = onKey, label = { Text("API Key") }, modifier = Modifier.weight(1f), singleLine = true,
-                    visualTransformation = if (showKeys) VisualTransformation.None else PasswordVisualTransformation())
-                OutlinedTextField(value = ovUser, onValueChange = onUser, label = { Text("用户名") }, modifier = Modifier.weight(1f), singleLine = true)
-            }
+    FormTitle("连接")
+    Spacer(Modifier.height(2.dp))
+    FormField("服务器地址", ovUrl, onUrl)
+    FormField("API Key", ovKey, onKey, masked = !showKeys)
+    FormField("用户名", ovUser, onUser)
 
-            HorizontalDivider(Modifier.padding(vertical = 10.dp))
+    Spacer(Modifier.height(24.dp))
+    FormTitle("搜索工具")
+    Spacer(Modifier.height(2.dp))
+    FormField("匹配阈值 (0-1)", ovScoreThreshold, onValueChange = { v ->
+        onThreshold(v.filter { c -> c.isDigit() || c == '.' })
+    })
+    FormField("返回条数 (0=关闭)", ovSearchDisplayCount, onValueChange = { v ->
+        val filtered = v.filter { c -> c.isDigit() }
+        if ((filtered.toIntOrNull() ?: 0) in 0..10) onDisplayCount(filtered)
+    })
 
-            SubTitle("搜索工具")
-            Spacer(Modifier.height(6.dp))
-            OutlinedTextField(value = ovScoreThreshold, onValueChange = { v ->
-                onThreshold(v.filter { c -> c.isDigit() || c == '.' })
-            }, label = { Text("匹配阈值 (0-1，如 0.52)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-            Text("阈值越高召回越精准。LLM 调用搜索未指定时使用此值。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Spacer(Modifier.height(6.dp))
-            OutlinedTextField(value = ovSearchDisplayCount, onValueChange = { v ->
-                val filtered = v.filter { c -> c.isDigit() }
-                val num = filtered.toIntOrNull() ?: 0
-                if (num in 0..10) onDisplayCount(filtered)
-            }, label = { Text("返回条数 (0=关闭)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+    Spacer(Modifier.height(24.dp))
+    FormTitle("自动注入")
+    Spacer(Modifier.height(2.dp))
+    FormField("匹配阈值 (0-1)", ovFindThreshold, onValueChange = { v ->
+        onFindThreshold(v.filter { c -> c.isDigit() || c == '.' })
+    })
+    FormField("注入条数 (0=关闭)", ovFindLimit, onValueChange = { v ->
+        val filtered = v.filter { c -> c.isDigit() }
+        if ((filtered.toIntOrNull() ?: 0) in 0..10) onFindLimit(filtered)
+    })
 
-            HorizontalDivider(Modifier.padding(vertical = 10.dp))
-
-            SubTitle("自动注入")
-            Spacer(Modifier.height(6.dp))
-            OutlinedTextField(value = ovFindThreshold, onValueChange = { v ->
-                onFindThreshold(v.filter { c -> c.isDigit() || c == '.' })
-            }, label = { Text("匹配阈值 (0-1，如 0.5)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-            Text("对话时自动检索并注入相关记忆的阈值。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Spacer(Modifier.height(6.dp))
-            OutlinedTextField(value = ovFindLimit, onValueChange = { v ->
-                val filtered = v.filter { c -> c.isDigit() }
-                val num = filtered.toIntOrNull() ?: 0
-                if (num in 0..10) onFindLimit(filtered)
-            }, label = { Text("注入条数 (0=关闭)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-
-            HorizontalDivider(Modifier.padding(vertical = 10.dp))
-
-            SubTitle("记忆高级")
-            Spacer(Modifier.height(6.dp))
-            OutlinedTextField(value = ovPeerId, onValueChange = onPeerId, label = { Text("Peer ID（留空则按应用自动派生）") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-            Spacer(Modifier.height(8.dp))
-
-            SwitchRow("按应用派生 Peer", "不同应用记忆互相隔离", onWorkspacePeer, ovWorkspacePeer)
-            SwitchRow("召回去重", "跨轮不重复注入同一记忆", onRecallDedup, ovRecallDedup)
-        }
-    }
+    Spacer(Modifier.height(24.dp))
+    FormTitle("记忆高级")
+    Spacer(Modifier.height(2.dp))
+    FormField("Peer ID（留空则按应用自动派生）", ovPeerId, onPeerId)
+    FormSwitchRow("按应用派生 Peer", ovWorkspacePeer, onWorkspacePeer)
+    FormSwitchRow("召回去重", ovRecallDedup, onRecallDedup)
 }
 
 @Composable
@@ -563,19 +478,11 @@ private fun StoragePage(
     s3Endpoint: String, s3AccessKey: String, s3SecretKey: String, showKeys: Boolean,
     onEndpoint: (String) -> Unit, onAccessKey: (String) -> Unit, onSecretKey: (String) -> Unit,
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            SectionTitle("对象存储 (S3)")
-            Spacer(Modifier.height(6.dp))
-            OutlinedTextField(value = s3Endpoint, onValueChange = onEndpoint, label = { Text("服务地址 (如 http://192.168.1.100:9000)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-            Spacer(Modifier.height(6.dp))
-            OutlinedTextField(value = s3AccessKey, onValueChange = onAccessKey, label = { Text("Access Key") }, modifier = Modifier.fillMaxWidth(), singleLine = true,
-                visualTransformation = if (showKeys) VisualTransformation.None else PasswordVisualTransformation())
-            Spacer(Modifier.height(6.dp))
-            OutlinedTextField(value = s3SecretKey, onValueChange = onSecretKey, label = { Text("Secret Key") }, modifier = Modifier.fillMaxWidth(), singleLine = true,
-                visualTransformation = if (showKeys) VisualTransformation.None else PasswordVisualTransformation())
-        }
-    }
+    FormTitle("连接设置")
+    Spacer(Modifier.height(2.dp))
+    FormField("端点", s3Endpoint, onEndpoint)
+    FormField("访问密钥 ID", s3AccessKey, onAccessKey, masked = !showKeys)
+    FormField("秘密访问密钥", s3SecretKey, onSecretKey, masked = !showKeys)
 }
 
 @Composable
@@ -583,60 +490,19 @@ private fun FeaturesPage(
     skipSsl: Boolean, maxRounds: String, thinkingTimeout: String, backgroundEnabled: Boolean, systemPrompt: String,
     onSkipSsl: (Boolean) -> Unit, onMaxRounds: (String) -> Unit, onThinkingTimeout: (String) -> Unit, onBackgroundEnabled: (Boolean) -> Unit, onSystemPrompt: (String) -> Unit,
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Switch(checked = skipSsl, onCheckedChange = onSkipSsl)
-            Spacer(Modifier.width(8.dp))
-            Column {
-                Text("跳过证书验证", style = MaterialTheme.typography.bodyMedium)
-                Text("适用于自签名 HTTPS（OpenViking / 对象存储等全局生效）", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        }
-    }
+    FormTitle("功能")
+    Spacer(Modifier.height(2.dp))
+    FormField("最大工具调用轮次", maxRounds, onValueChange = { onMaxRounds(it.filter { c -> c.isDigit() }) })
+    FormField("思考熔断（分钟，0=关闭）", thinkingTimeout, onValueChange = { onThinkingTimeout(it.filter { c -> c.isDigit() }) })
+    FormSwitchRow("后台保活", backgroundEnabled, onBackgroundEnabled)
+    FormSwitchRow("跳过证书验证（自签名 HTTPS）", skipSsl, onSkipSsl)
 
-    Spacer(Modifier.height(12.dp))
-
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            SectionTitle("功能")
-            Spacer(Modifier.height(8.dp))
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text("最大工具调用轮次", modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
-                OutlinedTextField(value = maxRounds, onValueChange = { onMaxRounds(it.filter { c -> c.isDigit() }) }, modifier = Modifier.width(72.dp), singleLine = true)
-            }
-            HorizontalDivider(Modifier.padding(vertical = 6.dp))
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("思考熔断", style = MaterialTheme.typography.bodyMedium)
-                    Text("思维链超过该分钟数后注入提示直接作答 (0=关闭)", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                OutlinedTextField(value = thinkingTimeout, onValueChange = { onThinkingTimeout(it.filter { c -> c.isDigit() }) }, modifier = Modifier.width(72.dp), singleLine = true)
-            }
-            HorizontalDivider(Modifier.padding(vertical = 6.dp))
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("后台保活", style = MaterialTheme.typography.bodyMedium)
-                    Text("切到后台时保持运行", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                Switch(checked = backgroundEnabled, onCheckedChange = onBackgroundEnabled)
-            }
-        }
-    }
-
-    Spacer(Modifier.height(12.dp))
-
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            SectionTitle("系统提示词")
-            Spacer(Modifier.height(4.dp))
-            Text("自定义系统提示词，留空则使用默认。修改后新对话生效。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Spacer(Modifier.height(6.dp))
-            OutlinedTextField(value = systemPrompt, onValueChange = onSystemPrompt, label = { Text("系统提示词") }, modifier = Modifier.fillMaxWidth().height(200.dp), maxLines = 10)
-        }
-    }
+    Spacer(Modifier.height(24.dp))
+    FormTitle("系统提示词")
+    Spacer(Modifier.height(2.dp))
+    FormField("系统提示词（留空用默认，新对话生效）", systemPrompt, onSystemPrompt, singleLine = false)
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ImportPage(
     configUrl: String, importing: Boolean, importMsg: String?, remoteJson: String?,
@@ -646,120 +512,114 @@ private fun ImportPage(
     onRefreshFromPrefs: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            SectionTitle("配置导入")
-            Spacer(Modifier.height(4.dp))
-            Text("填入返回 JSON 的配置地址，可包含多个账号（顶层 key 为账号名，其对象为设置）。加载后选择账号一键应用，免去逐项输入。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Spacer(Modifier.height(6.dp))
-            OutlinedTextField(value = configUrl, onValueChange = onConfigUrl, label = { Text("配置地址 (JSON)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-            Spacer(Modifier.height(8.dp))
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = {
-                    onLoadingAccounts(true); onImportMsg(null)
-                    scope.launch {
-                        try {
-                            val json = withContext(Dispatchers.IO) { fetchConfigText(configUrl) }
-                            AppPreferences.configUrl = configUrl
-                            onRemoteJson(json)
-                            val accounts = AppPreferences.listConfigAccounts(json)
-                            onAccountOptions(accounts)
-                            onSelectedAccount(if (accounts.size == 1) accounts[0] else null)
-                            onImportMsg(if (accounts.isEmpty()) "已加载（扁平配置），可直接应用" else "找到 ${accounts.size} 个账号，请选择后应用")
-                        } catch (e: Exception) {
-                            onImportMsg("加载失败: ${e.message ?: e.javaClass.simpleName}")
-                        } finally {
-                            onLoadingAccounts(false)
-                        }
-                    }
-                }, enabled = !loadingAccounts && configUrl.isNotBlank()) {
-                    if (loadingAccounts) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                    else Text("加载")
-                }
-                if (accountOptions.isNotEmpty()) {
-                    ExposedDropdownMenuBox(expanded = accountMenuExpanded, onExpandedChange = onAccountMenuExpanded, modifier = Modifier.weight(1f)) {
-                        OutlinedTextField(value = selectedAccount ?: "选择账号", onValueChange = {}, label = { Text("账号") }, modifier = Modifier.fillMaxWidth().menuAnchor(), singleLine = true, readOnly = true, trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = accountMenuExpanded) })
-                        ExposedDropdownMenu(expanded = accountMenuExpanded, onDismissRequest = { onAccountMenuExpanded(false) }) {
-                            accountOptions.forEach { a -> DropdownMenuItem(text = { Text(a) }, onClick = { onSelectedAccount(a); onAccountMenuExpanded(false) }) }
-                        }
-                    }
-                }
-            }
-            Spacer(Modifier.height(8.dp))
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = {
-                    onImporting(true); onImportMsg(null)
-                    scope.launch {
-                        try {
-                            val json = remoteJson ?: withContext(Dispatchers.IO) { fetchConfigText(configUrl) }
-                            val applied = AppPreferences.applyRemoteConfig(json, selectedAccount)
-                            onRefreshFromPrefs()
-                            onImportMsg("已应用 $applied 项配置" + if (selectedAccount != null) "（账号: $selectedAccount）" else "")
-                        } catch (e: Exception) {
-                            onImportMsg("应用失败: ${e.message ?: e.javaClass.simpleName}")
-                        } finally {
-                            onImporting(false)
-                        }
-                    }
-                }, enabled = !importing && remoteJson != null) {
-                    if (importing) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                    else Text("应用配置")
-                }
-                if (importMsg != null) {
-                    Text(importMsg!!, style = MaterialTheme.typography.bodySmall,
-                        color = if (importMsg!!.startsWith("加载失败") || importMsg!!.startsWith("应用失败")) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
+    FormTitle("配置导入")
+    Spacer(Modifier.height(2.dp))
+    FormField("配置地址 (JSON)", configUrl, onConfigUrl)
+    if (accountOptions.isNotEmpty()) {
+        Box {
+            FormField(
+                label = "账号",
+                value = selectedAccount ?: "选择账号",
+                onValueChange = {},
+                readOnly = true,
+                onClick = { onAccountMenuExpanded(true) },
+            )
+            DropdownMenu(expanded = accountMenuExpanded, onDismissRequest = { onAccountMenuExpanded(false) }) {
+                accountOptions.forEach { a ->
+                    DropdownMenuItem(text = { Text(a) }, onClick = { onSelectedAccount(a); onAccountMenuExpanded(false) })
                 }
             }
         }
     }
+
+    Spacer(Modifier.height(20.dp))
+    PillButton(text = "加载", loading = loadingAccounts, enabled = configUrl.isNotBlank()) {
+        onLoadingAccounts(true); onImportMsg(null)
+        scope.launch {
+            try {
+                val json = withContext(Dispatchers.IO) { fetchConfigText(configUrl) }
+                AppPreferences.configUrl = configUrl
+                onRemoteJson(json)
+                val accounts = AppPreferences.listConfigAccounts(json)
+                onAccountOptions(accounts)
+                onSelectedAccount(if (accounts.size == 1) accounts[0] else null)
+                onImportMsg(if (accounts.isEmpty()) "已加载（扁平配置），可直接应用" else "找到 ${accounts.size} 个账号，请选择后应用")
+            } catch (e: Exception) {
+                onImportMsg("加载失败: ${e.message ?: e.javaClass.simpleName}")
+            } finally {
+                onLoadingAccounts(false)
+            }
+        }
+    }
+    Spacer(Modifier.height(10.dp))
+    PillButton(text = "应用配置", loading = importing, enabled = remoteJson != null) {
+        onImporting(true); onImportMsg(null)
+        scope.launch {
+            try {
+                val json = remoteJson ?: withContext(Dispatchers.IO) { fetchConfigText(configUrl) }
+                val applied = AppPreferences.applyRemoteConfig(json, selectedAccount)
+                onRefreshFromPrefs()
+                onImportMsg("已应用 $applied 项配置" + if (selectedAccount != null) "（账号: $selectedAccount）" else "")
+            } catch (e: Exception) {
+                onImportMsg("应用失败: ${e.message ?: e.javaClass.simpleName}")
+            } finally {
+                onImporting(false)
+            }
+        }
+    }
+    if (importMsg != null) FormNote(importMsg, isError = importMsg.startsWith("加载失败") || importMsg.startsWith("应用失败"))
 }
 
 @Composable
 private fun AboutPage(updateState: UpdateState, onUpdateState: (UpdateState) -> Unit) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            SectionTitle("说明")
-            Spacer(Modifier.height(4.dp))
-            Text("• DeepSeek API Key 是必填项\n• OpenViking 用于长期记忆存储（可选）\n• Python 首次使用自动解压\n• 设置保存后立即生效", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    FormTitle("说明")
+    Spacer(Modifier.height(6.dp))
+    Text(
+        "• DeepSeek API Key 是必填项\n• OpenViking 用于长期记忆（可选）\n• Python 首次使用自动解压\n• 设置保存后立即生效",
+        fontSize = 13.sp,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+
+    Spacer(Modifier.height(24.dp))
+    FormTitle("版本")
+    Spacer(Modifier.height(8.dp))
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text("版本 ${BuildConfig.VERSION_NAME}", fontSize = 16.sp, color = MaterialTheme.colorScheme.onSurface)
+            Text("Build ${BuildConfig.VERSION_CODE}", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-    }
-
-    Spacer(Modifier.height(12.dp))
-
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("版本 ${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.titleSmall.copy(fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.80f)))
-                    Text("Build ${BuildConfig.VERSION_CODE}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                when (val state = updateState) {
-                    is UpdateState.Checking -> LinearProgressIndicator(Modifier.width(100.dp))
-                    is UpdateState.Latest -> Text("已是最新", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
-                    is UpdateState.Available -> Button(onClick = {
-                        onUpdateState(UpdateState.Downloading)
-                        scope.launch {
-                            AppUpdater.downloadAndInstall(context, state.url, state.version)
-                            onUpdateState(UpdateState.Idle)
-                        }
-                    }, enabled = updateState !is UpdateState.Downloading) { Text("下载 ${state.version}") }
-                    is UpdateState.Downloading -> LinearProgressIndicator(Modifier.width(100.dp))
-                    is UpdateState.Error -> Text(state.message, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
-                    is UpdateState.Idle -> OutlinedButton(onClick = {
-                        onUpdateState(UpdateState.Checking)
-                        scope.launch {
-                            val info = AppUpdater.checkUpdate()
-                            onUpdateState(when {
-                                info.error.isNotBlank() -> UpdateState.Error(info.error)
-                                info.hasUpdate -> UpdateState.Available(info.latestVersion, info.downloadUrl)
-                                else -> UpdateState.Latest
-                            })
-                        }
-                    }) { Text("检查更新") }
-                }
-            }
+        when (val state = updateState) {
+            is UpdateState.Checking -> CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+            is UpdateState.Latest -> Text("已是最新", fontSize = 13.sp, color = MaterialTheme.colorScheme.primary)
+            is UpdateState.Available -> Button(
+                onClick = {
+                    onUpdateState(UpdateState.Downloading)
+                    scope.launch {
+                        AppUpdater.downloadAndInstall(context, state.url, state.version)
+                        onUpdateState(UpdateState.Idle)
+                    }
+                },
+                enabled = updateState !is UpdateState.Downloading,
+                shape = RoundedCornerShape(20.dp),
+            ) { Text("下载 ${state.version}") }
+            is UpdateState.Downloading -> CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+            is UpdateState.Error -> Text(state.message, fontSize = 13.sp, color = MaterialTheme.colorScheme.error)
+            is UpdateState.Idle -> OutlinedButton(
+                onClick = {
+                    onUpdateState(UpdateState.Checking)
+                    scope.launch {
+                        val info = AppUpdater.checkUpdate()
+                        onUpdateState(when {
+                            info.error.isNotBlank() -> UpdateState.Error(info.error)
+                            info.hasUpdate -> UpdateState.Available(info.latestVersion, info.downloadUrl)
+                            else -> UpdateState.Latest
+                        })
+                    }
+                },
+                shape = RoundedCornerShape(20.dp),
+            ) { Text("检查更新") }
         }
     }
 }
@@ -767,26 +627,107 @@ private fun AboutPage(updateState: UpdateState, onUpdateState: (UpdateState) -> 
 // ==================== 小工具 ====================
 
 @Composable
-private fun SectionTitle(text: String) {
-    Text(text, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.80f))
+private fun FormTitle(text: String) {
+    Text(
+        text,
+        fontSize = 13.sp,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(top = 4.dp),
+    )
 }
 
+/**
+ * 表单字段：标签在上、无边框输入值在下，字段底部一条发丝分隔线。
+ * masked=密码遮罩；readOnly+onClick=只读可点击（用于选择/弹菜单）；trailing=右侧附加控件。
+ */
 @Composable
-private fun SubTitle(text: String) {
-    Text(text, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.80f))
-}
-
-@Composable
-private fun SwitchRow(title: String, subtitle: String, onChecked: (Boolean) -> Unit, checked: Boolean) {
+private fun FormField(
+    label: String,
+    value: String,
+    onValueChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    masked: Boolean = false,
+    singleLine: Boolean = true,
+    readOnly: Boolean = false,
+    onClick: (() -> Unit)? = null,
+    trailing: (@Composable () -> Unit)? = null,
+) {
     val cs = MaterialTheme.colorScheme
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.bodyMedium)
-            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
+    Column(modifier.fillMaxWidth().padding(top = 14.dp)) {
+        Text(label, fontSize = 13.sp, color = cs.onSurfaceVariant)
+        Spacer(Modifier.height(8.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.weight(1f)) {
+                BasicTextField(
+                    value = value,
+                    onValueChange = onValueChange,
+                    readOnly = readOnly,
+                    singleLine = singleLine,
+                    textStyle = TextStyle(fontSize = 17.sp, color = cs.onSurface),
+                    cursorBrush = SolidColor(cs.primary),
+                    visualTransformation = if (masked) PasswordVisualTransformation() else VisualTransformation.None,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                if (onClick != null) {
+                    Box(Modifier.matchParentSize().clickable { onClick() })
+                }
+            }
+            if (trailing != null) {
+                Spacer(Modifier.width(8.dp))
+                trailing()
+            }
         }
+        Spacer(Modifier.height(12.dp))
+        HorizontalDivider(thickness = 0.6.dp, color = cs.outlineVariant.copy(alpha = 0.5f))
+    }
+}
+
+@Composable
+private fun FormSwitchRow(label: String, checked: Boolean, onChecked: (Boolean) -> Unit) {
+    val cs = MaterialTheme.colorScheme
+    Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(label, fontSize = 16.sp, color = cs.onSurface, modifier = Modifier.weight(1f))
         Switch(checked = checked, onCheckedChange = onChecked)
     }
-    HorizontalDivider(Modifier.padding(vertical = 6.dp))
+    HorizontalDivider(thickness = 0.6.dp, color = cs.outlineVariant.copy(alpha = 0.5f))
+}
+
+@Composable
+private fun FormNote(text: String, isError: Boolean = false) {
+    Text(
+        text,
+        fontSize = 12.sp,
+        color = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(top = 8.dp),
+    )
+}
+
+@Composable
+private fun PillButton(
+    text: String,
+    modifier: Modifier = Modifier,
+    icon: ImageVector? = null,
+    enabled: Boolean = true,
+    loading: Boolean = false,
+    onClick: () -> Unit,
+) {
+    Button(
+        onClick = onClick,
+        enabled = enabled && !loading,
+        shape = RoundedCornerShape(28.dp),
+        contentPadding = PaddingValues(vertical = 14.dp),
+        modifier = modifier.fillMaxWidth(),
+    ) {
+        if (loading) {
+            CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
+        } else {
+            if (icon != null) {
+                Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+            }
+            Text(text, fontSize = 16.sp)
+        }
+    }
 }
 
 private fun fetchConfigText(url: String): String {
