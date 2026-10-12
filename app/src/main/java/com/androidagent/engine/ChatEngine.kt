@@ -13,7 +13,6 @@ import com.google.gson.Gson
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
-import java.text.SimpleDateFormat
 import java.util.*
 
 /**
@@ -449,19 +448,14 @@ class ChatEngine(private val context: Context) {
         )
         db.sessionDao().insert(session)
 
-        val systemMsg = AppPreferences.systemPrompt.let { prompt ->
-            if (prompt.isNotBlank()) {
-                "$prompt\n\n今天是 ${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())}"
-            } else {
-                "今天是 ${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())}"
-            }
+        val systemMsg = AppPreferences.systemPrompt.trim()
+        if (systemMsg.isNotBlank()) {
+            db.messageDao().insert(Message(
+                sessionId = sessionId,
+                role = "system",
+                content = systemMsg
+            ))
         }
-
-        db.messageDao().insert(Message(
-            sessionId = sessionId,
-            role = "system",
-            content = systemMsg
-        ))
 
         sessionId
     }

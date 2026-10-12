@@ -690,64 +690,74 @@ fun MessageBubble(msg: Message) {
             .takeIf { it.exists() }?.absolutePath
     } else null
 
-    Column(Modifier.fillMaxWidth(),
-        horizontalAlignment = if (isUser) Alignment.End else Alignment.Start
-    ) {
-        // 推理内容（统一用「深度思考」折叠卡片展示）
-        if (msg.reasoningContent != null && msg.reasoningContent.isNotBlank()) {
-            ReasoningCard(msg.reasoningContent, Modifier.padding(bottom = 4.dp))
-        }
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        // 用户气泡：自适应内容（不超过可用宽度的 86%）；助手气泡：自适应屏幕（占满可用宽度）
+        val maxBubbleWidth = maxWidth * 0.86f
 
-        when {
-            // ---- OV 检索记忆：复用「工具调用」样式，点击弹详情 ----
-            isOvContext -> {
-                val ovContent = remember(msg.content) {
-                    val c = msg.content
-                    val start = c.indexOf('\n')
-                    val end = c.lastIndexOf('\n')
-                    if (start >= 0 && end > start) c.substring(start + 1, end).trim() else c
-                }
-                ToolCallCard(
-                    listOf(ToolCallEntry("ov-search", ovContent)),
-                    containerColor = Color(250, 244, 224),
-                )
+        Column(
+            Modifier.fillMaxWidth(),
+            horizontalAlignment = if (isUser) Alignment.End else Alignment.Start,
+        ) {
+            // 推理内容（统一用「深度思考」折叠卡片展示）
+            if (msg.reasoningContent != null && msg.reasoningContent.isNotBlank()) {
+                ReasoningCard(msg.reasoningContent, Modifier.padding(bottom = 4.dp))
             }
 
-            // ---- 普通消息 (user / assistant) ----
-            else -> {
-                Surface(
-                    modifier = if (isUser)
-                        // 问题框自适应内容宽度，最长 92% 屏宽
-                        Modifier.fillMaxWidth(0.92f).wrapContentWidth(Alignment.End, unbounded = false)
-                    else
-                        Modifier.fillMaxWidth(0.92f),
-                    shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp,
-                        bottomStart = if (isUser) 16.dp else 4.dp,
-                        bottomEnd = if (isUser) 4.dp else 16.dp),
-                    color = bc
-                ) {
-                    Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
-                        if (userImage != null) {
-                            MessageImage(
-                                path = userImage,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .heightIn(max = 320.dp)
-                                    .clip(RoundedCornerShape(10.dp)),
-                            )
-                            if (msg.content.isNotBlank()) Spacer(Modifier.height(8.dp))
+            when {
+                // ---- OV 检索记忆：复用「工具调用」样式，点击弹详情 ----
+                isOvContext -> {
+                    val ovContent = remember(msg.content) {
+                        val c = msg.content
+                        val start = c.indexOf('\n')
+                        val end = c.lastIndexOf('\n')
+                        if (start >= 0 && end > start) c.substring(start + 1, end).trim() else c
+                    }
+                    ToolCallCard(
+                        listOf(ToolCallEntry("ov-search", ovContent)),
+                        containerColor = Color(250, 244, 224),
+                    )
+                }
+
+                // ---- 普通消息 (user / assistant) ----
+                else -> {
+                    if (isUser) {
+                        Surface(
+                            modifier = Modifier.widthIn(max = maxBubbleWidth),   // 自适应内容
+                            shape = RoundedCornerShape(
+                                topStart = 16.dp, topEnd = 16.dp,
+                                bottomStart = 16.dp, bottomEnd = 4.dp,
+                            ),
+                            color = bc,
+                        ) {
+                            Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+                                if (userImage != null) {
+                                    MessageImage(
+                                        path = userImage,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .heightIn(max = 320.dp)
+                                            .clip(RoundedCornerShape(10.dp)),
+                                    )
+                                    if (msg.content.isNotBlank()) Spacer(Modifier.height(8.dp))
+                                }
+                                MarkdownBody(msg.content)
+                            }
                         }
+                    } else {
+                        // 助手消息：无气泡（透明无框），直接铺满屏宽
                         MarkdownBody(msg.content)
                     }
                 }
             }
-        }
 
-        // 仅正式回复（用户消息 / AI 正文回复）下方显示时间，思考、工具调用与 OV 检索不显示
-        if (!isOvContext && (isUser || (msg.role == "assistant" && msg.content.isNotBlank()))) {
-            Text(fmtTime(msg.timestamp), fontSize = 10.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp))
+            // 仅正式回复（用户消息 / AI 正文回复）下方显示时间，思考、工具调用与 OV 检索不显示
+            if (!isOvContext && (isUser || (msg.role == "assistant" && msg.content.isNotBlank()))) {
+                Text(
+                    fmtTime(msg.timestamp), fontSize = 10.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                )
+            }
         }
     }
 }
