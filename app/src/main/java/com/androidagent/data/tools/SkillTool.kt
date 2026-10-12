@@ -30,6 +30,9 @@ class SkillTool(private val context: Context) : Tool {
     @Volatile private var cachedSignature: String = ""
     private val scanLock = Any()
 
+    /** 运行时文件与内置默认 skill 是否已部署（每进程一次） */
+    @Volatile private var assetsDeployed = false
+
     override val name: String = "skill"
 
     /** 已注册（启用）skill 名称，自动反映新增/删除。 */
@@ -112,6 +115,7 @@ class SkillTool(private val context: Context) : Tool {
     )
 
     private fun scan(): List<SkillMeta> {
+        ensureDeployed()
         val files = skillsDir.listFiles()?.filter {
             it.isFile && it.name.endsWith(".py") && !it.name.startsWith("_")
         }?.sortedBy { it.name } ?: emptyList()
@@ -242,8 +246,7 @@ class SkillTool(private val context: Context) : Tool {
             }
         }
 
-        if (!skillsDir.exists()) skillsDir.mkdirs()
-        deployAssets(skillsDir)
+        ensureDeployed()
 
         val request = mapOf("action" to "run", "skill" to action, "arguments" to arguments)
         val requestFile = File(skillsDir, ".request.json")
@@ -266,15 +269,48 @@ class SkillTool(private val context: Context) : Tool {
         return output
     }
 
+    /** 确保 skills/ 存在，并把运行时文件与内置默认 skill 部署一次（每进程一次）。 */
+    private fun ensureDeployed() {
+        if (assetsDeployed) return
+        synchronized(scanLock) {
+            if (assetsDeployed) return
+            if (!skillsDir.exists()) skillsDir.mkdirs()
+            deployAssets(skillsDir)
+            assetsDeployed = true
+        }
+    }
+
     /**
      * 部署运行时文件：
      *  - _skill_runner.py / _envelope.py 每次覆盖，保持与应用版本一致；
-     *  - README.md 仅在缺失时写入，避免覆盖使用者改动。
+     *  - README.md 仅在缺失时写入，避免覆盖使用者改动；
+     *  - 再部署 assets/skills/ 下的内置默认 skill（见 deployBundledSkills）。
      */
     private fun deployAssets(dir: File) {
         writeAsset("skill_runner.py", File(dir, "_skill_runner.py"), overwrite = true)
         writeAsset("skill_envelope.py", File(dir, "_envelope.py"), overwrite = true)
         writeAsset("skill_README.md", File(dir, "README.md"), overwrite = false)
+        deployBundledSkills(dir)
+    }
+
+    /**
+     * 部署内置默认 skill（打包在 assets/skills/ 下）：
+     *  - `_` 开头的辅助/运行时文件每次覆盖，保证与应用版本一致；
+     *  - 普通 skill 脚本仅在缺失时写入，避免覆盖使用者的改动。
+     *
+     * 注：内置 skill 属于随应用发布的默认能力，被删除后会在下次运行时重新部署；
+     * 如需临时下线，把脚本头部改为 `# status: disable` 即可。
+     */
+    private fun deployBundledSkills(dir: File) {
+        val names = try {
+            context.assets.list("skills") ?: emptyArray()
+        } catch (_: Exception) {
+            return
+        }
+        for (name in names) {
+            if (!name.endsWith(".py")) continue
+            writeAsset("skills/$name", File(dir, name), overwrite = name.startsWith("_"))
+        }
     }
 
     private fun writeAsset(asset: String, target: File, overwrite: Boolean) {
