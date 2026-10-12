@@ -34,7 +34,7 @@ class ToolRegistry(context: Context) {
     init {
         // 注册 4 个工具族（每个族通过 action 参数分发子操作）+ skill 自建工具入口
         register(SystemTool())
-        register(PhoneTool(this, context))
+        register(PhoneTool(context, this))
         register(OpenVikingTool())
         register(ObjectStorageTool())
         register(SkillTool(context))

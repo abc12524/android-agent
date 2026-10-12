@@ -36,6 +36,8 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -46,6 +48,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import android.graphics.BitmapFactory
 import android.net.Uri
 import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -681,6 +684,11 @@ fun MessageBubble(msg: Message) {
     val isOvContext = msg.role == "user" && msg.content.startsWith("[自动检索的候选记忆")
     val bc = if (isUser) BubbleUser else BubbleAssistant
     val tc = if (isUser) BubbleUserText else BubbleAssistantText
+    val imageId = msg.imageFileId
+    val userImage = if (isUser && !imageId.isNullOrBlank()) {
+        File(File(LocalContext.current.filesDir, "agent_files"), imageId)
+            .takeIf { it.exists() }?.absolutePath
+    } else null
 
     Column(Modifier.fillMaxWidth(),
         horizontalAlignment = if (isUser) Alignment.End else Alignment.Start
@@ -719,6 +727,16 @@ fun MessageBubble(msg: Message) {
                     color = bc
                 ) {
                     Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+                        if (userImage != null) {
+                            MessageImage(
+                                path = userImage,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(max = 320.dp)
+                                    .clip(RoundedCornerShape(10.dp)),
+                            )
+                            if (msg.content.isNotBlank()) Spacer(Modifier.height(8.dp))
+                        }
                         MarkdownBody(msg.content)
                     }
                 }
@@ -731,6 +749,37 @@ fun MessageBubble(msg: Message) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp))
         }
+    }
+}
+
+// ==================== 消息图片 ====================
+
+/** 渲染用户消息附带的本地图片（按需下采样，避免大图 OOM） */
+@Composable
+private fun MessageImage(path: String, modifier: Modifier = Modifier) {
+    val bitmap = remember(path) { decodeSampledBitmap(path, 1080) }
+    if (bitmap != null) {
+        androidx.compose.foundation.Image(
+            bitmap = bitmap.asImageBitmap(),
+            contentDescription = "图片",
+            modifier = modifier,
+            contentScale = ContentScale.Fit,
+        )
+    }
+}
+
+private fun decodeSampledBitmap(path: String, maxDim: Int): android.graphics.Bitmap? {
+    return try {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeFile(path, bounds)
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+        var sample = 1
+        val largest = maxOf(bounds.outWidth, bounds.outHeight)
+        while (largest / sample > maxDim * 2) sample *= 2
+        val opts = BitmapFactory.Options().apply { inSampleSize = sample }
+        BitmapFactory.decodeFile(path, opts)
+    } catch (_: Exception) {
+        null
     }
 }
 

@@ -64,13 +64,15 @@ class ChatEngine(private val context: Context) {
             val messages = history.map { it.toApiMessage() }.toMutableList()
 
             // 2. 添加用户消息（放在最前面），含图片时自动上传 Files API（vision 模型）
-            messages.add(buildUserMessage(userMessage, imageFilePath))
-            val userMsgEntity = Message(sessionId = sessionId, role = "user", content = userMessage)
+            val (userApiMsg, imageFileId) = buildUserMessage(userMessage, imageFilePath)
+            messages.add(userApiMsg)
+            if (imageFileId != null && !imageFilePath.isNullOrBlank()) renameLocalImage(imageFilePath, imageFileId)
+            val userMsgEntity = Message(sessionId = sessionId, role = "user", content = userMessage, imageFileId = imageFileId)
             insertedIds.add(db.messageDao().insert(userMsgEntity))
             allNewMessages.add(userMsgEntity)
 
-            // 3. 搜索 OpenViking 记忆（仅在自动注入条数 >0 时注入），作为背景线索附在用户问题之后
-            if (AppPreferences.ovFindLimit > 0) {
+            // 3. 搜索 OpenViking 记忆（仅在自动注入条数 >0 且未附带图片时注入），作为背景线索附在用户问题之后
+            if (AppPreferences.ovFindLimit > 0 && imageFilePath.isNullOrBlank()) {
                 val ovContext = openViking.loadContext(userMessage, sessionId)
                 if (ovContext.isNotBlank()) {
                     val ovMsg = "[自动检索的候选记忆(相关性未经验证可能无关，仅作为背景线索)]\n" +
@@ -251,13 +253,15 @@ class ChatEngine(private val context: Context) {
             val messages = history.map { it.toApiMessage() }.toMutableList()
 
             // 2. 添加用户消息（放在最前面），含图片时自动上传 Files API（vision 模型）
-            messages.add(buildUserMessage(userMessage, imageFilePath))
-            val userMsgEntity = Message(sessionId = sessionId, role = "user", content = userMessage)
+            val (userApiMsg, imageFileId) = buildUserMessage(userMessage, imageFilePath)
+            messages.add(userApiMsg)
+            if (imageFileId != null && !imageFilePath.isNullOrBlank()) renameLocalImage(imageFilePath, imageFileId)
+            val userMsgEntity = Message(sessionId = sessionId, role = "user", content = userMessage, imageFileId = imageFileId)
             insertedIds.add(db.messageDao().insert(userMsgEntity))
             allNewMessages.add(userMsgEntity)
 
-            // 3. 搜索 OpenViking 记忆（仅在自动注入条数 >0 时注入），作为背景线索附在用户问题之后
-            if (AppPreferences.ovFindLimit > 0) {
+            // 3. 搜索 OpenViking 记忆（仅在自动注入条数 >0 且未附带图片时注入），作为背景线索附在用户问题之后
+            if (AppPreferences.ovFindLimit > 0 && imageFilePath.isNullOrBlank()) {
                 val ovContext = openViking.loadContext(userMessage, sessionId)
                 if (ovContext.isNotBlank()) {
                     val ovMsg = "[自动检索的候选记忆(相关性未经验证可能无关，仅作为背景线索)]\n" +
@@ -484,16 +488,16 @@ class ChatEngine(private val context: Context) {
 
     /**
      * 构建用户消息。
-     * 无图片时返回纯文本 content；带图片时上传 Files API 获取 file_id，
-     * 并返回 OpenAI 风格 content 数组（text + file 块）。
+     * 无图片时返回 (纯文本 content, null)；带图片时上传 Files API 获取 file_id，
+     * 返回 (OpenAI 风格 content 数组（text + file 块）, file_id)。
      * 当前在线模型均支持识图，不再校验模型名；API 报错原样上报给用户。
      */
     private suspend fun buildUserMessage(
         userMessage: String,
         imageFilePath: String?
-    ): DeepSeekClient.ChatMessage {
+    ): Pair<DeepSeekClient.ChatMessage, String?> {
         if (imageFilePath.isNullOrBlank()) {
-            return DeepSeekClient.ChatMessage(role = "user", content = userMessage)
+            return DeepSeekClient.ChatMessage(role = "user", content = userMessage) to null
         }
 
         val upload = deepSeek.uploadFile(File(imageFilePath)).getOrElse { throw it }
@@ -503,7 +507,25 @@ class ChatEngine(private val context: Context) {
         }
         parts.add(mapOf("type" to "file", "file_id" to upload.id))
 
-        return DeepSeekClient.ChatMessage(role = "user", content = parts)
+        return DeepSeekClient.ChatMessage(role = "user", content = parts) to upload.id
+    }
+
+    /**
+     * 把本地图片副本重命名为 DeepSeek file_id（filesDir/agent_files/<file_id>），
+     * 便于回显时由 file_id 反推本地路径。
+     */
+    private fun renameLocalImage(srcPath: String, fileId: String) {
+        try {
+            val src = File(srcPath)
+            if (!src.exists()) return
+            val dst = File(File(context.filesDir, "agent_files").apply { mkdirs() }, fileId)
+            if (src.absolutePath == dst.absolutePath) return
+            if (dst.exists()) dst.delete()
+            if (!src.renameTo(dst)) {
+                src.copyTo(dst, overwrite = true)
+                src.delete()
+            }
+        } catch (_: Exception) { }
     }
 
     /**

@@ -20,6 +20,7 @@ data class Message(
     val toolResult: String? = null,   // 工具执行结果
     val reasoningContent: String? = null, // DeepSeek 推理内容
     val toolCalls: String? = null,    // assistant 消息的 tool_calls (JSON)
+    val imageFileId: String? = null,  // 用户消息附带图片的 DeepSeek file_id（本地副本以该 id 命名于 filesDir/agent_files/）
     val promptTokens: Int = 0,
     val completionTokens: Int = 0,
     val promptCacheHitTokens: Int = 0,
