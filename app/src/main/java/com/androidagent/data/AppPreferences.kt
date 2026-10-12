@@ -59,16 +59,6 @@ object AppPreferences {
         get() = prefs.getBoolean("ov_recall_dedup", true)
         set(value) = prefs.edit().putBoolean("ov_recall_dedup", value).apply()
 
-    // 会话开始注入记忆索引（profile）
-    var ovProfileEnabled: Boolean
-        get() = prefs.getBoolean("ov_profile_enabled", true)
-        set(value) = prefs.edit().putBoolean("ov_profile_enabled", value).apply()
-
-    // 自动把对话捕获到 OpenViking Session 并提取长期记忆
-    var ovAutoCapture: Boolean
-        get() = prefs.getBoolean("ov_auto_capture", true)
-        set(value) = prefs.edit().putBoolean("ov_auto_capture", value).apply()
-
     // 对话设置
     var maxToolRounds: Int
         get() = prefs.getInt("max_tool_rounds", 8)
@@ -88,7 +78,7 @@ object AppPreferences {
         get() = prefs.getBoolean("background_service_enabled", false)
         set(value) = prefs.edit().putBoolean("background_service_enabled", value).apply()
 
-    // 搜索工具（openviking_search）默认阈值与条数：LLM 未显式指定时使用
+    // 搜索工具（openviking_tool 的 search 动作）默认阈值与条数：LLM 未显式指定时使用
     var ovScoreThreshold: Float
         get() = prefs.getFloat("ov_score_threshold", 0.4f)
         set(value) = prefs.edit().putFloat("ov_score_threshold", value).apply()
@@ -140,7 +130,7 @@ object AppPreferences {
      * deepseek_api_key / deepseek_base_url / deepseek_model /
      * openviking_url / openviking_key / openviking_user /
      * ov_peer_id / ov_peer_scope / ov_workspace_peer / ov_recall_dedup /
-     * ov_profile_enabled / ov_auto_capture / max_tool_rounds /
+     * max_tool_rounds /
      * session_timeout_minutes / background_service_enabled /
      * ov_score_threshold / ov_search_display_count / system_prompt
      * 返回成功应用的字段数量（不存在的 key 会被忽略）。
@@ -186,8 +176,6 @@ object AppPreferences {
         str("ov_peer_scope")?.let { ovPeerScope = it; count++ }
         bool("ov_workspace_peer")?.let { ovWorkspacePeer = it; count++ }
         bool("ov_recall_dedup")?.let { ovRecallDedup = it; count++ }
-        bool("ov_profile_enabled")?.let { ovProfileEnabled = it; count++ }
-        bool("ov_auto_capture")?.let { ovAutoCapture = it; count++ }
         int("max_tool_rounds")?.let { maxToolRounds = it; count++ }
         int("session_timeout_minutes")?.let { sessionTimeoutMinutes = it; count++ }
         int("thinking_timeout_minutes")?.let { thinkingTimeoutMinutes = it; count++ }

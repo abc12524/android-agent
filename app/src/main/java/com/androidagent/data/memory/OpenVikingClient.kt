@@ -3,9 +3,7 @@ package com.androidagent.data.memory
 import com.androidagent.BuildConfig
 import com.androidagent.data.AppPreferences
 import com.androidagent.data.HttpClientProvider
-import com.androidagent.data.model.Message
 import com.google.gson.Gson
-import com.google.gson.JsonElement
 import com.google.gson.JsonParser
 import com.google.gson.JsonObject
 import kotlinx.coroutines.Dispatchers
@@ -22,8 +20,7 @@ import java.security.MessageDigest
  * 对齐 shell-tool/core/tools/ov_tools.py 的接口与行为：
  *  - peer_id 派生（显式 > 按包名派生 ws-* > 默认 default）
  *  - 搜索阈值/条数严格遵守设置，不做兜底放宽；跨轮召回去重
- *  - 批量读取 / 批量写消息 / session 查询
- *  - 会话开始注入记忆索引（profile）、自动捕获对话到 OV Session
+ *  - 批量读取 / 记忆文件读写 / 语义搜索
  */
 class OpenVikingClient {
 
@@ -32,15 +29,10 @@ class OpenVikingClient {
 
     private val jsonMediaType = "application/json".toMediaType()
 
-    // 跨实例/跨轮共享状态（对齐 shell-tool 的 _RECALL_SEEN / session 映射）
+    // 跨实例/跨轮共享状态（对齐 shell-tool 的 _RECALL_SEEN）
     companion object {
         private val recallSeen = mutableMapOf<String, MutableSet<String>>()
-        private val ovSessions = mutableMapOf<String, String>() // androidSessionId -> ov session_id
         private var peerCache: String? = null
-
-        private const val RECALL_MARKER = "## 相关记忆"
-        private const val RECALL_MARKER_ANDROID = "[自动检索的候选记忆"
-        private const val PROFILE_MARKER = "<openviking-context source=\"profile\">"
     }
 
     private fun getBaseUrl(): String = AppPreferences.openVikingUrl.trimEnd('/')
@@ -376,78 +368,6 @@ class OpenVikingClient {
         )
     }
 
-    // ========== Session 管理 ==========
-    suspend fun createSession(sessionId: String = ""): String {
-        val payload = if (sessionId.isNotBlank()) mapOf("session_id" to sessionId) else emptyMap<String, String>()
-        val result = post("/api/v1/sessions", payload)
-        return result.fold(
-            onSuccess = { body ->
-                try {
-                    val json = JsonParser.parseString(body).asJsonObject
-                    json.getAsJsonObject("result")?.toString() ?: body
-                } catch (e: Exception) { body }
-            },
-            onFailure = { "{\"error\": \"${it.message}\"}" }
-        )
-    }
-
-    suspend fun addMessage(sessionId: String, role: String, content: String, peerId: String = ""): String {
-        if (sessionId.isBlank()) return "{\"error\": \"缺少 session_id\"}"
-        val payload = mutableMapOf("role" to role, "content" to content)
-        if (peerId.isNotBlank()) payload["peer_id"] = peerId
-        val result = post("/api/v1/sessions/$sessionId/messages", payload)
-        return result.fold(
-            onSuccess = { body ->
-                try {
-                    val json = JsonParser.parseString(body).asJsonObject
-                    json.getAsJsonObject("result")?.toString() ?: body
-                } catch (e: Exception) { body }
-            },
-            onFailure = { "{\"error\": \"${it.message}\"}" }
-        )
-    }
-
-    /** 批量向 Session 添加消息（一次最多 100 条） */
-    suspend fun addMessagesBatch(sessionId: String, messages: List<Map<String, String>>): String {
-        if (sessionId.isBlank()) return "{\"error\": \"缺少 session_id\"}"
-        if (messages.isEmpty()) return "{\"error\": \"messages 列表为空\"}"
-        val result = post("/api/v1/sessions/$sessionId/messages/batch", mapOf("messages" to messages))
-        return result.fold(
-            onSuccess = { body ->
-                try {
-                    val json = JsonParser.parseString(body).asJsonObject
-                    json.getAsJsonObject("result")?.toString() ?: body
-                } catch (e: Exception) { body }
-            },
-            onFailure = { "{\"error\": \"${it.message}\"}" }
-        )
-    }
-
-    suspend fun commitSession(sessionId: String, keepRecentCount: Int = 0): String {
-        if (sessionId.isBlank()) return "{\"error\": \"缺少 session_id\"}"
-        val result = post("/api/v1/sessions/$sessionId/commit", mapOf("keep_recent_count" to keepRecentCount))
-        return result.fold(
-            onSuccess = { body ->
-                try {
-                    val json = JsonParser.parseString(body).asJsonObject
-                    json.getAsJsonObject("result")?.toString() ?: body
-                } catch (e: Exception) { body }
-            },
-            onFailure = { "{\"error\": \"${it.message}\"}" }
-        )
-    }
-
-    suspend fun getSession(sessionId: String): String {
-        if (sessionId.isBlank()) return "{\"error\": \"缺少 session_id\"}"
-        val result = get("/api/v1/sessions/$sessionId")
-        return result.fold(onSuccess = { it }, onFailure = { "{\"error\": \"${it.message}\"}" })
-    }
-
-    suspend fun listSessions(): String {
-        val result = get("/api/v1/sessions")
-        return result.fold(onSuccess = { it }, onFailure = { "{\"error\": \"${it.message}\"}" })
-    }
-
     /** 加载相关记忆作为上下文（带跨轮去重）；自动注入走 find 接口（纯向量低延迟） */
     suspend fun loadContext(query: String, sessionId: String = ""): String {
         val threshold = AppPreferences.ovFindThreshold
@@ -479,181 +399,5 @@ class OpenVikingClient {
             },
             onFailure = { "" }
         )
-    }
-
-    /** 会话开始时拉取可用记忆索引，返回 profile 块（仅新建会话调用一次） */
-    suspend fun loadProfile(): String {
-        if (AppPreferences.openVikingUrl.isBlank()) return ""
-        val user = AppPreferences.openVikingUser
-        val peer = peerId()
-        val root = "viking://user/$user/peers/$peer/memories/"
-        val result = get("/api/v1/fs/tree?uri=${URLEncoder.encode(root, "UTF-8")}")
-        return result.fold(
-            onSuccess = { body ->
-                try {
-                    val entries = extractTreeEntries(body)
-                    if (entries.isEmpty()) return@fold ""
-                    val text = entries.take(40).joinToString("\n") { "- $it" }
-                    "$PROFILE_MARKER\n可用记忆索引（主题概览）：\n$text\n</openviking-context>"
-                } catch (e: Exception) { "" }
-            },
-            onFailure = { "" }
-        )
-    }
-
-    private fun extractTreeEntries(body: String): List<String> {
-        val json = runCatching { JsonParser.parseString(body).asJsonObject }.getOrNull() ?: return emptyList()
-        val names = mutableListOf<String>()
-        val seen = mutableSetOf<String>()
-        fun collect(raw: JsonElement?) {
-            if (raw == null || !raw.isJsonObject) return
-            val obj = raw.asJsonObject
-            for (key in listOf("entries", "list", "children", "files", "nodes")) {
-                val arr = obj.getAsJsonArray(key) ?: continue
-                for (it in arr) {
-                    if (it.isJsonObject) {
-                        val o = it.asJsonObject
-                        val n = o.get("name")?.asString ?: o.get("title")?.asString
-                            ?: o.get("uri")?.asString?.trimEnd('/')?.substringAfterLast('/') ?: ""
-                        if (n.isNotBlank() && seen.add(n)) names.add(n)
-                    } else if (it.isJsonPrimitive) {
-                        val s = it.asString
-                        if (s.isNotBlank() && seen.add(s)) names.add(s)
-                    }
-                }
-            }
-        }
-        val result = json.getAsJsonObject("result")
-        if (result != null) collect(result)
-        else if (json.getAsJsonArray("entries") != null) collect(json)
-        return names
-    }
-
-    /**
-     * 把一段对话捕获到 OpenViking Session 并提取长期记忆（对齐 shell-tool OV_AUTO_CAPTURE）。
-     * 失败静默跳过，不影响主对话。
-     */
-    suspend fun captureSession(androidSessionId: String, messages: List<Message>) {
-        if (AppPreferences.openVikingUrl.isBlank() || !AppPreferences.ovAutoCapture) return
-        try {
-            val ovSession = ovSessions[androidSessionId]
-                ?: (createSessionRaw()?.also { ovSessions[androidSessionId] = it } ?: return)
-            val ovMsgs = toOvMessages(messages)
-            if (ovMsgs.isEmpty()) return
-            post("/api/v1/sessions/$ovSession/messages/batch", mapOf("messages" to ovMsgs))
-            post("/api/v1/sessions/$ovSession/commit", mapOf("keep_recent_count" to 0))
-        } catch (_: Exception) { }
-    }
-
-    private suspend fun createSessionRaw(): String? {
-        return post("/api/v1/sessions", emptyMap<String, String>()).fold(
-            onSuccess = { body ->
-                runCatching {
-                    val json = JsonParser.parseString(body).asJsonObject
-                    val res = json.getAsJsonObject("result")
-                    res?.get("session_id")?.asString
-                        ?: res?.get("id")?.asString
-                        ?: res?.getAsJsonObject("session")?.get("id")?.asString
-                }.getOrNull()
-            },
-            onFailure = { null }
-        )
-    }
-
-    /** 把聊天消息转成 OV session 消息列表（对齐 opencode 插件 buildCapturePayload：
-     *  纯文本发 {role, content}，含工具调用发 {role, parts}，assistant 消息带 peer_id，
-     *  tool 消息转成 tool-result part）。噪音过滤对齐 capture-utils.shouldCaptureText。 */
-    private fun toOvMessages(messages: List<Message>): List<Map<String, Any>> {
-        val out = mutableListOf<Map<String, Any>>()
-        for (m in messages) {
-            val content = m.content
-            // 跳过自动注入的召回 / profile 块，防止记忆回声
-            if (content.contains(RECALL_MARKER, ignoreCase = true) ||
-                content.contains(RECALL_MARKER_ANDROID, ignoreCase = true) ||
-                content.contains(PROFILE_MARKER, ignoreCase = true)) continue
-
-            if (m.role == "tool") {
-                val result = content.take(2000) // OV_CAPTURE_TOOL_MAX_CHARS
-                if (result.isBlank()) continue
-                val part = mutableMapOf<String, Any>(
-                    "type" to "tool",
-                    "tool_id" to (m.toolCallId ?: ""),
-                    "tool_name" to (m.toolName ?: ""),
-                    "tool_status" to "completed",
-                    "tool_output" to result,
-                )
-                val args = m.toolArgs
-                if (!args.isNullOrBlank()) part["tool_input"] = parseJsonValue(args)
-                out.add(mapOf("role" to "assistant", "parts" to listOf(part), "peer_id" to peerId()))
-                continue
-            }
-
-            val c = content.take(4000) // OV_CAPTURE_MAX_LENGTH
-            if (m.role == "assistant" && !m.toolCalls.isNullOrBlank()) {
-                // 含工具调用：文本 + 工具调用 parts
-                val textCaptured = shouldCapture(c, m.role)
-                val parts = mutableListOf<Map<String, Any>>()
-                if (textCaptured) parts.add(mapOf("type" to "text", "text" to c))
-                parts.addAll(buildToolCallParts(m.toolCalls))
-                if (parts.isEmpty()) continue
-                out.add(mapOf("role" to "assistant", "parts" to parts, "peer_id" to peerId()))
-                continue
-            }
-
-            if (m.role != "user" && m.role != "assistant") continue
-            if (!shouldCapture(c, m.role)) continue
-            val ovRole = if (m.role == "assistant") "assistant" else "user"
-            val msg = mutableMapOf<String, Any>("role" to ovRole, "content" to c)
-            if (ovRole == "assistant") msg["peer_id"] = peerId()
-            out.add(msg)
-        }
-        return out
-    }
-
-    /** 把 assistant 消息的 tool_calls(JSON) 解析成 tool-call parts（对齐 hermes.json 的 tool 结构）。 */
-    private fun buildToolCallParts(toolCallsJson: String): List<Map<String, Any>> {
-        val parts = mutableListOf<Map<String, Any>>()
-        runCatching {
-            val arr = JsonParser.parseString(toolCallsJson).asJsonArray
-            for (el in arr) {
-                if (!el.isJsonObject) continue
-                val obj = el.asJsonObject
-                val id = runCatching { obj.get("id").asString }.getOrNull() ?: ""
-                val name = runCatching { obj.getAsJsonObject("function").get("name").asString }.getOrNull() ?: ""
-                if (name.isBlank()) continue
-                val part = mutableMapOf<String, Any>(
-                    "type" to "tool",
-                    "tool_id" to id,
-                    "tool_name" to name,
-                    "tool_status" to "completed",
-                )
-                val args = runCatching { obj.getAsJsonObject("function").get("arguments").asString }.getOrNull()
-                if (!args.isNullOrBlank()) part["tool_input"] = parseJsonValue(args)
-                parts.add(part)
-            }
-        }
-        return parts
-    }
-
-    /** 尽量把 JSON 字符串还原为对象/数组；失败则保留原始字符串。 */
-    private fun parseJsonValue(text: String): Any {
-        val el = runCatching { JsonParser.parseString(text) }.getOrNull() ?: return text
-        return if (el.isJsonObject || el.isJsonArray) el else el.asString
-    }
-
-    /** 对齐官方 capture-utils.shouldCaptureText 的轻量噪音过滤 */
-    private fun shouldCapture(text: String, role: String): Boolean {
-        val t = text.trim()
-        if (t.isEmpty()) return false
-        if (role == "user" && Regex("^/[a-z0-9_-]{1,64}\\b", RegexOption.IGNORE_CASE).matches(t)) return false
-        if (Regex(
-                "^(?:ok|okay|k|yes|yep|no|nope|thanks|thank you|thx|done|收到|好的|好|嗯|可以|继续|不用|不需要|没了|好了)[.!?。！？\\s]*$",
-                RegexOption.IGNORE_CASE
-            ).matches(t)
-        ) return false
-        if (!Regex("[a-z0-9\u3400-\u9fff]", RegexOption.IGNORE_CASE).containsMatchIn(t)) return false
-        val cjk = Regex("[\\u3400-\\u9fff]").findAll(t).count()
-        val alnum = Regex("[a-z0-9]", RegexOption.IGNORE_CASE).findAll(t).count()
-        return cjk >= 4 || alnum >= 6 || t.length >= 12
     }
 }

@@ -9,26 +9,30 @@
 - AI 可自主调用设备上的工具完成任务
 - 对话历史持久化（Room 本地数据库）
 
-### 🛠️ 工具集
-| 工具 | 说明 |
+### 🛠️ 工具集（5 个大工具，两段式调用）
+
+对外暴露 5 个大工具，子工具用 `action` 指定，调用参数只有 `{ action, params }`：
+
+| 大工具 | 子工具 |
 |------|------|
-| `execute_system_command` | Android Shell 命令执行 |
-| `get_system_info` | 获取设备系统信息 |
-| `get_gps_location` | 获取设备 GPS 定位 |
-| `get_sensor_data` | 读取陀螺仪、加速度计、磁力计等传感器 |
-| `ssh_execute` | SSH 远程命令执行 |
-| `ssh_scp` | SCP 文件上传下载 |
-| `execute_python` | 嵌入 Python 3.13 环境，支持 pip 安装包 |
-| `send_notification` | 发送系统通知 |
-| `play_sound` | 播放提示音或远程音频 |
-| `wait` | 延迟执行（0-30 分钟） |
-| `rename_session` | 设置对话标题 |
-| `openviking_search` | OpenViking 语义搜索（上下文感知） |
-| `openviking_remember` | 保存记忆到 OpenViking |
-| `openviking_forget` | 删除 OpenViking 记忆文件/目录（recursive 可递归删目录） |
-| `openviking_*` | OpenViking 综合管理（find/read/write/session 等 10 个 action） |
-| `file_*` | 对象存储 S3 兼容（upload/download/delete/list/copy 等 13 个 action） |
-| `deepseek_file_tool` | DeepSeek 文件暂存空间（upload/list/retrieve/delete/recognize 识别图像） |
+| `system_tool` | `shell` / `python` / `ssh` / `scp` / `wait` |
+| `phone_tool` | `system_info` / `gps` / `notify` / `sound` / `sensor` / `rename_session` |
+| `openviking_tool` | `search` / `find` / `remember` / `forget` / `read` / `list_dir` / `write_file` |
+| `file_tool` | `upload` / `download` / `delete` / `delete_batch` / `list` / `copy` / `head` / `list_buckets` / `create_bucket` / `delete_bucket` / `presign` / `create_folder` / `delete_folder` |
+| `skill` | `list` / `usage` / `run` / `write` / `delete` / `guide`（自建 Python 工具，脚本目录 `skills/`） |
+
+**两段式调用**（渐进披露，首次只暴露工具名与子工具名，用法按需返回）：
+- 不传 `action` → 返回该大工具下全部子工具及简短说明；
+- 只传 `action`（有参子工具）→ 返回该子工具的用法；无参子工具（如 `gps`）则直接执行；
+- 传 `action + params` → 执行，子工具参数放进 `params` 对象（如 `{"action":"shell","params":{"command":"ls"}}`）。
+
+> 用户发送图片时自动上传并交由 vision 模型识别，无需 LLM 调用工具。
+
+### 🧩 skill 自建工具
+- 复刻 shell-tool 的 skill 机制：`skills/` 目录下的 `*.py` 脚本按头部元信息自动注册为可调用工具
+- 脚本定义 `run(arguments)` 并返回统一信封 `{"status":"ok","result":{...}}` / `{"status":"error",...}`
+- LLM 可用 `skill` 工具的 `guide` 读取编写指南、`write` 新建脚本、`run` 执行，实现「自我扩展能力」
+- 运行在应用内置的 Python 3.13 环境；`skills/` 初始为空
 
 ### ☁️ 对象存储（S3 兼容）
 - 支持任何 S3 兼容服务（AWS S3、MinIO、Ceph、阿里云 OSS 等）
@@ -43,7 +47,7 @@
 - 通过 `/system/bin/linker64` 绕过 SELinux 限制
 
 ### 💾 外置记忆（OpenViking）
-- 语义搜索历史知识（`openviking_search` 走 search 上下文感知接口；`openviking_*` 的 find action 走纯向量接口，支持 `target_uri` 限定范围）
+- 语义搜索历史知识（`openviking_tool` 的 `search` 动作走上下文感知接口；`find` 动作走纯向量接口，支持 `target_uri` 限定范围）
 - 保存用户偏好、项目配置、操作经验
 - 自动注入相关记忆作为对话上下文（默认走 find 接口）
 
@@ -52,7 +56,7 @@
 ### 环境要求
 - Android Studio Meerkat (2024.3.1+) 或命令行 Gradle
 - JDK 17+
-- Android SDK (compileSdk 36)
+- Android SDK (compileSdk 37)
 
 ### 构建命令
 ```bash
@@ -84,7 +88,7 @@ maven { setUrl("https://maven.aliyun.com/repository/gradle-plugin") }
 
 1. 安装 APK 后打开应用
 2. 进入 **设置** 配置 **DeepSeek API Key**（必填）
-3. （可选）配置 OpenViking 服务器地址和百度千帆 API Key
+3. （可选）配置 OpenViking 服务器地址与密钥
 4. （可选）配置对象存储 S3 服务地址和密钥
 5. 开始对话
 
@@ -111,8 +115,6 @@ JSON 顶层 key 与应用的设置项一一对应；**顶层值为对象的 key 
     "ov_peer_scope": "actor",
     "ov_workspace_peer": true,
     "ov_recall_dedup": true,
-    "ov_profile_enabled": true,
-    "ov_auto_capture": true,
     "max_tool_rounds": 8,
     "session_timeout_minutes": 15,
     "thinking_timeout_minutes": 0,
@@ -137,8 +139,6 @@ JSON 顶层 key 与应用的设置项一一对应；**顶层值为对象的 key 
     "ov_peer_scope": "actor",
     "ov_workspace_peer": true,
     "ov_recall_dedup": true,
-    "ov_profile_enabled": true,
-    "ov_auto_capture": true,
     "max_tool_rounds": 8,
     "session_timeout_minutes": 15,
     "thinking_timeout_minutes": 0,
@@ -163,7 +163,7 @@ JSON 顶层 key 与应用的设置项一一对应；**顶层值为对象的 key 
 - **网络**: OkHttp + Gson
 - **AI API**: DeepSeek Chat Completion (Function Calling)
 - **SSH**: JSch
-- **对象存储**: AWS SDK for Kotlin S3（兼容 MinIO/Ceph 等）
+- **对象存储**: OkHttp + AWS Signature V4（S3 兼容，支持 MinIO/Ceph 等）
 - **CI**: GitHub Actions（自动构建 Debug APK 并发布 Release）
 
 ## License

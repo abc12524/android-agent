@@ -25,30 +25,61 @@ class SensorTool(private val context: Context) : Tool {
     override val parameters: Map<String, Any> = mapOf(
         "type" to "object",
         "properties" to mapOf(
-            "sensor" to mapOf(
+            "type" to mapOf(
                 "type" to "string",
                 "enum" to listOf("all", "gyroscope", "accelerometer", "magnetic", "light", "pressure", "proximity", "gravity", "linear_acceleration", "rotation"),
                 "description" to "要读取的传感器类型。all=所有可用传感器"
             )
         ),
-        "required" to listOf("sensor")
+        "required" to listOf("type")
     )
 
     override suspend fun execute(args: Map<String, Any>): String {
-        val sensorType = args["sensor"] as? String ?: "all"
+        val spec = ((args["type"] as? String) ?: (args["sensor"] as? String))?.trim().orEmpty()
+        val sensorTypeArg = spec.ifBlank { "all" }
 
         val sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as? SensorManager
             ?: return gson.toJson(mapOf("error" to true, "message" to "设备不支持 SensorManager"))
 
-        if (sensorType == "all") {
+        if (sensorTypeArg == "all") {
             return getAllSensors(sensorManager)
         }
 
-        val type = mapSensorType(sensorType) ?: return gson.toJson(mapOf(
-            "error" to true, "message" to "不支持的传感器类型: $sensorType"
-        ))
+        val resolved = resolveSensor(sensorManager, sensorTypeArg)
+            ?: return gson.toJson(mapOf(
+                "error" to true,
+                "message" to "不支持的传感器类型: $sensorTypeArg",
+                "hint" to "可传已知关键字（gyroscope/accelerometer/magnetic/light/pressure/proximity/gravity/linear_acceleration/rotation）、数字型别（如 19），或 all 结果中的传感器 name"
+            ))
 
-        return readSensorOnce(sensorManager, type, sensorType)
+        return readSensorOnce(sensorManager, resolved.type, resolved.name)
+    }
+
+    private data class ResolvedSensor(val type: Int, val name: String)
+
+    /**
+     * 解析传感器：支持
+     *  1) 已知关键字（mapSensorType）
+     *  2) 数字型别（Android Sensor type 常量，如 19=计步器、21=心率）
+     *  3) 设备上传感器 name 的精确/模糊匹配
+     *  4) 中文显示名匹配（如「计步器」）
+     */
+    private fun resolveSensor(sm: SensorManager, spec: String): ResolvedSensor? {
+        mapSensorType(spec.lowercase())?.let { t ->
+            return ResolvedSensor(t, sm.getDefaultSensor(t)?.name ?: spec)
+        }
+        val sensors = sm.getSensorList(Sensor.TYPE_ALL)
+
+        spec.toIntOrNull()?.let { n ->
+            val s = sensors.firstOrNull { it.type == n } ?: sm.getDefaultSensor(n)
+            return ResolvedSensor(n, s?.name ?: "type $n")
+        }
+
+        val q = spec.lowercase()
+        sensors.firstOrNull { it.name.lowercase() == q }?.let { return ResolvedSensor(it.type, it.name) }
+        sensors.firstOrNull { it.name.lowercase().contains(q) }?.let { return ResolvedSensor(it.type, it.name) }
+        sensors.firstOrNull { sensorTypeName(it.type).contains(spec) }?.let { return ResolvedSensor(it.type, it.name) }
+        return null
     }
 
     /**

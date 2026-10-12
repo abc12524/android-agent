@@ -68,8 +68,6 @@ fun SettingsScreen(
     var ovPeerId by remember { mutableStateOf(AppPreferences.ovPeerId) }
     var ovWorkspacePeer by remember { mutableStateOf(AppPreferences.ovWorkspacePeer) }
     var ovRecallDedup by remember { mutableStateOf(AppPreferences.ovRecallDedup) }
-    var ovProfileEnabled by remember { mutableStateOf(AppPreferences.ovProfileEnabled) }
-    var ovAutoCapture by remember { mutableStateOf(AppPreferences.ovAutoCapture) }
     var backgroundEnabled by remember { mutableStateOf(AppPreferences.backgroundServiceEnabled) }
     var s3Endpoint by remember { mutableStateOf(AppPreferences.s3EndpointUrl) }
     var s3AccessKey by remember { mutableStateOf(AppPreferences.s3AccessKey) }
@@ -82,12 +80,13 @@ fun SettingsScreen(
 
 请用中文回答用户的问题。
 
-明确对话主题后，调用 rename_session 设置简洁的对话标题（≤20字）。
+明确对话主题后，调用 phone_tool（action=rename_session）设置简洁的对话标题（≤20字）。
 
 【记忆规则】
-记忆是给未来的自己看的。善用 openviking_remember 记录：
-- 有用的操作、配置、步骤、关键信息 → 必须记录
-- 发现错误记忆 → 立即修正，不留错误"""
+- 发现错误记忆 → 立即修正，不留错误
+
+【工具自建】
+需要新能力时，可用 skill 工具自建 Python 工具：先 action=guide 阅读编写规范，再 action=write 新建脚本，action=run 调用。"""
         }
     ) }
     var showKeys by remember { mutableStateOf(false) }
@@ -125,8 +124,6 @@ fun SettingsScreen(
         ovPeerId = AppPreferences.ovPeerId
         ovWorkspacePeer = AppPreferences.ovWorkspacePeer
         ovRecallDedup = AppPreferences.ovRecallDedup
-        ovProfileEnabled = AppPreferences.ovProfileEnabled
-        ovAutoCapture = AppPreferences.ovAutoCapture
         backgroundEnabled = AppPreferences.backgroundServiceEnabled
         s3Endpoint = AppPreferences.s3EndpointUrl
         s3AccessKey = AppPreferences.s3AccessKey
@@ -150,8 +147,6 @@ fun SettingsScreen(
         AppPreferences.ovPeerId = ovPeerId
         AppPreferences.ovWorkspacePeer = ovWorkspacePeer
         AppPreferences.ovRecallDedup = ovRecallDedup
-        AppPreferences.ovProfileEnabled = ovProfileEnabled
-        AppPreferences.ovAutoCapture = ovAutoCapture
         AppPreferences.maxToolRounds = maxRounds.toIntOrNull() ?: 8
         AppPreferences.thinkingTimeoutMinutes = thinkingTimeout.toIntOrNull() ?: 0
         AppPreferences.systemPrompt = systemPrompt
@@ -251,7 +246,7 @@ fun SettingsScreen(
                     "ov" -> OvPage(
                         ovUrl, ovKey, ovUser, ovScoreThreshold, ovSearchDisplayCount,
                         ovFindThreshold, ovFindLimit,
-                        ovPeerId, ovWorkspacePeer, ovRecallDedup, ovProfileEnabled, ovAutoCapture,
+                        ovPeerId, ovWorkspacePeer, ovRecallDedup,
                         showKeys,
                         onUrl = { ovUrl = it; saved = false },
                         onKey = { ovKey = it; saved = false },
@@ -263,8 +258,6 @@ fun SettingsScreen(
                         onPeerId = { ovPeerId = it; saved = false },
                         onWorkspacePeer = { ovWorkspacePeer = it; saved = false },
                         onRecallDedup = { ovRecallDedup = it; saved = false },
-                        onProfileEnabled = { ovProfileEnabled = it; saved = false },
-                        onAutoCapture = { ovAutoCapture = it; saved = false },
                     )
                     "storage" -> StoragePage(
                         s3Endpoint, s3AccessKey, s3SecretKey, showKeys,
@@ -503,12 +496,12 @@ private fun OvPage(
     ovUrl: String, ovKey: String, ovUser: String,
     ovScoreThreshold: String, ovSearchDisplayCount: String,
     ovFindThreshold: String, ovFindLimit: String,
-    ovPeerId: String, ovWorkspacePeer: Boolean, ovRecallDedup: Boolean, ovProfileEnabled: Boolean, ovAutoCapture: Boolean,
+    ovPeerId: String, ovWorkspacePeer: Boolean, ovRecallDedup: Boolean,
     showKeys: Boolean,
     onUrl: (String) -> Unit, onKey: (String) -> Unit, onUser: (String) -> Unit,
     onThreshold: (String) -> Unit, onDisplayCount: (String) -> Unit,
     onFindThreshold: (String) -> Unit, onFindLimit: (String) -> Unit, onPeerId: (String) -> Unit,
-    onWorkspacePeer: (Boolean) -> Unit, onRecallDedup: (Boolean) -> Unit, onProfileEnabled: (Boolean) -> Unit, onAutoCapture: (Boolean) -> Unit,
+    onWorkspacePeer: (Boolean) -> Unit, onRecallDedup: (Boolean) -> Unit,
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(12.dp)) {
@@ -561,8 +554,6 @@ private fun OvPage(
 
             SwitchRow("按应用派生 Peer", "不同应用记忆互相隔离", onWorkspacePeer, ovWorkspacePeer)
             SwitchRow("召回去重", "跨轮不重复注入同一记忆", onRecallDedup, ovRecallDedup)
-            SwitchRow("会话开始注入记忆索引", "新建会话时列出可用记忆主题", onProfileEnabled, ovProfileEnabled)
-            SwitchRow("自动捕获对话", "对话后自动归档并提取长期记忆", onAutoCapture, ovAutoCapture)
         }
     }
 }

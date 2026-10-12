@@ -30,50 +30,35 @@ class ObjectStorageTool : Tool {
 
     override val name: String = "file_tool"
 
-    override val description: String =
-        "对象存储（S3 兼容）文件管理工具。支持上传、下载、删除、列举、复制、元数据查询、" +
-        "bucket 管理、文件夹管理、预签名 URL 生成等操作。" +
-        "所有连接参数从应用设置中自动读取（endpoint / accessKey / secretKey），" +
-        "无需手动传入。"
-
-    override val parameters: Map<String, Any> = mapOf(
-        "type" to "object",
-        "properties" to mapOf(
-            "action" to mapOf(
-                "type" to "string",
-                "description" to "操作类型",
-                "enum" to listOf(
-                    "upload", "download", "delete", "delete_batch", "list",
-                    "copy", "head", "list_buckets", "create_bucket", "delete_bucket",
-                    "presign", "create_folder", "delete_folder"
-                )
-            ),
-            "bucket" to mapOf("type" to "string", "description" to "Bucket 名称"),
-            "key" to mapOf("type" to "string", "description" to "对象 key（文件路径）"),
-            "local_path" to mapOf("type" to "string", "description" to "本地文件路径（upload/download 时使用）"),
-            "source_bucket" to mapOf("type" to "string", "description" to "源 Bucket（copy 时使用）"),
-            "source_key" to mapOf("type" to "string", "description" to "源对象 key（copy 时使用）"),
-            "keys" to mapOf(
-                "type" to "array",
-                "description" to "要删除的 key 列表（delete_batch 时使用）",
-                "items" to mapOf("type" to "string")
-            ),
-            "prefix" to mapOf("type" to "string", "description" to "列举前缀（list 时使用）"),
-            "max_keys" to mapOf("type" to "integer", "description" to "最大返回数量（list 时使用，默认 100）"),
-            "folder" to mapOf("type" to "string", "description" to "文件夹名称（create_folder/delete_folder 时使用）"),
-            "method" to mapOf(
-                "type" to "string",
-                "description" to "预签名 HTTP 方法（presign 时使用，默认 GET）",
-                "enum" to listOf("GET", "PUT")
-            ),
-            "expires" to mapOf("type" to "integer", "description" to "预签名 URL 有效秒数（presign 时使用，默认 3600）")
-        ),
-        "required" to listOf("action")
+    private val subs = listOf(
+        SubTool("upload", "上传本地文件", "upload: 参数 bucket, key, local_path 必填"),
+        SubTool("download", "下载对象到本地", "download: 参数 bucket, key, local_path 必填"),
+        SubTool("delete", "删除对象", "delete: 参数 bucket, key 必填"),
+        SubTool("delete_batch", "批量删除对象", "delete_batch: 参数 bucket 必填, keys（字符串数组）必填"),
+        SubTool("list", "列举对象", "list: 参数 bucket 必填；可选 prefix、max_keys（默认 100）"),
+        SubTool("copy", "复制对象", "copy: 参数 bucket, key, source_key 必填；可选 source_bucket（默认同目标）"),
+        SubTool("head", "对象元数据", "head: 参数 bucket, key 必填"),
+        SubTool("list_buckets", "列出所有 bucket", "list_buckets: 无参数", requiresParams = false),
+        SubTool("create_bucket", "创建 bucket", "create_bucket: 参数 bucket 必填"),
+        SubTool("delete_bucket", "删除 bucket", "delete_bucket: 参数 bucket 必填"),
+        SubTool("presign", "生成预签名 URL", "presign: 参数 bucket, key 必填；可选 method（GET|PUT，默认 GET）、expires（默认 3600）"),
+        SubTool("create_folder", "创建文件夹", "create_folder: 参数 bucket, folder 必填"),
+        SubTool("delete_folder", "删除文件夹及其对象", "delete_folder: 参数 bucket, folder 必填")
     )
+
+    override val description: String =
+        "对象存储（S3 兼容）。子工具：" + subs.joinToString(" / ") { it.name } +
+        "。连接参数从应用设置自动读取，无需传入。"
+
+    override val parameters: Map<String, Any> = familyParameters(subs)
 
     override suspend fun execute(args: Map<String, Any>): String {
         val action = args["action"] as? String
-            ?: return err("缺少 action 参数")
+        if (action.isNullOrBlank()) return manifestOf(name, subs)
+        val sub = subs.firstOrNull { it.name == action }
+            ?: return err("未知子工具: $action")
+        val p = familyParams(args)
+        if (sub.requiresParams && p.isEmpty()) return usageOf(name, sub)
 
         val endpointUrl = AppPreferences.s3EndpointUrl
         val accessKey = AppPreferences.s3AccessKey
@@ -88,19 +73,19 @@ class ObjectStorageTool : Tool {
 
         return try {
             val result = when (action) {
-                "upload" -> doUpload(endpoint, region, accessKey, secretKey, args)
-                "download" -> doDownload(endpoint, region, accessKey, secretKey, args)
-                "delete" -> doDelete(endpoint, region, accessKey, secretKey, args)
-                "delete_batch" -> doDeleteBatch(endpoint, region, accessKey, secretKey, args)
-                "list" -> doList(endpoint, region, accessKey, secretKey, args)
-                "copy" -> doCopy(endpoint, region, accessKey, secretKey, args)
-                "head" -> doHead(endpoint, region, accessKey, secretKey, args)
+                "upload" -> doUpload(endpoint, region, accessKey, secretKey, p)
+                "download" -> doDownload(endpoint, region, accessKey, secretKey, p)
+                "delete" -> doDelete(endpoint, region, accessKey, secretKey, p)
+                "delete_batch" -> doDeleteBatch(endpoint, region, accessKey, secretKey, p)
+                "list" -> doList(endpoint, region, accessKey, secretKey, p)
+                "copy" -> doCopy(endpoint, region, accessKey, secretKey, p)
+                "head" -> doHead(endpoint, region, accessKey, secretKey, p)
                 "list_buckets" -> doListBuckets(endpoint, region, accessKey, secretKey)
-                "create_bucket" -> doCreateBucket(endpoint, region, accessKey, secretKey, args)
-                "delete_bucket" -> doDeleteBucket(endpoint, region, accessKey, secretKey, args)
-                "presign" -> doPresign(endpoint, region, accessKey, secretKey, args)
-                "create_folder" -> doCreateFolder(endpoint, region, accessKey, secretKey, args)
-                "delete_folder" -> doDeleteFolder(endpoint, region, accessKey, secretKey, args)
+                "create_bucket" -> doCreateBucket(endpoint, region, accessKey, secretKey, p)
+                "delete_bucket" -> doDeleteBucket(endpoint, region, accessKey, secretKey, p)
+                "presign" -> doPresign(endpoint, region, accessKey, secretKey, p)
+                "create_folder" -> doCreateFolder(endpoint, region, accessKey, secretKey, p)
+                "delete_folder" -> doDeleteFolder(endpoint, region, accessKey, secretKey, p)
                 else -> err("未知操作: $action")
             }
             android.util.Log.d("ObjectStorage", "action=$action result=${result.take(500)}")
