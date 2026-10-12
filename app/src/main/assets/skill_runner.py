@@ -31,9 +31,9 @@ SKILL_DIR = os.path.dirname(os.path.abspath(__file__))
 if SKILL_DIR not in sys.path:
     sys.path.insert(0, SKILL_DIR)
 
-_SKILL_RE = re.compile(r'^#\s*skill\s*:\s*(\S+)\s*$', re.I)
+_SKILL_RE = re.compile(r'^#\s*skill\s*:\s*([A-Za-z0-9_\-]+)', re.I)
 _DESC_RE = re.compile(r'^#\s*description\s*:\s*(.*)$', re.I)
-_STATUS_RE = re.compile(r'^#\s*status\s*:\s*(\S+)\s*$', re.I)
+_STATUS_RE = re.compile(r'^#\s*status\s*:\s*([A-Za-z0-9_\-]+)', re.I)
 _USAGE_RE = re.compile(r'^#\s*usage\s*:\s*(.*)$', re.I)
 _HASH_RE = re.compile(r'^#\s?')
 _NAME_RE = re.compile(r'^[A-Za-z0-9_\-]{1,64}$')
@@ -77,13 +77,18 @@ def _parse_header(path):
             continue
         if not line.startswith("#"):
             break
+        # 重复的 # skill: 块：后者覆盖前者，重开一个干净的头部（避免头部重复时解析错乱）
         m = _SKILL_RE.match(line)
         if m:
             name = m.group(1)
+            description = ""
+            status = "enable"
+            in_usage = False
+            usage_lines = []
             continue
         if name is None:
             continue
-        # status 在头部块内任意位置都生效（不受是否已进入 usage 影响）
+        # status 在头部块内任意位置都生效（允许尾随内容）
         m = _STATUS_RE.match(line)
         if m:
             status = m.group(1).strip().lower()
@@ -100,6 +105,9 @@ def _parse_header(path):
                 usage_lines.append(rest)
             continue
         if in_usage:
+            # 混入 usage 的元信息行不计入用法，避免污染
+            if _SKILL_RE.match(line) or _STATUS_RE.match(line) or _DESC_RE.match(line):
+                continue
             usage_lines.append(_HASH_RE.sub("", line))
     if not name:
         return None

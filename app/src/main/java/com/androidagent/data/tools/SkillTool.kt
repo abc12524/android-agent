@@ -150,15 +150,20 @@ class SkillTool(private val context: Context) : Tool {
             }
             if (!line.startsWith("#")) break
 
-            val mSkill = skillRe.matchEntire(line)
+            // 重复的 # skill: 块：后者覆盖前者，重开一个干净的头部（避免头部重复时解析错乱）
+            val mSkill = skillRe.find(line)
             if (mSkill != null) {
                 name = mSkill.groupValues[1]
+                description = ""
+                status = "enable"
+                inUsage = false
+                usageLines.clear()
                 continue
             }
             if (name == null) continue
 
-            // status 在头部块内任意位置都生效（不受是否已进入 usage 影响）
-            val mStatus = statusRe.matchEntire(line)
+            // status 在头部块内任意位置都生效（允许尾随内容）
+            val mStatus = statusRe.find(line)
             if (mStatus != null) {
                 status = mStatus.groupValues[1].lowercase()
                 continue
@@ -177,7 +182,13 @@ class SkillTool(private val context: Context) : Tool {
                 if (rest.isNotEmpty()) usageLines.add(rest)
                 continue
             }
-            if (inUsage) usageLines.add(hashRe.replace(line, ""))
+            if (inUsage) {
+                // 混入 usage 的元信息行不计入用法，避免污染
+                if (skillRe.containsMatchIn(line) || statusRe.containsMatchIn(line) ||
+                    descRe.containsMatchIn(line)
+                ) continue
+                usageLines.add(hashRe.replace(line, ""))
+            }
         }
         val skillName = name ?: return null
         return SkillMeta(
@@ -281,9 +292,9 @@ class SkillTool(private val context: Context) : Tool {
         gson.toJson(mapOf("status" to "error", "error" to msg))
 
     private companion object {
-        val skillRe = Regex("^#\\s*skill\\s*:\\s*(\\S+)\\s*$", RegexOption.IGNORE_CASE)
+        val skillRe = Regex("^#\\s*skill\\s*:\\s*([A-Za-z0-9_\\-]+)", RegexOption.IGNORE_CASE)
         val descRe = Regex("^#\\s*description\\s*:\\s*(.*)$", RegexOption.IGNORE_CASE)
-        val statusRe = Regex("^#\\s*status\\s*:\\s*(\\S+)\\s*$", RegexOption.IGNORE_CASE)
+        val statusRe = Regex("^#\\s*status\\s*:\\s*([A-Za-z0-9_\\-]+)", RegexOption.IGNORE_CASE)
         val usageRe = Regex("^#\\s*usage\\s*:\\s*(.*)$", RegexOption.IGNORE_CASE)
         val hashRe = Regex("^#\\s?")
         val NAME_RE = Regex("^[A-Za-z0-9_\\-]{1,64}$")
