@@ -38,7 +38,7 @@ import org.intellij.markdown.flavours.gfm.GFMTokenTypes
 // ==================== Markdown 渲染 ====================
 
 @Composable
-internal fun MarkdownBody(content: String) {
+internal fun MarkdownBody(content: String, fillWidth: Boolean = true) {
     val components = remember {
         markdownComponents(table = { model -> AutoSizedTable(model) })
     }
@@ -49,7 +49,7 @@ internal fun MarkdownBody(content: String) {
             markdownState = state,
             components = components,
             typography = typography,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = if (fillWidth) Modifier.fillMaxWidth() else Modifier,
         )
     }
 }

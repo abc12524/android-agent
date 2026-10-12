@@ -740,7 +740,7 @@ fun MessageBubble(msg: Message) {
                                     )
                                     if (msg.content.isNotBlank()) Spacer(Modifier.height(8.dp))
                                 }
-                                MarkdownBody(msg.content)
+                                MarkdownBody(msg.content, fillWidth = false)
                             }
                         }
                     } else {
