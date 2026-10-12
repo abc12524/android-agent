@@ -62,6 +62,10 @@ class ChatEngine(private val context: Context) {
             val history = db.messageDao().getMessagesBySessionSync(sessionId)
             val messages = history.map { it.toApiMessage() }.toMutableList()
 
+            // 动态注入已注册 skill 清单（不入库，随脚本增删每轮自动更新）
+            val skillsHint = toolRegistry.skillsSystemHint()
+            if (skillsHint.isNotBlank()) messages.add(0, DeepSeekClient.ChatMessage(role = "system", content = skillsHint))
+
             // 2. 添加用户消息（放在最前面），含图片时自动上传 Files API（vision 模型）
             val (userApiMsg, imageFileId) = buildUserMessage(userMessage, imageFilePath)
             messages.add(userApiMsg)
@@ -250,6 +254,10 @@ class ChatEngine(private val context: Context) {
             // 1. 加载历史消息
             val history = db.messageDao().getMessagesBySessionSync(sessionId)
             val messages = history.map { it.toApiMessage() }.toMutableList()
+
+            // 动态注入已注册 skill 清单（不入库，随脚本增删每轮自动更新）
+            val skillsHint = toolRegistry.skillsSystemHint()
+            if (skillsHint.isNotBlank()) messages.add(0, DeepSeekClient.ChatMessage(role = "system", content = skillsHint))
 
             // 2. 添加用户消息（放在最前面），含图片时自动上传 Files API（vision 模型）
             val (userApiMsg, imageFileId) = buildUserMessage(userMessage, imageFilePath)

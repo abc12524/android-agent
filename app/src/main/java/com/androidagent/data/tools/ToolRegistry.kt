@@ -47,6 +47,17 @@ class ToolRegistry(context: Context) {
     fun get(name: String): Tool? = tools[name]
 
     /**
+     * 动态系统提示：列出当前已注册的 skill（自建工具），随脚本增删自动变化。
+     * 无已注册 skill 时返回空串。
+     */
+    fun skillsSystemHint(): String {
+        val names = (tools["skill"] as? SkillTool)?.registeredSkillNames() ?: emptyList()
+        if (names.isEmpty()) return ""
+        return "【可用 skill（自建工具）】" + names.joinToString(", ") +
+            "。用法：skill 省略 action 返回清单；action=<名称> 查看用法；action=<名称> + params 执行。"
+    }
+
+    /**
      * 生成 DeepSeek API 所需的 tool definitions
      */
     fun toToolDefinitions(): List<DeepSeekClient.ToolDefinition> {

@@ -25,28 +25,42 @@ class SkillTool(private val context: Context) : Tool {
     /** skills 脚本目录（绝对路径）；*.py 会被自动注册（`_` 开头的运行时文件除外） */
     private val skillsDir: File = File(context.filesDir, "skills")
 
+    /** 脚本注册缓存：用「文件名 + 修改时间 + 大小」做签名，签名未变则复用，不重新读取解析。 */
+    @Volatile private var cachedSkills: List<SkillMeta> = emptyList()
+    @Volatile private var cachedSignature: String = ""
+    private val scanLock = Any()
+
     override val name: String = "skill"
 
-    override val description: String =
-        "调用已注册的 skill（自建 Python 工具，脚本目录 " + skillsDir.absolutePath + "）。" +
-            "不传 action 返回已注册 skill 清单；传 action=<skill 名> 查看用法；" +
-            "传 action=<skill 名> + params 执行；action=delete 删除。"
+    /** 已注册（启用）skill 名称，自动反映新增/删除。 */
+    fun registeredSkillNames(): List<String> = scan().filter { it.enabled }.map { it.name }
 
-    override val parameters: Map<String, Any> = mapOf(
-        "type" to "object",
-        "properties" to mapOf(
-            "action" to mapOf(
-                "type" to "string",
-                "description" to "skill 名（已注册清单中的名称），或管理动作 delete；省略则返回已注册 skill 清单"
+    /** 已注册 skill 名称串，供工具定义动态披露。 */
+    private fun registeredNames(): String =
+        registeredSkillNames().joinToString(", ").ifEmpty { "(空)" }
+
+    override val description: String
+        get() = "调用已注册的自建 Python 工具（脚本目录 " + skillsDir.absolutePath + "）。" +
+            "当前已注册: " + registeredNames() + "。" +
+            "不传 action 返回清单；action=<skill 名> 查看用法；" +
+            "action=<skill 名> + params 执行；action=delete 删除。"
+
+    override val parameters: Map<String, Any>
+        get() = mapOf(
+            "type" to "object",
+            "properties" to mapOf(
+                "action" to mapOf(
+                    "type" to "string",
+                    "description" to "skill 名（当前已注册: " + registeredNames() + "），或管理动作 delete；省略则返回已注册清单"
+                ),
+                "params" to mapOf(
+                    "type" to "object",
+                    "description" to "执行时传给 skill run() 的参数字典；action=delete 时用 {skill: 名称}",
+                    "additionalProperties" to true
+                )
             ),
-            "params" to mapOf(
-                "type" to "object",
-                "description" to "执行时传给 skill run() 的参数字典；action=delete 时用 {skill: 名称}",
-                "additionalProperties" to true
-            )
-        ),
-        "required" to emptyList<String>()
-    )
+            "required" to emptyList<String>()
+        )
 
     override suspend fun execute(args: Map<String, Any>): String {
         val action = (args["action"] as? String)?.trim().orEmpty()
@@ -98,13 +112,22 @@ class SkillTool(private val context: Context) : Tool {
     )
 
     private fun scan(): List<SkillMeta> {
-        if (!skillsDir.isDirectory) return emptyList()
-        val out = ArrayList<SkillMeta>()
-        skillsDir.listFiles()?.sortedBy { it.name }?.forEach { f ->
-            if (!f.isFile || !f.name.endsWith(".py") || f.name.startsWith("_")) return@forEach
-            parseHeader(f)?.let { out.add(it) }
+        val files = skillsDir.listFiles()?.filter {
+            it.isFile && it.name.endsWith(".py") && !it.name.startsWith("_")
+        }?.sortedBy { it.name } ?: emptyList()
+
+        // 签名 = 每个脚本的「文件名 + 修改时间 + 大小」。未变说明内容未改动，直接复用缓存，
+        // 既不重新载入脚本，披露的脚本名也保持稳定；有变化才重新解析。
+        val signature = files.joinToString(";") { "${it.name}:${it.lastModified()}:${it.length()}" }
+        if (signature == cachedSignature) return cachedSkills
+
+        synchronized(scanLock) {
+            if (signature == cachedSignature) return cachedSkills
+            val parsed = files.mapNotNull { parseHeader(it) }
+            cachedSkills = parsed
+            cachedSignature = signature
+            return parsed
         }
-        return out
     }
 
     private fun parseHeader(file: File): SkillMeta? {
@@ -120,7 +143,7 @@ class SkillTool(private val context: Context) : Tool {
         val usageLines = ArrayList<String>()
 
         for (raw in lines.take(300)) {
-            val line = raw.trim()
+            val line = raw.trim().removePrefix("\uFEFF")
             if (line.isEmpty()) {
                 if (name != null && inUsage) usageLines.add("")
                 continue
@@ -134,15 +157,16 @@ class SkillTool(private val context: Context) : Tool {
             }
             if (name == null) continue
 
+            // status 在头部块内任意位置都生效（不受是否已进入 usage 影响）
+            val mStatus = statusRe.matchEntire(line)
+            if (mStatus != null) {
+                status = mStatus.groupValues[1].lowercase()
+                continue
+            }
             if (!inUsage) {
                 val mDesc = descRe.matchEntire(line)
                 if (mDesc != null) {
                     description = mDesc.groupValues[1].trim()
-                    continue
-                }
-                val mStatus = statusRe.matchEntire(line)
-                if (mStatus != null) {
-                    status = mStatus.groupValues[1].lowercase()
                     continue
                 }
             }

@@ -83,13 +83,14 @@ def _parse_header(path):
             continue
         if name is None:
             continue
+        # status 在头部块内任意位置都生效（不受是否已进入 usage 影响）
+        m = _STATUS_RE.match(line)
+        if m:
+            status = m.group(1).strip().lower()
+            continue
         m = _DESC_RE.match(line)
         if m and not in_usage:
             description = m.group(1).strip()
-            continue
-        m = _STATUS_RE.match(line)
-        if m and not in_usage:
-            status = m.group(1).strip().lower()
             continue
         m = _USAGE_RE.match(line)
         if m:
