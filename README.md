@@ -169,4 +169,4 @@ JSON 顶层 key 与应用的设置项一一对应；**顶层值为对象的 key 
 
 ## License
 
-MIT
+GNU Affero General Public License v3.0 (AGPL-3.0)，详见 [LICENSE](LICENSE)。
