@@ -32,12 +32,13 @@ class ToolRegistry(context: Context) {
     var currentSessionId: String = ""
 
     init {
-        // 注册 4 个工具族（每个族通过 action 参数分发子操作）+ skill 已注册工具调用入口
+        // 注册工具族（每个族通过 action 参数分发子操作）+ skill 调用入口 + 远程 skill 仓库
         register(SystemTool())
         register(PhoneTool(context, this))
         register(OpenVikingTool())
         register(ObjectStorageTool())
         register(SkillTool(context))
+        register(SkillHubTool(context))
     }
 
     fun register(tool: Tool) {

@@ -9,9 +9,9 @@
 - AI 可自主调用设备上的工具完成任务
 - 对话历史持久化（Room 本地数据库）
 
-### 🛠️ 工具集（5 个大工具，两段式调用）
+### 🛠️ 工具集（6 个大工具，两段式调用）
 
-对外暴露 5 个大工具，子工具用 `action` 指定，调用参数只有 `{ action, params }`：
+对外暴露 6 个大工具，子工具用 `action` 指定，调用参数只有 `{ action, params }`：
 
 | 大工具 | 子工具 |
 |------|------|
@@ -20,6 +20,7 @@
 | `openviking_tool` | `search` / `find` / `remember` / `forget` / `read` / `list_dir` / `write_file` |
 | `file_tool` | `upload` / `download` / `delete` / `delete_batch` / `list` / `copy` / `head` / `list_buckets` / `create_bucket` / `delete_bucket` / `presign` / `create_folder` / `delete_folder` |
 | `skill` | 已注册的自建工具（子工具名即 skill 名，逐步披露）；`delete` 注销。脚本目录 `skills/` |
+| `skill_hub` | `list` / `install` / `remove` —— 从远程仓库（GitHub）查看 / 下载 / 下线或删除 skill |
 
 **两段式调用**（渐进披露，首次只暴露工具名与子工具名，用法按需返回）：
 - 不传 `action` → 返回该大工具下全部子工具及简短说明；
@@ -29,11 +30,20 @@
 > 用户发送图片时自动上传并交由 vision 模型识别，无需 LLM 调用工具。
 
 ### 🧩 skill 自建工具
-- `skills/` 目录下的 `*.py` 脚本按头部元信息**自动注册**为可调用工具：放入即生效，删除即注销，无需改核心代码
+- `skills/` 目录下的脚本按头部元信息**自动注册**为可调用工具：放入即生效，删除即注销，无需改核心代码
+- 支持两种布局：扁平 `skills/<名>.py`，或文件夹 `skills/<名>/skill.py`（可含 `_` 助手模块与 `config.json`，助手用相对导入引用）
 - `skill` 工具只负责**调用**（不负责创建）：省略 action 返回已注册清单，`action=<skill 名>` 查看用法，`action=<skill 名>` + `params` 执行，`action=delete` 注销
 - 新增 skill 只需把脚本写进 `skills/`（可用 `system_tool` 的 `python` 动作），编写规范见 `skills/README.md`
 - 脚本定义 `run(arguments)` 并返回统一信封 `{"status":"ok","result":{...}}` / `{"status":"error",...}`
 - 运行在应用内置的 Python 3.13 环境；默认内置 `script` 脚本读写工具（增删改查 + 结构骨架），其余为空
+
+### 🛰️ 远程 skill 仓库（skill_hub）
+- `skill_hub` 工具（`list` / `install` / `remove`）从 GitHub 技能仓库查看 / 下载 / 卸载 skill
+- 远程仓库根放 `index.json`（技能名 + 说明 + 平台 + 依赖索引），每个技能一个文件夹（入口 `skill.py` 与配置模板同目录）
+- 下载到本地 `skills/<名>/` 后**自动注册**，无需重启；同名技能为**覆盖安装**（会保留本地 `config.json`）
+- `remove` 默认只**下线**（改头部 `# status: disable`，保留文件、可重新 `install` 恢复）；传 `hard=true` 才真正删除
+- 仓库地址默认 `abc12524/shell-skills@main`，可在「设置 → Skill 仓库」修改
+- ⚠️ 下载即等价于信任该仓库的代码（会在内置 Python 进程内执行），仅从可信来源安装
 
 ### ☁️ 对象存储（S3 兼容）
 - 支持任何 S3 兼容服务（AWS S3、MinIO、Ceph、阿里云 OSS 等）

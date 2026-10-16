@@ -94,6 +94,8 @@ skill 工具用于调用已注册的自建 Python 工具：省略 action 查看�
     var saved by remember { mutableStateOf(false) }
     var updateState by remember { mutableStateOf<UpdateState>(UpdateState.Idle) }
     var configUrl by remember { mutableStateOf(AppPreferences.configUrl) }
+    var skillRepo by remember { mutableStateOf(AppPreferences.skillHubRepo) }
+    var skillBranch by remember { mutableStateOf(AppPreferences.skillHubBranch) }
     var importing by remember { mutableStateOf(false) }
     var importMsg by remember { mutableStateOf<String?>(null) }
     var remoteJson by remember { mutableStateOf<String?>(null) }
@@ -132,6 +134,8 @@ skill 工具用于调用已注册的自建 Python 工具：省略 action 查看�
         skipSsl = AppPreferences.skipSslVerification
         systemPrompt = AppPreferences.systemPrompt
         configUrl = AppPreferences.configUrl
+        skillRepo = AppPreferences.skillHubRepo
+        skillBranch = AppPreferences.skillHubBranch
     }
 
     fun savePrefs() {
@@ -155,6 +159,8 @@ skill 工具用于调用已注册的自建 Python 工具：省略 action 查看�
         AppPreferences.s3AccessKey = s3AccessKey
         AppPreferences.s3SecretKey = s3SecretKey
         AppPreferences.skipSslVerification = skipSsl
+        AppPreferences.skillHubRepo = skillRepo
+        AppPreferences.skillHubBranch = skillBranch
 
         val wasEnabled = AppPreferences.backgroundServiceEnabled
         AppPreferences.backgroundServiceEnabled = backgroundEnabled
@@ -171,6 +177,7 @@ skill 工具用于调用已注册的自建 Python 工具：省略 action 查看�
         "api" to "API 配置",
         "ov" to "OpenViking 记忆",
         "storage" to "对象存储",
+        "skillhub" to "Skill 仓库",
         "features" to "功能与提示词",
         "import" to "配置导入",
         "about" to "关于",
@@ -267,6 +274,11 @@ skill 工具用于调用已注册的自建 Python 工具：省略 action 查看�
                         onAccessKey = { s3AccessKey = it; saved = false },
                         onSecretKey = { s3SecretKey = it; saved = false },
                     )
+                    "skillhub" -> SkillHubPage(
+                        skillRepo, skillBranch,
+                        onRepo = { skillRepo = it; saved = false },
+                        onBranch = { skillBranch = it; saved = false },
+                    )
                     "features" -> FeaturesPage(
                         skipSsl, maxRounds, thinkingTimeout, backgroundEnabled, systemPrompt,
                         onSkipSsl = { skipSsl = it; saved = false },
@@ -330,6 +342,8 @@ private fun SettingsRootMenu(
         MenuNavRow(Icons.Outlined.Psychology, "OpenViking 记忆") { onNavigate("ov") }
         MenuDivider()
         MenuNavRow(Icons.Outlined.Storage, "对象存储 / S3") { onNavigate("storage") }
+        MenuDivider()
+        MenuNavRow(Icons.Outlined.Extension, "Skill 仓库") { onNavigate("skillhub") }
         MenuDivider()
         MenuNavRow(Icons.Outlined.Download, "配置导入") { onNavigate("import") }
 
@@ -485,6 +499,24 @@ private fun StoragePage(
     FormField("端点", s3Endpoint, onEndpoint)
     FormField("访问密钥 ID", s3AccessKey, onAccessKey, masked = !showKeys)
     FormField("秘密访问密钥", s3SecretKey, onSecretKey, masked = !showKeys)
+}
+
+@Composable
+private fun SkillHubPage(
+    repo: String, branch: String,
+    onRepo: (String) -> Unit, onBranch: (String) -> Unit,
+) {
+    FormTitle("远程技能仓库")
+    Spacer(Modifier.height(2.dp))
+    FormField("仓库 (owner/repo)", repo, onRepo)
+    FormField("分支", branch, onBranch)
+    Spacer(Modifier.height(10.dp))
+    Text(
+        "LLM 可通过 skill_hub 工具查看并下载远程技能；此处配置下载源（留空用默认 abc12524/shell-skills@main）。" +
+            "同名技能为覆盖安装（会保留本地 config.json）。下载即在进程内执行其代码，仅从可信来源安装。",
+        fontSize = 12.sp,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
 }
 
 @Composable

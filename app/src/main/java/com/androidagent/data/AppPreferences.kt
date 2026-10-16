@@ -124,6 +124,15 @@ object AppPreferences {
         get() = prefs.getString("config_url", "") ?: ""
         set(value) = prefs.edit().putString("config_url", value).apply()
 
+    // 远程技能仓库（skill_hub 下载源）：GitHub owner/repo 与分支，留空用默认
+    var skillHubRepo: String
+        get() = prefs.getString("skill_hub_repo", "abc12524/shell-skills") ?: "abc12524/shell-skills"
+        set(value) = prefs.edit().putString("skill_hub_repo", value).apply()
+
+    var skillHubBranch: String
+        get() = prefs.getString("skill_hub_branch", "main") ?: "main"
+        set(value) = prefs.edit().putString("skill_hub_branch", value).apply()
+
     /**
      * 从远程配置 JSON 一次性应用所有已知设置项，避免逐项手动输入。
      * JSON 顶层 key 与下方 SharedPreferences key 一一对应：

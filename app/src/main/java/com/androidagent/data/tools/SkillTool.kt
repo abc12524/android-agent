@@ -7,8 +7,9 @@ import java.io.File
 /**
  * 工具族 5：skill —— 调用已注册的自建工具（不负责创建）。
  *
- * skills/ 目录下的 *.py 脚本按头部元信息（# skill / # description / # status / # usage）
- * 自动注册；新增脚本自动出现，删除脚本自动消失，`_` 开头的运行时文件不参与注册。
+ * skills/ 目录下的脚本按头部元信息（# skill / # description / # status / # usage）
+ * 自动注册，支持两种布局（可混用）：扁平 `skills/<名>.py`；文件夹 `skills/<名>/skill.py`
+ * （入口、`_` 助手、`config.json` 同目录）。新增即生效、删除即注销，`_`/`.` 开头不注册。
  * 与内置工具族一样按「两段式」逐步披露：
  *
  *   - 不传 action                   → 返回已注册 skill 清单（仅名称 + 简短说明）；
@@ -116,18 +117,29 @@ class SkillTool(private val context: Context) : Tool {
 
     private fun scan(): List<SkillMeta> {
         ensureDeployed()
-        val files = skillsDir.listFiles()?.filter {
-            it.isFile && it.name.endsWith(".py") && !it.name.startsWith("_")
-        }?.sortedBy { it.name } ?: emptyList()
+        val children = skillsDir.listFiles()?.sortedBy { it.name } ?: emptyList()
+        // 支持两种布局：扁平 skills/<名>.py；文件夹 skills/<名>/skill.py（入口）
+        val entries = children.mapNotNull { f ->
+            when {
+                f.isDirectory && !f.name.startsWith("_") && !f.name.startsWith(".") -> {
+                    val entry = File(f, "skill.py")
+                    if (entry.isFile) entry else null
+                }
+                f.isFile && f.name.endsWith(".py") && !f.name.startsWith("_") -> f
+                else -> null
+            }
+        }
 
-        // 签名 = 每个脚本的「文件名 + 修改时间 + 大小」。未变说明内容未改动，直接复用缓存，
+        // 签名 = 每个入口的「绝对路径 + 修改时间 + 大小」。未变说明内容未改动，直接复用缓存，
         // 既不重新载入脚本，披露的脚本名也保持稳定；有变化才重新解析。
-        val signature = files.joinToString(";") { "${it.name}:${it.lastModified()}:${it.length()}" }
+        val signature = entries.joinToString(";") {
+            "${it.absolutePath}:${it.lastModified()}:${it.length()}"
+        }
         if (signature == cachedSignature) return cachedSkills
 
         synchronized(scanLock) {
             if (signature == cachedSignature) return cachedSkills
-            val parsed = files.mapNotNull { parseHeader(it) }
+            val parsed = entries.mapNotNull { parseHeader(it) }
             cachedSkills = parsed
             cachedSignature = signature
             return parsed
@@ -224,9 +236,14 @@ class SkillTool(private val context: Context) : Tool {
 
     private fun delete(skill: String): String {
         if (!NAME_RE.matches(skill)) return err("非法 skill 名称")
-        val target = File(skillsDir, "$skill.py")
-        if (!target.isFile) return err("skill '$skill' 不存在")
-        return if (target.delete()) {
+        val flat = File(skillsDir, "$skill.py")
+        val folder = File(skillsDir, skill)
+        val okDel = when {
+            flat.isFile -> flat.delete()
+            folder.isDirectory -> folder.deleteRecursively()
+            else -> return err("skill '$skill' 不存在")
+        }
+        return if (okDel) {
             gson.toJson(mapOf("status" to "ok", "result" to mapOf("skill" to skill, "deleted" to true)))
         } else {
             err("删除失败")
