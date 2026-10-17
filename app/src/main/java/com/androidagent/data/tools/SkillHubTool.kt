@@ -11,14 +11,16 @@ import okhttp3.Request
 import java.io.File
 
 /**
- * 工具族：skill_hub —— 从远程技能仓库（GitHub）查看 / 下载 / 卸载 skill。
+ * 工具族：skill_hub —— 从远程技能仓库（GitHub / Gitea）查看 / 下载 / 卸载 skill。
  *
  * 远程仓库根放 `index.json`（技能名 + 说明 + 平台 + 依赖索引），每个技能一个文件夹
- * （入口 `skill.py` 与可选 `_` 助手 / `config.example.json` 同目录）。安装时按 GitHub
+ * （入口 `skill.py` 与可选 `_` 助手 / `config.example.json` 同目录）。安装时按仓库
  * contents API 列出该文件夹文件并逐个下载到本地 `skills/<名>/`，随后由 SkillTool 按签名
  * 自动重新扫描注册（无需重启）。
  *
  * 仓库地址默认内置 `abc12524/shell-skills@main`，可在「设置 → Skill 仓库」修改。
+ * 仓库类型 `github` / `gitea` 由 `skill_hub_type` 指定；留空时若配置了 Gitea 基址
+ * `skill_hub_base`（如 http://192.168.30.181:3000）则按 gitea 处理，否则按 github。
  *
  * action 分发（两段式）：
  *   - 不传 action              → 返回子工具清单
@@ -45,7 +47,7 @@ class SkillHubTool(private val context: Context) : Tool {
     )
 
     override val description: String
-        get() = "远程技能仓库（GitHub " + repo() + "@" + branch() + "）。子工具：" +
+        get() = "远程技能仓库（" + sourceLabel() + "）。子工具：" +
             subs.joinToString(" / ") { it.name } +
             "。list 查看可装技能；install + params{name} 下载安装；" +
             "remove + params{name} 默认下线（可恢复），remove + params{name,hard=true} 才删除。" +
@@ -82,20 +84,50 @@ class SkillHubTool(private val context: Context) : Tool {
 
     private fun branch(): String = AppPreferences.skillHubBranch.trim().ifBlank { "main" }
 
+    private fun base(): String = AppPreferences.skillHubBase.trim().trimEnd('/')
+
+    /** 仓库类型：显式配置优先，其次按是否配置 Gitea 基址推断。 */
+    private fun type(): String = when (AppPreferences.skillHubType.trim().lowercase()) {
+        "github" -> "github"
+        "gitea" -> "gitea"
+        else -> if (base().isNotBlank()) "gitea" else "github"
+    }
+
+    private fun sourceLabel(): String =
+        if (type() == "gitea") "${base().ifBlank { "https://gitea.com" }}/${repo()}@${branch()} (gitea)"
+        else "${repo()}@${branch()} (github)"
+
     private fun indexUrl(): String =
-        "https://raw.githubusercontent.com/${repo()}/${branch()}/index.json"
+        if (type() == "gitea") "${base()}/${repo()}/raw/branch/${branch()}/index.json"
+        else "https://raw.githubusercontent.com/${repo()}/${branch()}/index.json"
 
     private fun contentsUrl(path: String): String =
-        "https://api.github.com/repos/${repo()}/contents/$path?ref=${branch()}"
+        if (type() == "gitea") "${base()}/api/v1/repos/${repo()}/contents/$path?ref=${branch()}"
+        else "https://api.github.com/repos/${repo()}/contents/$path?ref=${branch()}"
 
     // ==================== HTTP ====================
 
+    private fun authed(builder: Request.Builder): Request.Builder {
+        val token = AppPreferences.skillHubToken.trim()
+        if (token.isNotBlank()) {
+            builder.header(
+                "Authorization",
+                if (type() == "gitea") "token $token" else "Bearer $token"
+            )
+        }
+        return builder
+    }
+
     private fun httpGetText(url: String): String {
-        val req = Request.Builder()
-            .url(url)
-            .header("Accept", "application/vnd.github.v3+json")
-            .header("User-Agent", "android-agent")
-            .build()
+        val req = authed(
+            Request.Builder()
+                .url(url)
+                .header(
+                    "Accept",
+                    if (type() == "gitea") "application/json" else "application/vnd.github.v3+json"
+                )
+                .header("User-Agent", "android-agent")
+        ).build()
         client.newCall(req).execute().use { resp ->
             if (!resp.isSuccessful) throw RuntimeException("HTTP ${resp.code} ${resp.message}")
             return resp.body?.string() ?: throw RuntimeException("响应为空")
@@ -103,10 +135,11 @@ class SkillHubTool(private val context: Context) : Tool {
     }
 
     private fun httpGetBytes(url: String): ByteArray {
-        val req = Request.Builder()
-            .url(url)
-            .header("User-Agent", "android-agent")
-            .build()
+        val req = authed(
+            Request.Builder()
+                .url(url)
+                .header("User-Agent", "android-agent")
+        ).build()
         client.newCall(req).execute().use { resp ->
             if (!resp.isSuccessful) throw RuntimeException("HTTP ${resp.code} ${resp.message}")
             return resp.body?.bytes() ?: ByteArray(0)
@@ -141,6 +174,8 @@ class SkillHubTool(private val context: Context) : Tool {
         return gson.toJson(
             mapOf(
                 "status" to "ok",
+                "type" to type(),
+                "base" to base(),
                 "repo" to repo(),
                 "branch" to branch(),
                 "count" to items.size,

@@ -96,6 +96,9 @@ skill 工具用于调用已注册的自建 Python 工具：省略 action 查看�
     var configUrl by remember { mutableStateOf(AppPreferences.configUrl) }
     var skillRepo by remember { mutableStateOf(AppPreferences.skillHubRepo) }
     var skillBranch by remember { mutableStateOf(AppPreferences.skillHubBranch) }
+    var skillType by remember { mutableStateOf(AppPreferences.skillHubType) }
+    var skillBase by remember { mutableStateOf(AppPreferences.skillHubBase) }
+    var skillToken by remember { mutableStateOf(AppPreferences.skillHubToken) }
     var importing by remember { mutableStateOf(false) }
     var importMsg by remember { mutableStateOf<String?>(null) }
     var remoteJson by remember { mutableStateOf<String?>(null) }
@@ -136,6 +139,9 @@ skill 工具用于调用已注册的自建 Python 工具：省略 action 查看�
         configUrl = AppPreferences.configUrl
         skillRepo = AppPreferences.skillHubRepo
         skillBranch = AppPreferences.skillHubBranch
+        skillType = AppPreferences.skillHubType
+        skillBase = AppPreferences.skillHubBase
+        skillToken = AppPreferences.skillHubToken
     }
 
     fun savePrefs() {
@@ -161,6 +167,9 @@ skill 工具用于调用已注册的自建 Python 工具：省略 action 查看�
         AppPreferences.skipSslVerification = skipSsl
         AppPreferences.skillHubRepo = skillRepo
         AppPreferences.skillHubBranch = skillBranch
+        AppPreferences.skillHubType = skillType
+        AppPreferences.skillHubBase = skillBase
+        AppPreferences.skillHubToken = skillToken
 
         val wasEnabled = AppPreferences.backgroundServiceEnabled
         AppPreferences.backgroundServiceEnabled = backgroundEnabled
@@ -275,9 +284,12 @@ skill 工具用于调用已注册的自建 Python 工具：省略 action 查看�
                         onSecretKey = { s3SecretKey = it; saved = false },
                     )
                     "skillhub" -> SkillHubPage(
-                        skillRepo, skillBranch,
+                        skillRepo, skillBranch, skillType, skillBase, skillToken, showKeys,
                         onRepo = { skillRepo = it; saved = false },
                         onBranch = { skillBranch = it; saved = false },
+                        onType = { skillType = it; saved = false },
+                        onBase = { skillBase = it; saved = false },
+                        onToken = { skillToken = it; saved = false },
                     )
                     "features" -> FeaturesPage(
                         skipSsl, maxRounds, thinkingTimeout, backgroundEnabled, systemPrompt,
@@ -503,17 +515,22 @@ private fun StoragePage(
 
 @Composable
 private fun SkillHubPage(
-    repo: String, branch: String,
+    repo: String, branch: String, type: String, base: String, token: String, showKeys: Boolean,
     onRepo: (String) -> Unit, onBranch: (String) -> Unit,
+    onType: (String) -> Unit, onBase: (String) -> Unit, onToken: (String) -> Unit,
 ) {
     FormTitle("远程技能仓库")
     Spacer(Modifier.height(2.dp))
     FormField("仓库 (owner/repo)", repo, onRepo)
     FormField("分支", branch, onBranch)
+    FormField("类型 (github/gitea，留空自动)", type, onType)
+    FormField("Gitea 基址 (如 http://192.168.30.181:3000)", base, onBase)
+    FormField("访问令牌（私有仓库，可选）", token, onToken, masked = !showKeys)
     Spacer(Modifier.height(10.dp))
     Text(
         "LLM 可通过 skill_hub 工具查看并下载远程技能；此处配置下载源（留空用默认 abc12524/shell-skills@main）。" +
-            "同名技能为覆盖安装（会保留本地 config.json）。下载即在进程内执行其代码，仅从可信来源安装。",
+            "配置 Gitea 基址后默认按 gitea 处理；同名技能为覆盖安装（会保留本地 config.json）。" +
+            "下载即在进程内执行其代码，仅从可信来源安装。",
         fontSize = 12.sp,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )

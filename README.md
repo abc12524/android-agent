@@ -20,7 +20,7 @@
 | `openviking_tool` | `search` / `find` / `remember` / `forget` / `read` / `list_dir` / `write_file` |
 | `file_tool` | `upload` / `download` / `delete` / `delete_batch` / `list` / `copy` / `head` / `list_buckets` / `create_bucket` / `delete_bucket` / `presign` / `create_folder` / `delete_folder` |
 | `skill` | 已注册的自建工具（子工具名即 skill 名，逐步披露）；`delete` 注销。脚本目录 `skills/` |
-| `skill_hub` | `list` / `install` / `remove` —— 从远程仓库（GitHub）查看 / 下载 / 下线或删除 skill |
+| `skill_hub` | `list` / `install` / `remove` —— 从远程仓库（GitHub / Gitea）查看 / 下载 / 下线或删除 skill |
 
 **两段式调用**（渐进披露，首次只暴露工具名与子工具名，用法按需返回）：
 - 不传 `action` → 返回该大工具下全部子工具及简短说明；
@@ -38,11 +38,12 @@
 - 运行在应用内置的 Python 3.13 环境；默认内置 `script` 脚本读写工具（增删改查 + 结构骨架），其余为空
 
 ### 🛰️ 远程 skill 仓库（skill_hub）
-- `skill_hub` 工具（`list` / `install` / `remove`）从 GitHub 技能仓库查看 / 下载 / 卸载 skill
+- `skill_hub` 工具（`list` / `install` / `remove`）从 GitHub / Gitea 技能仓库查看 / 下载 / 卸载 skill
 - 远程仓库根放 `index.json`（技能名 + 说明 + 平台 + 依赖索引），每个技能一个文件夹（入口 `skill.py` 与配置模板同目录）
 - 下载到本地 `skills/<名>/` 后**自动注册**，无需重启；同名技能为**覆盖安装**（会保留本地 `config.json`）
 - `remove` 默认只**下线**（改头部 `# status: disable`，保留文件、可重新 `install` 恢复）；传 `hard=true` 才真正删除
 - 仓库地址默认 `abc12524/shell-skills@main`，可在「设置 → Skill 仓库」修改
+- 支持 **Gitea** 源：在「设置 → Skill 仓库」填「类型」（`github`/`gitea`，留空按基址自动推断）与「Gitea 基址」（如 `http://192.168.30.181:3000`）；私有仓库可填访问令牌
 - ⚠️ 下载即等价于信任该仓库的代码（会在内置 Python 进程内执行），仅从可信来源安装
 
 ### ☁️ 对象存储（S3 兼容）

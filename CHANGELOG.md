@@ -2,11 +2,12 @@
 
 ## Unreleased
 
-- 新增 `skill_hub` 工具：从远程技能仓库（GitHub）查看 / 下载 / 卸载 skill（list / install / remove）
+- 新增 `skill_hub` 工具：从远程技能仓库（GitHub / Gitea）查看 / 下载 / 卸载 skill（list / install / remove）
 - `remove` 默认仅下线（改头部 `# status: disable`，保留文件，可重新 install 恢复）；`hard=true` 才真正删除
 - skill 加载器支持**文件夹式布局**（`skills/<名>/skill.py` + `_` 助手 + `config.json`），与扁平 `skills/<名>.py` 混用
 - 远程技能安装到 `skills/<名>/` 后自动注册；同名技能为覆盖安装（保留本地 `config.json`）
 - 设置新增「Skill 仓库」页：可配置远程仓库（owner/repo）与分支（默认 `abc12524/shell-skills@main`）
+- skill_hub 支持 **Gitea** 源：新增类型（`github`/`gitea`，留空按 Gitea 基址自动推断）、Gitea 基址与私有仓库访问令牌配置
 
 ## v1.0.0 (2024-xx-xx)
 

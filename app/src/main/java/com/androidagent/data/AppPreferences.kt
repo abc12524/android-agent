@@ -124,7 +124,7 @@ object AppPreferences {
         get() = prefs.getString("config_url", "") ?: ""
         set(value) = prefs.edit().putString("config_url", value).apply()
 
-    // 远程技能仓库（skill_hub 下载源）：GitHub owner/repo 与分支，留空用默认
+    // 远程技能仓库（skill_hub 下载源）：owner/repo 与分支，留空用默认
     var skillHubRepo: String
         get() = prefs.getString("skill_hub_repo", "abc12524/shell-skills") ?: "abc12524/shell-skills"
         set(value) = prefs.edit().putString("skill_hub_repo", value).apply()
@@ -132,6 +132,21 @@ object AppPreferences {
     var skillHubBranch: String
         get() = prefs.getString("skill_hub_branch", "main") ?: "main"
         set(value) = prefs.edit().putString("skill_hub_branch", value).apply()
+
+    // 仓库类型：github / gitea；留空时按是否配置 skillHubBase 自动推断
+    var skillHubType: String
+        get() = prefs.getString("skill_hub_type", "") ?: ""
+        set(value) = prefs.edit().putString("skill_hub_type", value).apply()
+
+    // Gitea 服务基址（如 http://192.168.30.181:3000）；配置后默认按 gitea 处理
+    var skillHubBase: String
+        get() = prefs.getString("skill_hub_base", "") ?: ""
+        set(value) = prefs.edit().putString("skill_hub_base", value).apply()
+
+    // 私有仓库访问令牌（GitHub / Gitea 通用）
+    var skillHubToken: String
+        get() = prefs.getString("skill_hub_token", "") ?: ""
+        set(value) = prefs.edit().putString("skill_hub_token", value).apply()
 
     /**
      * 从远程配置 JSON 一次性应用所有已知设置项，避免逐项手动输入。
@@ -198,6 +213,9 @@ object AppPreferences {
         str("s3_access_key")?.let { s3AccessKey = it; count++ }
         str("s3_secret_key")?.let { s3SecretKey = it; count++ }
         bool("skip_ssl_verification")?.let { skipSslVerification = it; count++ }
+        str("skill_hub_type")?.let { skillHubType = it; count++ }
+        str("skill_hub_base")?.let { skillHubBase = it; count++ }
+        str("skill_hub_token")?.let { skillHubToken = it; count++ }
         return count
     }
 }
