@@ -35,6 +35,7 @@ import com.androidagent.data.AppPreferences
 import com.androidagent.data.api.DeepSeekClient
 import com.androidagent.data.skills.SkillRepoConfig
 import com.androidagent.data.skills.SkillRepository
+import com.androidagent.data.skills.RemoteSkill
 import com.androidagent.data.skills.SkillStore
 import com.androidagent.data.updater.AppUpdater
 import kotlinx.coroutines.Dispatchers
@@ -534,7 +535,7 @@ private fun SkillHubPage(
     var localLoading by remember { mutableStateOf(true) }
     var localMessage by remember { mutableStateOf<Pair<String, Boolean>?>(null) }
 
-    var remote by remember { mutableStateOf(emptyList<SkillRepository.RemoteSkill>()) }
+    var remote by remember { mutableStateOf(emptyList<RemoteSkill>()) }
     var remoteLoaded by remember { mutableStateOf(false) }
     var remoteLoading by remember { mutableStateOf(false) }
     var busySkill by remember { mutableStateOf<String?>(null) }
@@ -802,7 +803,7 @@ private fun InstalledSkillRow(
 /** 远程 skill 行：名称 / 说明 / 平台依赖 / 下载按钮。 */
 @Composable
 private fun RemoteSkillRow(
-    skill: SkillRepository.RemoteSkill,
+    skill: RemoteSkill,
     busy: Boolean,
     onInstall: () -> Unit,
 ) {
