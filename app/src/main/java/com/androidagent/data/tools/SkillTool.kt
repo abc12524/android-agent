@@ -1,6 +1,7 @@
 package com.androidagent.data.tools
 
 import android.content.Context
+import com.androidagent.data.skills.SkillStore
 import com.google.gson.Gson
 import java.io.File
 
@@ -236,13 +237,8 @@ class SkillTool(private val context: Context) : Tool {
 
     private fun delete(skill: String): String {
         if (!NAME_RE.matches(skill)) return err("非法 skill 名称")
-        val flat = File(skillsDir, "$skill.py")
-        val folder = File(skillsDir, skill)
-        val okDel = when {
-            flat.isFile -> flat.delete()
-            folder.isDirectory -> folder.deleteRecursively()
-            else -> return err("skill '$skill' 不存在")
-        }
+        if (SkillStore.find(context, skill) == null) return err("skill '$skill' 不存在")
+        val okDel = SkillStore.delete(context, skill)
         return if (okDel) {
             gson.toJson(mapOf("status" to "ok", "result" to mapOf("skill" to skill, "deleted" to true)))
         } else {

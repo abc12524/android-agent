@@ -3,6 +3,7 @@
 ## Unreleased
 
 - 新增 `skill_hub` 工具：从远程技能仓库（GitHub / Gitea）查看 / 下载 / 卸载 skill（list / install / remove）
+- 新增 `disable` / `enable` 子工具；「设置 → Skill 仓库」可直接列出已安装 skill、开关启用状态（对 LLM 隐藏）、删除，并从远程仓库拉取列表手动下载
 - `remove` 默认仅下线（改头部 `# status: disable`，保留文件，可重新 install 恢复）；`hard=true` 才真正删除
 - skill 加载器支持**文件夹式布局**（`skills/<名>/skill.py` + `_` 助手 + `config.json`），与扁平 `skills/<名>.py` 混用
 - 远程技能安装到 `skills/<名>/` 后自动注册；同名技能为覆盖安装（保留本地 `config.json`）
