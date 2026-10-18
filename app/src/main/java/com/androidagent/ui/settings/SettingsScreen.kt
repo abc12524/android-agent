@@ -1,6 +1,7 @@
 package com.androidagent.ui.settings
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -26,11 +27,16 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.androidagent.BuildConfig
 import com.androidagent.data.AppPreferences
 import com.androidagent.data.api.DeepSeekClient
+import com.androidagent.data.skills.SkillRepoConfig
+import com.androidagent.data.skills.SkillRepository
+import com.androidagent.data.skills.RemoteSkill
+import com.androidagent.data.skills.SkillStore
 import com.androidagent.data.updater.AppUpdater
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -519,6 +525,35 @@ private fun SkillHubPage(
     onRepo: (String) -> Unit, onBranch: (String) -> Unit,
     onType: (String) -> Unit, onBase: (String) -> Unit, onToken: (String) -> Unit,
 ) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val config = remember(repo, branch, type, base, token) {
+        SkillRepoConfig(repo = repo, branch = branch, base = base, type = type, token = token)
+    }
+
+    var installed by remember { mutableStateOf(emptyList<SkillStore.InstalledSkill>()) }
+    var localLoading by remember { mutableStateOf(true) }
+    var localMessage by remember { mutableStateOf<Pair<String, Boolean>?>(null) }
+
+    var remote by remember { mutableStateOf(emptyList<RemoteSkill>()) }
+    var remoteLoaded by remember { mutableStateOf(false) }
+    var remoteLoading by remember { mutableStateOf(false) }
+    var busySkill by remember { mutableStateOf<String?>(null) }
+    var remoteMessage by remember { mutableStateOf<Pair<String, Boolean>?>(null) }
+
+    var pendingDelete by remember { mutableStateOf<SkillStore.InstalledSkill?>(null) }
+
+    fun reloadLocal() {
+        scope.launch {
+            installed = withContext(Dispatchers.IO) { SkillStore.list(context) }
+            localLoading = false
+        }
+    }
+
+    LaunchedEffect(Unit) { reloadLocal() }
+
+    // ---------------- 仓库设置 ----------------
+
     FormTitle("远程技能仓库")
     Spacer(Modifier.height(2.dp))
     FormField("仓库 (owner/repo)", repo, onRepo)
@@ -526,14 +561,320 @@ private fun SkillHubPage(
     FormField("类型 (github/gitea，留空自动)", type, onType)
     FormField("Gitea 基址 (如 http://192.168.30.181:3000)", base, onBase)
     FormField("访问令牌（私有仓库，可选）", token, onToken, masked = !showKeys)
-    Spacer(Modifier.height(10.dp))
+    Spacer(Modifier.height(8.dp))
     Text(
-        "LLM 可通过 skill_hub 工具查看并下载远程技能；此处配置下载源（留空用默认 abc12524/shell-skills@main）。" +
-            "配置 Gitea 基址后默认按 gitea 处理；同名技能为覆盖安装（会保留本地 config.json）。" +
+        "配置 Gitea 基址后默认按 gitea 处理；同名技能为覆盖安装（会保留本地 config.json）。" +
             "下载即在进程内执行其代码，仅从可信来源安装。",
         fontSize = 12.sp,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
+
+    // ---------------- 已安装技能 ----------------
+
+    Spacer(Modifier.height(28.dp))
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            FormTitle("已安装 Skills（${installed.size}）")
+            Text(
+                "关闭开关即对 LLM 隐藏（改写 # status: disable，文件保留）",
+                fontSize = 11.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        IconButton(onClick = { localLoading = true; reloadLocal() }) {
+            if (localLoading) {
+                CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+            } else {
+                Icon(
+                    Icons.Default.Refresh,
+                    contentDescription = "刷新已安装列表",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+
+    when {
+        localLoading -> LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 6.dp))
+        installed.isEmpty() -> FormNote("暂无已安装 skill，可从下方远程仓库下载。")
+        else -> installed.forEach { skill ->
+            InstalledSkillRow(
+                skill = skill,
+                bundled = SkillStore.isBundled(context, skill.name),
+                onToggle = { enabled ->
+                    scope.launch {
+                        val ok = withContext(Dispatchers.IO) {
+                            SkillStore.setEnabled(context, skill.name, enabled)
+                        }
+                        if (ok) {
+                            localMessage = (
+                                if (enabled) "已启用「${skill.name}」，LLM 可再次调用"
+                                else "已隐藏「${skill.name}」，LLM 不再可见"
+                                ) to false
+                            installed = installed.map {
+                                if (it.name == skill.name) it.copy(enabled = enabled) else it
+                            }
+                            remote = remote.map {
+                                if (it.name == skill.name) it.copy(enabled = enabled) else it
+                            }
+                        } else {
+                            localMessage = ("操作失败：无法写入 ${skill.path}") to true
+                        }
+                    }
+                },
+                onDelete = { pendingDelete = skill },
+            )
+        }
+    }
+    localMessage?.let { (text, isError) -> FormNote(text, isError) }
+
+    // ---------------- 远程技能 ----------------
+
+    Spacer(Modifier.height(28.dp))
+    FormTitle("远程仓库")
+    Text(
+        config.label(),
+        fontSize = 11.sp,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(bottom = 8.dp),
+    )
+    PillButton(
+        text = if (remoteLoaded) "刷新远程列表" else "获取远程技能列表",
+        icon = Icons.Outlined.CloudDownload,
+        loading = remoteLoading,
+    ) {
+        scope.launch {
+            remoteLoading = true
+            remoteMessage = null
+            try {
+                remote = withContext(Dispatchers.IO) {
+                    SkillRepository(context, config).listRemote()
+                }
+                remoteLoaded = true
+                remoteMessage = "已获取 ${remote.size} 个远程 skill" to false
+            } catch (e: Exception) {
+                remoteMessage = ("获取失败：" + (e.message ?: e.javaClass.simpleName)) to true
+            } finally {
+                remoteLoading = false
+            }
+        }
+    }
+    remoteMessage?.let { (text, isError) -> FormNote(text, isError) }
+
+    if (remoteLoaded && !remoteLoading) {
+        if (remote.isEmpty()) {
+            FormNote("仓库索引为空")
+        } else {
+            remote.forEach { item ->
+                RemoteSkillRow(
+                    skill = item,
+                    busy = busySkill == item.name,
+                    onInstall = {
+                        scope.launch {
+                            busySkill = item.name
+                            remoteMessage = null
+                            try {
+                                val result = withContext(Dispatchers.IO) {
+                                    SkillRepository(context, config).install(item.name)
+                                }
+                                installed = withContext(Dispatchers.IO) { SkillStore.list(context) }
+                                remote = remote.map {
+                                    if (it.name == item.name) it.copy(installed = true, enabled = true) else it
+                                }
+                                val extra = if (result.configCreated) "；已生成 config.json，请按需填写" else ""
+                                remoteMessage = (
+                                    "已下载「${result.name}」（${result.files.size} 个文件）" + extra
+                                    ) to false
+                            } catch (e: Exception) {
+                                remoteMessage = ("下载失败：" + (e.message ?: e.javaClass.simpleName)) to true
+                            } finally {
+                                busySkill = null
+                            }
+                        }
+                    },
+                )
+            }
+        }
+    }
+
+    // ---------------- 删除确认 ----------------
+
+    pendingDelete?.let { skill ->
+        val bundled = SkillStore.isBundled(context, skill.name)
+        AlertDialog(
+            onDismissRequest = { pendingDelete = null },
+            title = { Text("删除 skill") },
+            text = {
+                Text(
+                    "确定删除「${skill.name}」？文件会立即移除，LLM 将无法再调用。" +
+                        if (bundled) "\n\n该 skill 随应用内置，重启应用后会被重新部署。" else ""
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    pendingDelete = null
+                    scope.launch {
+                        val ok = withContext(Dispatchers.IO) { SkillStore.delete(context, skill.name) }
+                        if (ok) {
+                            installed = installed.filterNot { it.name == skill.name }
+                            remote = remote.map {
+                                if (it.name == skill.name) it.copy(installed = false, enabled = false) else it
+                            }
+                            localMessage = "已删除「${skill.name}」" to false
+                        } else {
+                            localMessage = ("删除失败：" + skill.path) to true
+                        }
+                    }
+                }) {
+                    Text("删除", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDelete = null }) { Text("取消") }
+            },
+        )
+    }
+}
+
+/** 已安装 skill 行：名称 / 说明 / 启用开关 / 删除。 */
+@Composable
+private fun InstalledSkillRow(
+    skill: SkillStore.InstalledSkill,
+    bundled: Boolean,
+    onToggle: (Boolean) -> Unit,
+    onDelete: () -> Unit,
+) {
+    val cs = MaterialTheme.colorScheme
+    Row(
+        Modifier.fillMaxWidth().padding(vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    skill.name,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = cs.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+                Spacer(Modifier.width(6.dp))
+                SkillTag(
+                    if (skill.enabled) "启用" else "已隐藏",
+                    if (skill.enabled) cs.primary else cs.error,
+                )
+                if (bundled) {
+                    Spacer(Modifier.width(4.dp))
+                    SkillTag("内置", cs.onSurfaceVariant)
+                }
+            }
+            if (skill.description.isNotBlank()) {
+                Text(
+                    skill.description,
+                    fontSize = 12.sp,
+                    color = cs.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = 3.dp),
+                )
+            }
+            Text(
+                if (skill.folder) "文件夹 · ${skill.name}/" else "脚本 · ${skill.name}.py",
+                fontSize = 11.sp,
+                color = cs.onSurfaceVariant.copy(alpha = 0.7f),
+                modifier = Modifier.padding(top = 2.dp),
+            )
+        }
+        Spacer(Modifier.width(4.dp))
+        Switch(checked = skill.enabled, onCheckedChange = onToggle)
+        IconButton(onClick = onDelete) {
+            Icon(
+                Icons.Outlined.DeleteOutline,
+                contentDescription = "删除 ${skill.name}",
+                tint = cs.error,
+            )
+        }
+    }
+    HorizontalDivider(thickness = 0.6.dp, color = cs.outlineVariant.copy(alpha = 0.5f))
+}
+
+/** 远程 skill 行：名称 / 说明 / 平台依赖 / 下载按钮。 */
+@Composable
+private fun RemoteSkillRow(
+    skill: RemoteSkill,
+    busy: Boolean,
+    onInstall: () -> Unit,
+) {
+    val cs = MaterialTheme.colorScheme
+    Row(
+        Modifier.fillMaxWidth().padding(vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    skill.name,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = cs.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+                Spacer(Modifier.width(6.dp))
+                when {
+                    skill.installed && skill.enabled -> SkillTag("已安装", cs.primary)
+                    skill.installed -> SkillTag("已安装 · 已隐藏", cs.onSurfaceVariant)
+                    else -> SkillTag("未安装", cs.onSurfaceVariant)
+                }
+            }
+            if (skill.description.isNotBlank()) {
+                Text(
+                    skill.description,
+                    fontSize = 12.sp,
+                    color = cs.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = 3.dp),
+                )
+            }
+            val meta = buildList {
+                if (skill.platform.isNotEmpty()) add("平台：" + skill.platform.joinToString("/"))
+                if (skill.requires.isNotEmpty()) add("依赖：" + skill.requires.joinToString("/"))
+            }.joinToString("   ")
+            if (meta.isNotBlank()) {
+                Text(
+                    meta,
+                    fontSize = 11.sp,
+                    color = cs.onSurfaceVariant.copy(alpha = 0.7f),
+                    modifier = Modifier.padding(top = 2.dp),
+                )
+            }
+        }
+        Spacer(Modifier.width(8.dp))
+        if (busy) {
+            CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+        } else {
+            TextButton(onClick = onInstall) {
+                Text(if (skill.installed) "重新下载" else "下载", fontSize = 13.sp)
+            }
+        }
+    }
+    HorizontalDivider(thickness = 0.6.dp, color = cs.outlineVariant.copy(alpha = 0.5f))
+}
+
+@Composable
+private fun SkillTag(text: String, color: Color) {
+    Box(
+        Modifier
+            .clip(RoundedCornerShape(4.dp))
+            .background(color.copy(alpha = 0.12f))
+            .padding(horizontal = 6.dp, vertical = 1.dp),
+    ) {
+        Text(text, fontSize = 10.sp, color = color)
+    }
 }
 
 @Composable
