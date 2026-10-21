@@ -9,16 +9,23 @@ class SystemTool : Tool {
 
     private val shell = ShellTool()
     private val python = PythonTool()
+    private val ssh = SSHTool()
 
     private val subs = listOf(
         SubTool("shell", "执行 Shell 命令", "shell: 参数 command = 要执行的 Shell 命令"),
-        SubTool("python", "执行 Python", "python: 参数 mode = code|script|pip|info（必填）；code（mode=code）、script_path（mode=script）、packages（mode=pip，空格分隔）")
+        SubTool("python", "执行 Python", "python: 参数 mode = code|script|pip|info（必填）；code（mode=code）、script_path（mode=script）、packages（mode=pip，空格分隔）"),
+        SubTool(
+            "ssh", "SSH 远程执行与 SCP 文件传输",
+            "ssh: 参数 params.action = exec|upload|download（默认 exec），host, port, username 必填；" +
+                "认证传 password 或 private_key / private_key_path；" +
+                "exec 需 command；upload/download 需 local_path, remote_path"
+        )
     )
 
     override val name: String = "system_tool"
 
     override val description: String =
-        "系统执行（SSH/SCP/延时请使用 skill）。子工具：" + subs.joinToString(" / ") { it.name } + "。"
+        "系统与远程执行。子工具：" + subs.joinToString(" / ") { it.name } + "。"
 
     override val parameters: Map<String, Any> = familyParameters(subs)
 
@@ -39,6 +46,7 @@ class SystemTool : Tool {
                 val mode = p["mode"] as? String ?: return """{"error": "缺少 mode 参数"}"""
                 python.execute(p + mapOf("action" to mode))
             }
+            "ssh" -> ssh.execute(p)
             else -> """{"error": "未知子工具: $action"}"""
         }
     }
