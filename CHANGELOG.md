@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- 移除内置 `script` skill（`assets/skills` 清空）；升级时若本地文件仍是原随包版本会自动清理，改动过的保留
 - 工具集精简为 4 个大工具；`system_tool` 保留 `shell` / `python` / `ssh`，SSH 恢复为原生 JSch 并合并 SCP
   （`params.action=exec|upload|download`）；`wait` / `objstore` / `ov` 改由 skill 提供
 - OpenViking 改为内构自动记忆：`ov_recall_question` / `ov_recall_step` / `ov_commit` 三个开关；

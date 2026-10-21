@@ -36,7 +36,7 @@ SSH 为原生 JSch 实现（一个 `ssh` 子工具覆盖执行 / 上传 / 下载
 - `skill` 工具只负责**调用**（不负责创建）：省略 action 返回已注册清单，`action=<skill 名>` 查看用法，`action=<skill 名>` + `params` 执行，`action=delete` 注销
 - 新增 skill 只需把脚本写进 `skills/`（可用 `system_tool` 的 `python` 动作），编写规范见 `skills/README.md`
 - 脚本定义 `run(arguments)` 并返回统一信封 `{"status":"ok","result":{...}}` / `{"status":"error",...}`
-- 运行在应用内置的 Python 3.13 环境；默认内置 `script` 脚本读写工具（增删改查 + 结构骨架），其余为空
+- 运行在应用内置的 Python 3.13 环境；默认不内置 skill，全部从远程仓库安装
 
 ### 🛰️ 远程 skill 仓库（skill_hub）
 - `skill_hub` 工具（`list` / `install` / `disable` / `enable` / `remove`）从 GitHub / Gitea 技能仓库查看 / 下载 / 启停 / 卸载 skill

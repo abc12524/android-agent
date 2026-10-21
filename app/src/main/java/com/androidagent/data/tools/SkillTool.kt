@@ -4,6 +4,7 @@ import android.content.Context
 import com.androidagent.data.skills.SkillStore
 import com.google.gson.Gson
 import java.io.File
+import java.security.MessageDigest
 
 /**
  * 工具族 5：skill —— 调用已注册的自建工具（不负责创建）。
@@ -303,7 +304,26 @@ class SkillTool(private val context: Context) : Tool {
         writeAsset("skill_runner.py", File(dir, "_skill_runner.py"), overwrite = true)
         writeAsset("skill_envelope.py", File(dir, "_envelope.py"), overwrite = true)
         writeAsset("skill_README.md", File(dir, "README.md"), overwrite = false)
+        removeRetiredBundledSkills(dir)
         deployBundledSkills(dir)
+    }
+
+    /**
+     * 清理已下线的内置 skill：仅在文件内容与随包版本一致（未被用户改动）时删除，
+     * 避免误删本地修改。远程仓库仍可安装同名的 script skill。
+     */
+    private fun removeRetiredBundledSkills(dir: File) {
+        for ((name, expected) in RETIRED_BUNDLED) {
+            val file = File(dir, name)
+            if (!file.isFile) continue
+            val actual = try {
+                MessageDigest.getInstance("SHA-256").digest(file.readBytes())
+                    .joinToString("") { "%02x".format(it) }
+            } catch (_: Exception) {
+                continue
+            }
+            if (actual == expected) file.delete()
+        }
     }
 
     /**
@@ -348,5 +368,11 @@ class SkillTool(private val context: Context) : Tool {
         val hashRe = Regex("^#\\s?")
         val NAME_RE = Regex("^[A-Za-z0-9_\\-]{1,64}$")
         val DISABLED = setOf("disable", "disabled", "off", "false", "0")
+
+        /** 已下线内置 skill 的 SHA-256（内容未变才删除） */
+        val RETIRED_BUNDLED = mapOf(
+            "script.py" to "8ebaa7de44b0e71ee5f5cb87f2d26482c50d52f3b1b153bf65e5e00d8d9a139d",
+            "_script_impl.py" to "e01baabec456a7debbdf8b07dd387d3732c2e1ed48dfffb6765e79aee21afaa7"
+        )
     }
 }
