@@ -9,18 +9,19 @@
 - AI 可自主调用设备上的工具完成任务
 - 对话历史持久化（Room 本地数据库）
 
-### 🛠️ 工具集（6 个大工具，两段式调用）
+### 🛠️ 工具集（4 个大工具，两段式调用）
 
-对外暴露 6 个大工具，子工具用 `action` 指定，调用参数只有 `{ action, params }`：
+对外暴露 4 个大工具，子工具用 `action` 指定，调用参数只有 `{ action, params }`：
 
 | 大工具 | 子工具 |
 |------|------|
-| `system_tool` | `shell` / `python` / `ssh` / `scp` / `wait` |
+| `system_tool` | `shell` / `python` |
 | `phone_tool` | `system_info` / `gps` / `notify` / `sound` / `sensor` / `rename_session` |
-| `openviking_tool` | `search` / `find` / `remember` / `forget` / `read` / `list_dir` / `write_file` |
-| `file_tool` | `upload` / `download` / `delete` / `delete_batch` / `list` / `copy` / `head` / `list_buckets` / `create_bucket` / `delete_bucket` / `presign` / `create_folder` / `delete_folder` |
 | `skill` | 已注册的自建工具（子工具名即 skill 名，逐步披露）；`delete` 注销。脚本目录 `skills/` |
 | `skill_hub` | `list` / `install` / `disable` / `enable` / `remove` —— 从远程仓库（GitHub / Gitea）查看 / 下载 / 启停 / 卸载 skill |
+
+SSH / SCP / 延时等待 / 对象存储 / OpenViking 读写通过 skill 提供
+（`ssh` / `wait` / `objstore` / `ov`）。
 
 **两段式调用**（渐进披露，首次只暴露工具名与子工具名，用法按需返回）：
 - 不传 `action` → 返回该大工具下全部子工具及简短说明；
@@ -60,9 +61,11 @@
 - 通过 `/system/bin/linker64` 绕过 SELinux 限制
 
 ### 💾 外置记忆（OpenViking）
-- 语义搜索历史知识（`openviking_tool` 的 `search` 动作走上下文感知接口；`find` 动作走纯向量接口，支持 `target_uri` 限定范围）
-- 保存用户偏好、项目配置、操作经验
-- 自动注入相关记忆作为对话上下文（默认走 find 接口）
+- 三个开关：每轮按问题检索、每步按问题/助手/工具检索、会话自动抓取并提交（commit）
+- 自动注入相关记忆作为对话上下文；召回与抓取均静默失败，不打断对话
+- 同一会话内不重复注入相同记忆（强制规则，非开关）；每个会话独立，切换会话从零开始
+- skill 名单与记忆召回统一以 `inject_user` 注入，默认不在聊天界面展示；
+  设置「显示注入信息」后可在历史会话中查看
 
 ## 构建
 
@@ -127,7 +130,6 @@ JSON 顶层 key 与应用的设置项一一对应；**顶层值为对象的 key 
     "ov_peer_id": "",
     "ov_peer_scope": "actor",
     "ov_workspace_peer": true,
-    "ov_recall_dedup": true,
     "max_tool_rounds": 8,
     "session_timeout_minutes": 15,
     "thinking_timeout_minutes": 0,
@@ -151,7 +153,6 @@ JSON 顶层 key 与应用的设置项一一对应；**顶层值为对象的 key 
     "ov_peer_id": "",
     "ov_peer_scope": "actor",
     "ov_workspace_peer": true,
-    "ov_recall_dedup": true,
     "max_tool_rounds": 8,
     "session_timeout_minutes": 15,
     "thinking_timeout_minutes": 0,

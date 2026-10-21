@@ -67,13 +67,14 @@ fun SettingsScreen(
     var ovUser by remember { mutableStateOf(AppPreferences.openVikingUser) }
     var maxRounds by remember { mutableStateOf(AppPreferences.maxToolRounds.toString()) }
     var thinkingTimeout by remember { mutableStateOf(AppPreferences.thinkingTimeoutMinutes.toString()) }
-    var ovScoreThreshold by remember { mutableStateOf(AppPreferences.ovScoreThreshold.toString()) }
-    var ovSearchDisplayCount by remember { mutableStateOf(AppPreferences.ovSearchDisplayCount.toString()) }
     var ovFindThreshold by remember { mutableStateOf(AppPreferences.ovFindThreshold.toString()) }
     var ovFindLimit by remember { mutableStateOf(AppPreferences.ovFindLimit.toString()) }
     var ovPeerId by remember { mutableStateOf(AppPreferences.ovPeerId) }
     var ovWorkspacePeer by remember { mutableStateOf(AppPreferences.ovWorkspacePeer) }
-    var ovRecallDedup by remember { mutableStateOf(AppPreferences.ovRecallDedup) }
+    var ovRecallQuestion by remember { mutableStateOf(AppPreferences.ovRecallQuestion) }
+    var ovRecallStep by remember { mutableStateOf(AppPreferences.ovRecallStep) }
+    var ovCommit by remember { mutableStateOf(AppPreferences.ovCommit) }
+    var showInjected by remember { mutableStateOf(AppPreferences.showInjectedMessages) }
     var backgroundEnabled by remember { mutableStateOf(AppPreferences.backgroundServiceEnabled) }
     var s3Endpoint by remember { mutableStateOf(AppPreferences.s3EndpointUrl) }
     var s3AccessKey by remember { mutableStateOf(AppPreferences.s3AccessKey) }
@@ -129,13 +130,14 @@ skill 工具用于调用已注册的自建 Python 工具：省略 action 查看�
         ovUser = AppPreferences.openVikingUser
         maxRounds = AppPreferences.maxToolRounds.toString()
         thinkingTimeout = AppPreferences.thinkingTimeoutMinutes.toString()
-        ovScoreThreshold = AppPreferences.ovScoreThreshold.toString()
-        ovSearchDisplayCount = AppPreferences.ovSearchDisplayCount.toString()
         ovFindThreshold = AppPreferences.ovFindThreshold.toString()
         ovFindLimit = AppPreferences.ovFindLimit.toString()
         ovPeerId = AppPreferences.ovPeerId
         ovWorkspacePeer = AppPreferences.ovWorkspacePeer
-        ovRecallDedup = AppPreferences.ovRecallDedup
+        ovRecallQuestion = AppPreferences.ovRecallQuestion
+        ovRecallStep = AppPreferences.ovRecallStep
+        ovCommit = AppPreferences.ovCommit
+        showInjected = AppPreferences.showInjectedMessages
         backgroundEnabled = AppPreferences.backgroundServiceEnabled
         s3Endpoint = AppPreferences.s3EndpointUrl
         s3AccessKey = AppPreferences.s3AccessKey
@@ -157,13 +159,14 @@ skill 工具用于调用已注册的自建 Python 工具：省略 action 查看�
         AppPreferences.openVikingUrl = ovUrl
         AppPreferences.openVikingKey = ovKey
         AppPreferences.openVikingUser = ovUser
-        AppPreferences.ovScoreThreshold = (ovScoreThreshold.toFloatOrNull() ?: 0.4f).coerceIn(0f, 1f)
-        AppPreferences.ovSearchDisplayCount = ovSearchDisplayCount.toIntOrNull() ?: 2
         AppPreferences.ovFindThreshold = (ovFindThreshold.toFloatOrNull() ?: 0.5f).coerceIn(0f, 1f)
         AppPreferences.ovFindLimit = ovFindLimit.toIntOrNull() ?: 2
         AppPreferences.ovPeerId = ovPeerId
         AppPreferences.ovWorkspacePeer = ovWorkspacePeer
-        AppPreferences.ovRecallDedup = ovRecallDedup
+        AppPreferences.ovRecallQuestion = ovRecallQuestion
+        AppPreferences.ovRecallStep = ovRecallStep
+        AppPreferences.ovCommit = ovCommit
+        AppPreferences.showInjectedMessages = showInjected
         AppPreferences.maxToolRounds = maxRounds.toIntOrNull() ?: 8
         AppPreferences.thinkingTimeoutMinutes = thinkingTimeout.toIntOrNull() ?: 0
         AppPreferences.systemPrompt = systemPrompt
@@ -268,20 +271,21 @@ skill 工具用于调用已注册的自建 Python 工具：省略 action 查看�
                         },
                     )
                     "ov" -> OvPage(
-                        ovUrl, ovKey, ovUser, ovScoreThreshold, ovSearchDisplayCount,
+                        ovUrl, ovKey, ovUser,
                         ovFindThreshold, ovFindLimit,
-                        ovPeerId, ovWorkspacePeer, ovRecallDedup,
+                        ovPeerId, ovWorkspacePeer,
+                        ovRecallQuestion, ovRecallStep, ovCommit,
                         showKeys,
                         onUrl = { ovUrl = it; saved = false },
                         onKey = { ovKey = it; saved = false },
                         onUser = { ovUser = it; saved = false },
-                        onThreshold = { ovScoreThreshold = it; saved = false },
-                        onDisplayCount = { ovSearchDisplayCount = it; saved = false },
                         onFindThreshold = { ovFindThreshold = it; saved = false },
                         onFindLimit = { ovFindLimit = it; saved = false },
                         onPeerId = { ovPeerId = it; saved = false },
                         onWorkspacePeer = { ovWorkspacePeer = it; saved = false },
-                        onRecallDedup = { ovRecallDedup = it; saved = false },
+                        onRecallQuestion = { ovRecallQuestion = it; saved = false },
+                        onRecallStep = { ovRecallStep = it; saved = false },
+                        onCommit = { ovCommit = it; saved = false },
                     )
                     "storage" -> StoragePage(
                         s3Endpoint, s3AccessKey, s3SecretKey, showKeys,
@@ -298,12 +302,13 @@ skill 工具用于调用已注册的自建 Python 工具：省略 action 查看�
                         onToken = { skillToken = it; saved = false },
                     )
                     "features" -> FeaturesPage(
-                        skipSsl, maxRounds, thinkingTimeout, backgroundEnabled, systemPrompt,
+                        skipSsl, maxRounds, thinkingTimeout, backgroundEnabled, systemPrompt, showInjected,
                         onSkipSsl = { skipSsl = it; saved = false },
                         onMaxRounds = { maxRounds = it; saved = false },
                         onThinkingTimeout = { thinkingTimeout = it; saved = false },
                         onBackgroundEnabled = { backgroundEnabled = it; saved = false },
                         onSystemPrompt = { systemPrompt = it; saved = false },
+                        onShowInjected = { showInjected = it; saved = false },
                     )
                     "import" -> ImportPage(
                         configUrl, importing, importMsg, remoteJson,
@@ -462,14 +467,14 @@ private fun ApiPage(
 @Composable
 private fun OvPage(
     ovUrl: String, ovKey: String, ovUser: String,
-    ovScoreThreshold: String, ovSearchDisplayCount: String,
     ovFindThreshold: String, ovFindLimit: String,
-    ovPeerId: String, ovWorkspacePeer: Boolean, ovRecallDedup: Boolean,
+    ovPeerId: String, ovWorkspacePeer: Boolean,
+    ovRecallQuestion: Boolean, ovRecallStep: Boolean, ovCommit: Boolean,
     showKeys: Boolean,
     onUrl: (String) -> Unit, onKey: (String) -> Unit, onUser: (String) -> Unit,
-    onThreshold: (String) -> Unit, onDisplayCount: (String) -> Unit,
     onFindThreshold: (String) -> Unit, onFindLimit: (String) -> Unit, onPeerId: (String) -> Unit,
-    onWorkspacePeer: (Boolean) -> Unit, onRecallDedup: (Boolean) -> Unit,
+    onWorkspacePeer: (Boolean) -> Unit,
+    onRecallQuestion: (Boolean) -> Unit, onRecallStep: (Boolean) -> Unit, onCommit: (Boolean) -> Unit,
 ) {
     FormTitle("连接")
     Spacer(Modifier.height(2.dp))
@@ -478,19 +483,11 @@ private fun OvPage(
     FormField("用户名", ovUser, onUser)
 
     Spacer(Modifier.height(24.dp))
-    FormTitle("搜索工具")
+    FormTitle("自动记忆")
     Spacer(Modifier.height(2.dp))
-    FormField("匹配阈值 (0-1)", ovScoreThreshold, onValueChange = { v ->
-        onThreshold(v.filter { c -> c.isDigit() || c == '.' })
-    })
-    FormField("返回条数 (0=关闭)", ovSearchDisplayCount, onValueChange = { v ->
-        val filtered = v.filter { c -> c.isDigit() }
-        if ((filtered.toIntOrNull() ?: 0) in 0..10) onDisplayCount(filtered)
-    })
-
-    Spacer(Modifier.height(24.dp))
-    FormTitle("自动注入")
-    Spacer(Modifier.height(2.dp))
+    FormSwitchRow("对问题检索（每轮）", ovRecallQuestion, onRecallQuestion)
+    FormSwitchRow("对问题/助手/工具检索（每步）", ovRecallStep, onRecallStep)
+    FormSwitchRow("会话自动抓取并提交（commit）", ovCommit, onCommit)
     FormField("匹配阈值 (0-1)", ovFindThreshold, onValueChange = { v ->
         onFindThreshold(v.filter { c -> c.isDigit() || c == '.' })
     })
@@ -504,7 +501,6 @@ private fun OvPage(
     Spacer(Modifier.height(2.dp))
     FormField("Peer ID（留空则按应用自动派生）", ovPeerId, onPeerId)
     FormSwitchRow("按应用派生 Peer", ovWorkspacePeer, onWorkspacePeer)
-    FormSwitchRow("召回去重", ovRecallDedup, onRecallDedup)
 }
 
 @Composable
@@ -880,13 +876,16 @@ private fun SkillTag(text: String, color: Color) {
 @Composable
 private fun FeaturesPage(
     skipSsl: Boolean, maxRounds: String, thinkingTimeout: String, backgroundEnabled: Boolean, systemPrompt: String,
+    showInjected: Boolean,
     onSkipSsl: (Boolean) -> Unit, onMaxRounds: (String) -> Unit, onThinkingTimeout: (String) -> Unit, onBackgroundEnabled: (Boolean) -> Unit, onSystemPrompt: (String) -> Unit,
+    onShowInjected: (Boolean) -> Unit,
 ) {
     FormTitle("功能")
     Spacer(Modifier.height(2.dp))
     FormField("最大工具调用轮次", maxRounds, onValueChange = { onMaxRounds(it.filter { c -> c.isDigit() }) })
     FormField("思考熔断（分钟，0=关闭）", thinkingTimeout, onValueChange = { onThinkingTimeout(it.filter { c -> c.isDigit() }) })
     FormSwitchRow("后台保活", backgroundEnabled, onBackgroundEnabled)
+    FormSwitchRow("显示注入信息（skill 名单 / 记忆召回）", showInjected, onShowInjected)
     FormSwitchRow("跳过证书验证（自签名 HTTPS）", skipSsl, onSkipSsl)
 
     Spacer(Modifier.height(24.dp))

@@ -36,4 +36,7 @@ interface SessionDao {
 
     @Query("UPDATE sessions SET balance = :balance WHERE id = :id")
     suspend fun updateBalance(id: String, balance: String)
+
+    @Query("UPDATE sessions SET ovSessionId = :ovSessionId WHERE id = :id")
+    suspend fun updateOvSessionId(id: String, ovSessionId: String)
 }

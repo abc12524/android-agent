@@ -20,6 +20,9 @@ import java.io.File
  *
  * 脚本的编写规范见 assets/skill_README.md（部署到 skills/README.md）与项目 README。
  */
+/** 已注册 skill 的对外摘要（名称 + 一句话说明）。 */
+data class SkillSummary(val name: String, val description: String)
+
 class SkillTool(private val context: Context) : Tool {
 
     private val gson = Gson()
@@ -39,6 +42,10 @@ class SkillTool(private val context: Context) : Tool {
 
     /** 已注册（启用）skill 名称，自动反映新增/删除。 */
     fun registeredSkillNames(): List<String> = scan().filter { it.enabled }.map { it.name }
+
+    /** 已注册（启用）skill 的名称与说明，供注入 skill 名单消息。 */
+    fun registeredSkillSummaries(): List<SkillSummary> =
+        scan().filter { it.enabled }.map { SkillSummary(it.name, it.description) }
 
     /** 已注册 skill 名称串，供工具定义动态披露。 */
     private fun registeredNames(): String =

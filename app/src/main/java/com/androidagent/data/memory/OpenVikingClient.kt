@@ -19,7 +19,7 @@ import java.security.MessageDigest
  * OpenViking 外置记忆系统 HTTP 客户端
  * 对齐 shell-tool/core/tools/ov_tools.py 的接口与行为：
  *  - peer_id 派生（显式 > 按包名派生 ws-* > 默认 default）
- *  - 搜索阈值/条数严格遵守设置，不做兜底放宽；跨轮召回去重
+ *  - 搜索阈值/条数严格遵守设置，不做兜底放宽（召回去重由 RecallEngine 负责）
  *  - 批量读取 / 记忆文件读写 / 语义搜索
  */
 class OpenVikingClient {
@@ -29,9 +29,7 @@ class OpenVikingClient {
 
     private val jsonMediaType = "application/json".toMediaType()
 
-    // 跨实例/跨轮共享状态（对齐 shell-tool 的 _RECALL_SEEN）
     companion object {
-        private val recallSeen = mutableMapOf<String, MutableSet<String>>()
         private var peerCache: String? = null
     }
 
@@ -260,6 +258,61 @@ class OpenVikingClient {
         )
     }
 
+    // ========== 自动记忆：召回命中 / 会话建立 / 抓取 / 提交 ==========
+
+    /** 自动召回用的 find 请求：返回解析后的命中列表（失败/未配置时为空）。 */
+    suspend fun findHits(
+        query: String,
+        threshold: Float = AppPreferences.ovFindThreshold,
+        limit: Int = AppPreferences.ovFindLimit
+    ): List<JsonObject> {
+        if (AppPreferences.openVikingUrl.isBlank()) return emptyList()
+        return post("/api/v1/search/find", buildFindPayload(query, threshold, limit)).fold(
+            onSuccess = { parseSearchHits(it) },
+            onFailure = { emptyList() }
+        )
+    }
+
+    /** 为本地会话建立 OV session，返回 OV session_id（失败返回空串）。 */
+    suspend fun ensureSession(): String {
+        if (AppPreferences.openVikingUrl.isBlank()) return ""
+        return post("/api/v1/sessions", emptyMap<String, Any>()).fold(
+            onSuccess = { body ->
+                val json = runCatching { JsonParser.parseString(body).asJsonObject }.getOrNull()
+                if (json == null) "" else {
+                    val res = json.objOrNull("result") ?: json
+                    res.strOrEmpty("session_id")
+                        .ifBlank { res.strOrEmpty("id") }
+                        .ifBlank { res.objOrNull("session")?.strOrEmpty("id") ?: "" }
+                }
+            },
+            onFailure = { "" }
+        )
+    }
+
+    /** 向 OV session 批量追加消息（失败静默）。 */
+    suspend fun capture(ovSessionId: String, messages: List<Map<String, Any>>): Boolean {
+        if (ovSessionId.isBlank() || messages.isEmpty()) return false
+        return post("/api/v1/sessions/$ovSessionId/messages/batch", mapOf("messages" to messages)).isSuccess
+    }
+
+    /** 提交/归档 OV session，触发记忆提取（失败静默）。 */
+    suspend fun commitSession(ovSessionId: String, keepRecentCount: Int = 0): Boolean {
+        if (ovSessionId.isBlank()) return false
+        return post(
+            "/api/v1/sessions/$ovSessionId/commit",
+            mapOf("keep_recent_count" to keepRecentCount)
+        ).isSuccess
+    }
+
+    private fun JsonObject.objOrNull(key: String): JsonObject? = try {
+        get(key)?.takeIf { it.isJsonObject }?.asJsonObject
+    } catch (_: Exception) { null }
+
+    private fun JsonObject.strOrEmpty(key: String): String = try {
+        get(key)?.takeIf { !it.isJsonNull }?.asString ?: ""
+    } catch (_: Exception) { "" }
+
     // ========== 保存记忆 ==========
     suspend fun remember(category: String, name: String, content: String): String {
         val user = AppPreferences.openVikingUser
@@ -368,36 +421,4 @@ class OpenVikingClient {
         )
     }
 
-    /** 加载相关记忆作为上下文（带跨轮去重）；自动注入走 find 接口（纯向量低延迟） */
-    suspend fun loadContext(query: String, sessionId: String = ""): String {
-        val threshold = AppPreferences.ovFindThreshold
-        val displayCount = AppPreferences.ovFindLimit
-        if (displayCount <= 0) return ""
-        if (query.isBlank()) return ""
-        val result = post("/api/v1/search/find", buildFindPayload(query, threshold, displayCount))
-        return result.fold(
-            onSuccess = { body ->
-                try {
-                    var hits = parseSearchHits(body)
-                    // 客户端跨轮去重：本 session 已注入过的 URI 不再重复注入
-                    if (sessionId.isNotBlank() && AppPreferences.ovRecallDedup) {
-                        val seen = recallSeen.getOrPut(sessionId) { mutableSetOf() }
-                        hits = hits.filter { obj ->
-                            val uri = obj.get("uri")?.asString ?: ""
-                            uri.isBlank() || seen.add(uri)
-                        }
-                        if (seen.size > 500) recallSeen[sessionId] = seen.toList().takeLast(500).toMutableSet()
-                    }
-                    val top = hits.take(displayCount)
-                    if (top.isEmpty()) return@fold ""
-                    top.joinToString("\n") { obj ->
-                        val uri = obj.get("uri")?.asString ?: ""
-                        val snippet = (obj.get("abstract")?.asString ?: "").take(200)
-                        "> [$uri] ${obj.get("score")?.asDouble?.let { "(${String.format("%.2f", it)})" } ?: ""}\n  $snippet"
-                    }
-                } catch (e: Exception) { "" }
-            },
-            onFailure = { "" }
-        )
-    }
 }

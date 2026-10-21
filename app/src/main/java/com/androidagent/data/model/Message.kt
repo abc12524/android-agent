@@ -25,4 +25,9 @@ data class Message(
     val completionTokens: Int = 0,
     val promptCacheHitTokens: Int = 0,
     val promptCacheMissTokens: Int = 0
-)
+) {
+    companion object {
+        /** 系统注入消息（skill 名单 / OV 召回）：对模型按 user 发送，默认不在 UI 展示 */
+        const val ROLE_INJECT = "inject_user"
+    }
+}

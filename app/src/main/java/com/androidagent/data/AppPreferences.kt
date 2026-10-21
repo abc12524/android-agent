@@ -2,6 +2,9 @@ package com.androidagent.data
 
 import android.content.Context
 import android.content.SharedPreferences
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import org.json.JSONObject
 
 /**
@@ -11,8 +14,14 @@ object AppPreferences {
     private const val PREFS_NAME = "android_agent_prefs"
     private lateinit var prefs: SharedPreferences
 
+    private val _showInjected = MutableStateFlow(false)
+
+    /** 是否在历史会话中展示注入消息（skill 名单 / OV 召回），供 UI 实时订阅 */
+    val showInjectedFlow: StateFlow<Boolean> = _showInjected.asStateFlow()
+
     fun init(context: Context) {
         prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        _showInjected.value = prefs.getBoolean("show_injected_messages", false)
     }
 
     // DeepSeek
@@ -54,10 +63,29 @@ object AppPreferences {
         get() = prefs.getString("ov_peer_scope", "actor") ?: "actor"
         set(value) = prefs.edit().putString("ov_peer_scope", value).apply()
 
-    // OpenViking 召回去重（跨轮不重复注入同一记忆）
-    var ovRecallDedup: Boolean
-        get() = prefs.getBoolean("ov_recall_dedup", true)
-        set(value) = prefs.edit().putBoolean("ov_recall_dedup", value).apply()
+    // OpenViking 自动记忆（三个开关）
+    // 每轮以用户问题为 query 检索注入
+    var ovRecallQuestion: Boolean
+        get() = prefs.getBoolean("ov_recall_question", true)
+        set(value) = prefs.edit().putBoolean("ov_recall_question", value).apply()
+
+    // 每个工具轮以整批消息（问题 / 助手信息 / 工具结果）为 query 检索注入
+    var ovRecallStep: Boolean
+        get() = prefs.getBoolean("ov_recall_step", false)
+        set(value) = prefs.edit().putBoolean("ov_recall_step", value).apply()
+
+    // 把对话抓取到 OV session，并在每轮结束时 commit 触发记忆提取
+    var ovCommit: Boolean
+        get() = prefs.getBoolean("ov_commit", false)
+        set(value) = prefs.edit().putBoolean("ov_commit", value).apply()
+
+    // 在历史会话中展示注入消息（skill 名单 / OV 召回）
+    var showInjectedMessages: Boolean
+        get() = prefs.getBoolean("show_injected_messages", false)
+        set(value) {
+            prefs.edit().putBoolean("show_injected_messages", value).apply()
+            _showInjected.value = value
+        }
 
     // 对话设置
     var maxToolRounds: Int
@@ -78,7 +106,7 @@ object AppPreferences {
         get() = prefs.getBoolean("background_service_enabled", false)
         set(value) = prefs.edit().putBoolean("background_service_enabled", value).apply()
 
-    // 搜索工具（openviking_tool 的 search 动作）默认阈值与条数：LLM 未显式指定时使用
+    // 遗留：OpenViking 显式搜索阈值与条数（openviking_tool 已移除，保留供内部调用/远程配置兼容）
     var ovScoreThreshold: Float
         get() = prefs.getFloat("ov_score_threshold", 0.4f)
         set(value) = prefs.edit().putFloat("ov_score_threshold", value).apply()
@@ -153,7 +181,7 @@ object AppPreferences {
      * JSON 顶层 key 与下方 SharedPreferences key 一一对应：
      * deepseek_api_key / deepseek_base_url / deepseek_model /
      * openviking_url / openviking_key / openviking_user /
-     * ov_peer_id / ov_peer_scope / ov_workspace_peer / ov_recall_dedup /
+     * ov_peer_id / ov_peer_scope / ov_workspace_peer /
      * max_tool_rounds /
      * session_timeout_minutes / background_service_enabled /
      * ov_score_threshold / ov_search_display_count / system_prompt
@@ -199,7 +227,10 @@ object AppPreferences {
         str("ov_peer_id")?.let { ovPeerId = it; count++ }
         str("ov_peer_scope")?.let { ovPeerScope = it; count++ }
         bool("ov_workspace_peer")?.let { ovWorkspacePeer = it; count++ }
-        bool("ov_recall_dedup")?.let { ovRecallDedup = it; count++ }
+        bool("ov_recall_question")?.let { ovRecallQuestion = it; count++ }
+        bool("ov_recall_step")?.let { ovRecallStep = it; count++ }
+        bool("ov_commit")?.let { ovCommit = it; count++ }
+        bool("show_injected_messages")?.let { showInjectedMessages = it; count++ }
         int("max_tool_rounds")?.let { maxToolRounds = it; count++ }
         int("session_timeout_minutes")?.let { sessionTimeoutMinutes = it; count++ }
         int("thinking_timeout_minutes")?.let { thinkingTimeoutMinutes = it; count++ }

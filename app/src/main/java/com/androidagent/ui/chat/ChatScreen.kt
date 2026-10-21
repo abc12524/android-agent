@@ -299,9 +299,11 @@ fun ChatScreen(
                         }
                     }
                 } else {
-                    // 过滤掉 system 角色消息（OV 检索记忆作为用户侧消息显示）
+                    // 过滤 system；注入消息（skill 名单 / OV 召回）默认隐藏，设置中可开启
                     val displayMessages = state.messages.filter { msg ->
-                        msg.role != "system"
+                        val injected = msg.role == Message.ROLE_INJECT ||
+                            (msg.role == "user" && msg.content.startsWith("[自动检索的候选记忆"))
+                        msg.role != "system" && (!injected || state.showInjected)
                     }
                     // 分组：把每次 assistant 的推理+工具调用聚合成「工具执行」时间线卡
                     val chatItems = remember(displayMessages) {
@@ -680,8 +682,10 @@ private fun BlinkingCursor(color: Color) {
 
 @Composable
 fun MessageBubble(msg: Message) {
-    val isUser = msg.role == "user"
-    val isOvContext = msg.role == "user" && msg.content.startsWith("[自动检索的候选记忆")
+    // 注入消息：skill 名单 / OV 召回（新版本 role=inject_user，旧数据以 user + 前缀标记兼容）
+    val isInjected = msg.role == Message.ROLE_INJECT ||
+        (msg.role == "user" && msg.content.startsWith("[自动检索的候选记忆"))
+    val isUser = msg.role == "user" && !isInjected
     val bc = if (isUser) BubbleUser else BubbleAssistant
     val tc = if (isUser) BubbleUserText else BubbleAssistantText
     val imageId = msg.imageFileId
@@ -704,16 +708,11 @@ fun MessageBubble(msg: Message) {
             }
 
             when {
-                // ---- OV 检索记忆：复用「工具调用」样式，点击弹详情 ----
-                isOvContext -> {
-                    val ovContent = remember(msg.content) {
-                        val c = msg.content
-                        val start = c.indexOf('\n')
-                        val end = c.lastIndexOf('\n')
-                        if (start >= 0 && end > start) c.substring(start + 1, end).trim() else c
-                    }
+                // ---- 注入消息（skill 名单 / OV 召回）：复用「工具调用」样式，点击弹详情 ----
+                isInjected -> {
+                    val label = if (msg.content.contains("<available_skills>")) "skill-list" else "ov-recall"
                     ToolCallCard(
-                        listOf(ToolCallEntry("ov-search", ovContent)),
+                        listOf(ToolCallEntry(label, msg.content)),
                         containerColor = Color(250, 244, 224),
                     )
                 }
@@ -750,8 +749,8 @@ fun MessageBubble(msg: Message) {
                 }
             }
 
-            // 仅正式回复（用户消息 / AI 正文回复）下方显示时间，思考、工具调用与 OV 检索不显示
-            if (!isOvContext && (isUser || (msg.role == "assistant" && msg.content.isNotBlank()))) {
+            // 仅正式回复（用户消息 / AI 正文回复）下方显示时间，思考、工具调用与注入信息不显示
+            if (!isInjected && (isUser || (msg.role == "assistant" && msg.content.isNotBlank()))) {
                 Text(
                     fmtTime(msg.timestamp), fontSize = 10.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),

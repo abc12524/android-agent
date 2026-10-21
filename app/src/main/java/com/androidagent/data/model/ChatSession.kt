@@ -18,5 +18,6 @@ data class ChatSession(
     val totalCompletionTokens: Int = 0,
     val totalCacheHitTokens: Int = 0,
     val totalCacheMissTokens: Int = 0,
-    val balance: String = ""
+    val balance: String = "",
+    val ovSessionId: String = ""
 )

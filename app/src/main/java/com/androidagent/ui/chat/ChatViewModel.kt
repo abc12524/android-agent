@@ -39,7 +39,8 @@ data class ChatUiState(
     val modelFamily: String = "flash",
     val lastUsage: DeepSeekClient.Usage? = null,
     val allSessions: List<ChatSession> = emptyList(),
-    val balance: String = ""
+    val balance: String = "",
+    val showInjected: Boolean = false
 )
 
 class ChatViewModel(application: Application) : AndroidViewModel(application) {
@@ -64,6 +65,13 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 if (current != null) {
                     uiState = uiState.copy(sessionTitle = current.title)
                 }
+            }
+        }
+
+        // 设置页开关：在历史会话中展示注入消息
+        viewModelScope.launch {
+            AppPreferences.showInjectedFlow.collect { show ->
+                uiState = uiState.copy(showInjected = show)
             }
         }
     }
