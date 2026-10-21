@@ -6,7 +6,7 @@ import java.io.File
 /**
  * 本地 skill 目录的统一读写入口（设置页与工具族共用）。
  *
- * 支持两种布局：扁平 `skills/<名>.py`；文件夹 `skills/<名>/skill.py`。
+ * 只支持文件夹布局：`skills/<名>/skill.py`（入口）。
  * skill 的头部元信息决定名称、说明与是否启用：
  *
  *   # skill: <name>
@@ -14,7 +14,7 @@ import java.io.File
  *   # status: enable | disable
  *
  * `disable` 只是把脚本从 LLM 的工具清单中隐藏，文件仍保留，随时可再启用；
- * [delete] 才会真正删除文件（内置 skill 会在下次部署时恢复）。
+ * [delete] 才会真正删除文件。
  */
 object SkillStore {
 
@@ -23,25 +23,19 @@ object SkillStore {
         val description: String,
         val enabled: Boolean,
         val entry: File,
-        /** true = `skills/<name>/skill.py` 文件夹布局；false = 扁平 `<name>.py` */
-        val folder: Boolean,
     ) {
         val path: String get() = entry.absolutePath
     }
 
     fun dir(context: Context): File = File(context.filesDir, "skills")
 
-    /** 扫描已安装 skill 并按名称排序（`_`/`.` 开头的运行时文件不参与）。 */
+    /** 扫描已安装 skill 并按名称排序（`_`/`.` 开头的运行时目录不参与）。 */
     fun list(context: Context): List<InstalledSkill> {
         val children = dir(context).listFiles()?.sortedBy { it.name } ?: return emptyList()
         return children.mapNotNull { f ->
-            val entry = when {
-                f.isDirectory && !f.name.startsWith("_") && !f.name.startsWith(".") ->
-                    File(f, "skill.py").takeIf { it.isFile }
-                f.isFile && f.name.endsWith(".py") && !f.name.startsWith("_") -> f
-                else -> null
-            } ?: return@mapNotNull null
-            parse(entry, f.isDirectory)
+            if (!f.isDirectory || f.name.startsWith("_") || f.name.startsWith(".")) return@mapNotNull null
+            val entry = File(f, "skill.py").takeIf { it.isFile } ?: return@mapNotNull null
+            parse(entry)
         }.sortedBy { it.name }
     }
 
@@ -55,31 +49,20 @@ object SkillStore {
         return writeStatus(skill.entry, if (enabled) "enable" else "disable")
     }
 
-    /** 彻底删除 skill（文件夹布局删整个目录，扁平布局删脚本）。 */
+    /** 彻底删除 skill（删整个技能目录）。 */
     fun delete(context: Context, name: String): Boolean {
         if (!NAME_RE.matches(name)) return false
         val skill = find(context, name) ?: return false
         return try {
-            if (skill.folder) {
-                skill.entry.parentFile?.deleteRecursively() ?: false
-            } else {
-                skill.entry.delete()
-            }
+            skill.entry.parentFile?.deleteRecursively() ?: false
         } catch (_: Exception) {
             false
         }
     }
 
-    /** 该 skill 是否随应用内置（被删后重启会重新部署）。 */
-    fun isBundled(context: Context, name: String): Boolean = try {
-        (context.assets.list("skills") ?: emptyArray()).any { it == "$name.py" }
-    } catch (_: Exception) {
-        false
-    }
-
     // ---- 头部解析 ----
 
-    private fun parse(file: File, folder: Boolean): InstalledSkill? {
+    private fun parse(file: File): InstalledSkill? {
         val lines = try {
             file.readLines()
         } catch (_: Exception) {
@@ -120,7 +103,6 @@ object SkillStore {
             description = description,
             enabled = status !in DISABLED,
             entry = file,
-            folder = folder,
         )
     }
 

@@ -9,8 +9,8 @@ import java.io.File
  * 工具族 5：skill —— 调用已注册的自建工具（不负责创建）。
  *
  * skills/ 目录下的脚本按头部元信息（# skill / # description / # status / # usage）
- * 自动注册，支持两种布局（可混用）：扁平 `skills/<名>.py`；文件夹 `skills/<名>/skill.py`
- * （入口、`_` 助手、`config.json` 同目录）。新增即生效、删除即注销，`_`/`.` 开头不注册。
+ * 自动注册，只支持文件夹布局：`skills/<名>/skill.py`（入口、`_` 助手、`config.json` 同目录）。
+ * 新增即生效、删除即注销，`_`/`.` 开头不注册。
  * 与内置工具族一样按「两段式」逐步披露：
  *
  *   - 不传 action                   → 返回已注册 skill 清单（仅名称 + 简短说明）；
@@ -35,7 +35,7 @@ class SkillTool(private val context: Context) : Tool {
     @Volatile private var cachedSignature: String = ""
     private val scanLock = Any()
 
-    /** 运行时文件与内置默认 skill 是否已部署（每进程一次） */
+    /** 运行时文件是否已部署（每进程一次） */
     @Volatile private var assetsDeployed = false
 
     override val name: String = "skill"
@@ -119,16 +119,10 @@ class SkillTool(private val context: Context) : Tool {
     private fun scan(): List<SkillMeta> {
         ensureDeployed()
         val children = skillsDir.listFiles()?.sortedBy { it.name } ?: emptyList()
-        // 支持两种布局：扁平 skills/<名>.py；文件夹 skills/<名>/skill.py（入口）
+        // 只支持文件夹布局：skills/<名>/skill.py（入口）
         val entries = children.mapNotNull { f ->
-            when {
-                f.isDirectory && !f.name.startsWith("_") && !f.name.startsWith(".") -> {
-                    val entry = File(f, "skill.py")
-                    if (entry.isFile) entry else null
-                }
-                f.isFile && f.name.endsWith(".py") && !f.name.startsWith("_") -> f
-                else -> null
-            }
+            if (!f.isDirectory || f.name.startsWith("_") || f.name.startsWith(".")) return@mapNotNull null
+            File(f, "skill.py").takeIf { it.isFile }
         }
 
         // 签名 = 每个入口的「绝对路径 + 修改时间 + 大小」。未变说明内容未改动，直接复用缓存，
@@ -282,7 +276,7 @@ class SkillTool(private val context: Context) : Tool {
         return output
     }
 
-    /** 确保 skills/ 存在，并把运行时文件与内置默认 skill 部署一次（每进程一次）。 */
+    /** 确保 skills/ 存在，并把运行时文件部署一次（每进程一次）。 */
     private fun ensureDeployed() {
         if (assetsDeployed) return
         synchronized(scanLock) {
@@ -296,34 +290,14 @@ class SkillTool(private val context: Context) : Tool {
     /**
      * 部署运行时文件：
      *  - _skill_runner.py / _envelope.py 每次覆盖，保持与应用版本一致；
-     *  - README.md 仅在缺失时写入，避免覆盖使用者改动；
-     *  - 再部署 assets/skills/ 下的内置默认 skill（见 deployBundledSkills）。
+     *  - README.md 仅在缺失时写入，避免覆盖使用者改动。
+     *
+     * 不内置任何 skill：技能统一从 skill 仓库安装，便于独立更新。
      */
     private fun deployAssets(dir: File) {
         writeAsset("skill_runner.py", File(dir, "_skill_runner.py"), overwrite = true)
         writeAsset("skill_envelope.py", File(dir, "_envelope.py"), overwrite = true)
         writeAsset("skill_README.md", File(dir, "README.md"), overwrite = false)
-        deployBundledSkills(dir)
-    }
-
-    /**
-     * 部署内置默认 skill（打包在 assets/skills/ 下）：
-     *  - `_` 开头的辅助/运行时文件每次覆盖，保证与应用版本一致；
-     *  - 普通 skill 脚本仅在缺失时写入，避免覆盖使用者的改动。
-     *
-     * 注：内置 skill 属于随应用发布的默认能力，被删除后会在下次运行时重新部署；
-     * 如需临时下线，把脚本头部改为 `# status: disable` 即可。
-     */
-    private fun deployBundledSkills(dir: File) {
-        val names = try {
-            context.assets.list("skills") ?: emptyArray()
-        } catch (_: Exception) {
-            return
-        }
-        for (name in names) {
-            if (!name.endsWith(".py")) continue
-            writeAsset("skills/$name", File(dir, name), overwrite = name.startsWith("_"))
-        }
     }
 
     private fun writeAsset(asset: String, target: File, overwrite: Boolean) {

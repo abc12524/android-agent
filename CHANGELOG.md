@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- skill 注册取消扁平单文件布局：只识别文件夹式 `skills/<名>/skill.py`；`skills/<名>.py` 不再注册（runner、扫描、删除逻辑同步收紧）
+- 移除内置 `script` 技能：技能不再随应用打包，统一从 skill 仓库安装，便于独立更新；旧版本已部署到设备上的副本不会自动删除，可在「设置 → Skill 仓库」手动删除
 - 新增 `skill_hub` 工具：从远程技能仓库（GitHub / Gitea）查看 / 下载 / 卸载 skill（list / install / remove）
 - 新增 `disable` / `enable` 子工具；「设置 → Skill 仓库」可直接列出已安装 skill、开关启用状态（对 LLM 隐藏）、删除，并从远程仓库拉取列表手动下载
 - `remove` 默认仅下线（改头部 `# status: disable`，保留文件，可重新 install 恢复）；`hard=true` 才真正删除
