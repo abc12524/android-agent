@@ -40,20 +40,13 @@ class SkillTool(private val context: Context) : Tool {
 
     override val name: String = "skill"
 
-    /** 已注册（启用）skill 名称，自动反映新增/删除。 */
-    fun registeredSkillNames(): List<String> = scan().filter { it.enabled }.map { it.name }
-
-    /** 已注册（启用）skill 的名称与说明，供注入 skill 名单消息。 */
+    /** 已注册（启用）skill 的名称与说明，供注入 skill 名单消息（不进入工具 schema）。 */
     fun registeredSkillSummaries(): List<SkillSummary> =
         scan().filter { it.enabled }.map { SkillSummary(it.name, it.description) }
 
-    /** 已注册 skill 名称串，供工具定义动态披露。 */
-    private fun registeredNames(): String =
-        registeredSkillNames().joinToString(", ").ifEmpty { "(空)" }
-
+    // 工具 schema 必须完全静态：不包含任何 skill 名称/说明，避免安装/删除 skill 时破坏前缀缓存。
     override val description: String
         get() = "调用已注册的自建 Python 工具（脚本目录 " + skillsDir.absolutePath + "）。" +
-            "当前已注册: " + registeredNames() + "。" +
             "不传 action 返回清单；action=<skill 名> 查看用法；" +
             "action=<skill 名> + params 执行；action=delete 删除。"
 
@@ -63,7 +56,7 @@ class SkillTool(private val context: Context) : Tool {
             "properties" to mapOf(
                 "action" to mapOf(
                     "type" to "string",
-                    "description" to "skill 名（当前已注册: " + registeredNames() + "），或管理动作 delete；省略则返回已注册清单"
+                    "description" to "skill 名，或管理动作 delete；省略则返回已注册清单"
                 ),
                 "params" to mapOf(
                     "type" to "object",

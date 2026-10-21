@@ -40,8 +40,9 @@ class SkillHubTool(private val context: Context) : Tool {
         SubTool("remove", "下线或删除本地技能", "remove: 参数 name 必填；默认仅下线；hard=true 才真正删除"),
     )
 
+    // 工具 schema 静态：不嵌入仓库地址等可配置内容。
     override val description: String
-        get() = "远程技能仓库（" + sourceLabel() + "）。子工具：" +
+        get() = "远程技能仓库。子工具：" +
             subs.joinToString(" / ") { it.name } +
             "。list 查看可装技能；install + params{name} 下载安装；" +
             "disable 对 LLM 隐藏；enable 重新启用；remove 默认下线，hard=true 才删除。" +
@@ -78,8 +79,6 @@ class SkillHubTool(private val context: Context) : Tool {
     private fun config(): SkillRepoConfig = SkillRepoConfig.fromPrefs()
 
     private fun repository(): SkillRepository = SkillRepository(context, config())
-
-    private fun sourceLabel(): String = config().label()
 
     // ==================== 动作实现 ====================
 
