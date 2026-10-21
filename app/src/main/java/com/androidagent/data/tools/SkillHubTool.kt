@@ -22,7 +22,7 @@ import kotlinx.coroutines.withContext
  *   - action=install  + params{name} → 下载安装（覆盖安装，保留本地 config.json）
  *   - action=disable  + params{name} → 下线（# status: disable，对 LLM 隐藏）
  *   - action=enable   + params{name} → 重新启用
- *   - action=remove   + params{name} → 默认下线；hard=true 才真正删除
+ *   - action=remove   + params{name} → 删除技能文件（卸载）
  *
  * 安全：下载即等价于信任该仓库的代码（会在内置 Python 进程内 import 执行）。
  */
@@ -37,7 +37,7 @@ class SkillHubTool(private val context: Context) : Tool {
         SubTool("install", "下载并安装远程技能", "install: 参数 name 必填（远程技能名）；下载到 skills/<name>/ 并自动注册"),
         SubTool("disable", "下线本地技能（对 LLM 隐藏）", "disable: 参数 name 必填；改写头部 # status: disable，文件保留"),
         SubTool("enable", "重新启用已下线技能", "enable: 参数 name 必填；改写头部 # status: enable"),
-        SubTool("remove", "下线或删除本地技能", "remove: 参数 name 必填；默认仅下线；hard=true 才真正删除"),
+        SubTool("remove", "删除本地技能（卸载）", "remove: 参数 name 必填；直接删除技能文件"),
     )
 
     // 工具 schema 静态：不嵌入仓库地址等可配置内容。
@@ -45,7 +45,7 @@ class SkillHubTool(private val context: Context) : Tool {
         get() = "远程技能仓库。子工具：" +
             subs.joinToString(" / ") { it.name } +
             "。list 查看可装技能；install + params{name} 下载安装；" +
-            "disable 对 LLM 隐藏；enable 重新启用；remove 默认下线，hard=true 才删除。" +
+            "disable 对 LLM 隐藏；enable 重新启用；remove 直接删除。" +
             "下载即信任其代码（会在进程内执行）。仓库地址可在设置中修改。"
 
     override val parameters: Map<String, Any> = familyParameters(subs)
@@ -65,7 +65,7 @@ class SkillHubTool(private val context: Context) : Tool {
                     "install" -> doInstall((p["name"] as? String)?.trim().orEmpty())
                     "disable" -> doSetEnabled((p["name"] as? String)?.trim().orEmpty(), false)
                     "enable" -> doSetEnabled((p["name"] as? String)?.trim().orEmpty(), true)
-                    "remove" -> doRemove((p["name"] as? String)?.trim().orEmpty(), asBool(p["hard"]))
+                    "remove" -> doRemove((p["name"] as? String)?.trim().orEmpty())
                     else -> err("未知操作: $action")
                 }
             } catch (e: Exception) {
@@ -103,7 +103,7 @@ class SkillHubTool(private val context: Context) : Tool {
                 "branch" to cfg.branchName,
                 "count" to items.size,
                 "skills" to items,
-                "note" to "install 安装；disable 隐藏；enable 启用；remove 下线（hard=true 删除）"
+                "note" to "install 安装；disable 隐藏；enable 启用；remove 删除"
             )
         )
     }
@@ -153,11 +153,9 @@ class SkillHubTool(private val context: Context) : Tool {
         )
     }
 
-    private fun doRemove(name: String, hard: Boolean): String {
+    private fun doRemove(name: String): String {
         if (!NAME_RE.matches(name)) return err("非法技能名 '$name'")
         val skill = SkillStore.find(context, name) ?: return err("未安装技能 '$name'")
-
-        if (!hard) return doSetEnabled(name, false)
 
         return if (SkillStore.delete(context, name)) {
             gson.toJson(
@@ -166,7 +164,6 @@ class SkillHubTool(private val context: Context) : Tool {
                     "result" to mapOf(
                         "skill" to name,
                         "removed" to true,
-                        "hard" to true,
                         "bundled" to SkillStore.isBundled(context, name),
                         "note" to "文件已删除；内置技能会在应用重启后重新部署"
                     )
@@ -178,13 +175,6 @@ class SkillHubTool(private val context: Context) : Tool {
     }
 
     // ==================== 工具方法 ====================
-
-    private fun asBool(v: Any?): Boolean = when (v) {
-        is Boolean -> v
-        is Number -> v.toInt() != 0
-        is String -> v.trim().lowercase() in setOf("1", "true", "yes", "on")
-        else -> false
-    }
 
     private fun err(msg: String): String = gson.toJson(mapOf("status" to "error", "error" to msg))
 
