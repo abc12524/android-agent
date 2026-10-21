@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- 工具集精简为 4 个大工具；`system_tool` 保留 `shell` / `python` / `ssh`，SSH 恢复为原生 JSch 并合并 SCP
+  （`params.action=exec|upload|download`）；`wait` / `objstore` / `ov` 改由 skill 提供
+- OpenViking 改为内构自动记忆：`ov_recall_question` / `ov_recall_step` / `ov_commit` 三个开关；
+  同一会话强制去重，按历史重建、换会话清空
+- 注入消息统一 role=`inject_user`（skill 名单 / OV 召回），默认不在 UI 展示；
+  设置「显示注入信息」可在历史会话查看
+- 工具 schema 改为完全静态（移除 skill 名单与仓库地址），保护前缀缓存
+- Room v7：新增 `sessions.ovSessionId`，用于恢复 OV session
 - 新增 `skill_hub` 工具：从远程技能仓库（GitHub / Gitea）查看 / 下载 / 卸载 skill（list / install / remove）
 - 新增 `disable` / `enable` 子工具；「设置 → Skill 仓库」可直接列出已安装 skill、开关启用状态（对 LLM 隐藏）、删除，并从远程仓库拉取列表手动下载
 - `remove` 默认仅下线（改头部 `# status: disable`，保留文件，可重新 install 恢复）；`hard=true` 才真正删除

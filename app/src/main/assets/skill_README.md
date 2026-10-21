@@ -22,7 +22,7 @@
 ## 目录与运行环境
 
 - 运行 Python：应用内置的 **Python 3.13**（完整标准库 + pip，清华源）。可用 `system_tool` 的
-  `python_pip` 安装第三方包（如 `requests`）。
+  `python`（`mode=pip`）安装第三方包（如 `requests`）。
 - 脚本工作目录即本目录，可直接 `import` 同目录下的其他脚本或 `_envelope`。
 - 执行方式：`skill` 工具的调用会在独立进程中导入脚本并调用 `run(arguments)`。
 
@@ -99,5 +99,5 @@ def run(arguments):
 - **错误用信封**：失败返回 `error("原因", code="...")`，便于 LLM 自纠。
 - **错误码**：`invalid_argument` / `not_found` / `unknown_skill` / `io_error` / `internal` 等。
 - **幂等与安全**：涉及删除/写文件等危险操作时，校验参数并在说明中写明。
-- **依赖**：优先标准库；需要第三方库时用 `system_tool` 的 `python_pip` 安装。
+- **依赖**：优先标准库；需要第三方库时用 `system_tool` 的 `python`（`mode=pip`）安装。
 - **状态控制**：临时下线某 skill，把头部 `# status:` 改为 `disable`（仍可按名调用，只是不出现在清单里）。

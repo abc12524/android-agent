@@ -49,10 +49,9 @@ SSH 为原生 JSch 实现（一个 `ssh` 子工具覆盖执行 / 上传 / 下载
 - ⚠️ 下载即等价于信任该仓库的代码（会在内置 Python 进程内执行），仅从可信来源安装
 
 ### ☁️ 对象存储（S3 兼容）
-- 支持任何 S3 兼容服务（AWS S3、MinIO、Ceph、阿里云 OSS 等）
-- 支持自定义 Endpoint（IP:port 格式）
+- 已下沉为 `objstore` skill，支持任何 S3 兼容服务（AWS S3、MinIO、Ceph、阿里云 OSS 等）
 - 13 种操作：upload / download / delete / delete_batch / list / copy / head / list_buckets / create_bucket / delete_bucket / presign / create_folder / delete_folder
-- 连接参数从应用设置自动读取，LLM 调用时无需传入
+- 从 Skill 仓库安装后，在同目录 `config.json` 配置连接参数
 
 ### 🧠 嵌入式 Python 环境
 - 内置 **Python 3.13** 完整标准库 + pip
@@ -105,7 +104,7 @@ maven { setUrl("https://maven.aliyun.com/repository/gradle-plugin") }
 1. 安装 APK 后打开应用
 2. 进入 **设置** 配置 **DeepSeek API Key**（必填）
 3. （可选）配置 OpenViking 服务器地址与密钥
-4. （可选）配置对象存储 S3 服务地址和密钥
+4. （可选）从 Skill 仓库安装所需技能（如 `objstore` / `wait` / `ov`）
 5. 开始对话
 
 ### 首次启动
@@ -177,7 +176,7 @@ JSON 顶层 key 与应用的设置项一一对应；**顶层值为对象的 key 
 - **网络**: OkHttp + Gson
 - **AI API**: DeepSeek Chat Completion (Function Calling)
 - **SSH**: JSch
-- **对象存储**: OkHttp + AWS Signature V4（S3 兼容，支持 MinIO/Ceph 等）
+- **对象存储**: `objstore` skill（Python，S3 兼容）
 - **CI**: GitHub Actions（自动构建 Debug APK 并发布 Release）
 
 ## License
