@@ -3,10 +3,12 @@ package com.androidagent.ui.chat
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -39,18 +41,38 @@ import org.intellij.markdown.flavours.gfm.GFMTokenTypes
 
 @Composable
 internal fun MarkdownBody(content: String, fillWidth: Boolean = true) {
+    val media = remember(content) { MediaParser.parse(content) }
     val components = remember {
         markdownComponents(table = { model -> AutoSizedTable(model) })
     }
-    val state = rememberMarkdownState(content = content, retainState = true)
+    val state = rememberMarkdownState(content = media.text, retainState = true)
     val typography = chatMarkdownTypography()
-    SelectionContainer {
-        Markdown(
-            markdownState = state,
-            components = components,
-            typography = typography,
-            modifier = if (fillWidth) Modifier.fillMaxWidth() else Modifier,
-        )
+    Column(
+        modifier = if (fillWidth) Modifier.fillMaxWidth() else Modifier,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        if (media.text.isNotBlank()) {
+            SelectionContainer {
+                Markdown(
+                    markdownState = state,
+                    components = components,
+                    typography = typography,
+                    modifier = if (fillWidth) Modifier.fillMaxWidth() else Modifier,
+                )
+            }
+        }
+        media.images.forEach { item ->
+            MediaImage(
+                source = item.source,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 320.dp)
+                    .clip(RoundedCornerShape(10.dp)),
+            )
+        }
+        media.audios.forEach { item ->
+            AudioAttachmentPlayer(source = item.source, label = item.label)
+        }
     }
 }
 

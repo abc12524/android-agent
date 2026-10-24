@@ -3,13 +3,16 @@ package com.androidagent.ui.chat
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.Build
@@ -24,6 +27,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.style.TextOverflow
@@ -102,7 +106,33 @@ fun ToolRunCard(steps: List<Message>, modifier: Modifier = Modifier) {
         .filter { it.role == "tool" && it.toolName != null }
         .map { ToolCallEntry(it.toolName!!, buildToolDetail(it)) }
     if (entries.isEmpty()) return
-    ToolCallCard(entries, modifier)
+    val media = steps
+        .filter { it.role == "tool" && it.toolName != null }
+        .map { MediaParser.parse(it.content) }
+    val images = media.flatMap { it.images }
+    val audios = media.flatMap { it.audios }
+    Column(modifier) {
+        ToolCallCard(entries)
+        if (images.isNotEmpty() || audios.isNotEmpty()) {
+            Column(
+                Modifier.padding(top = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                images.forEach { item ->
+                    MediaImage(
+                        source = item.source,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 280.dp)
+                            .clip(RoundedCornerShape(10.dp)),
+                    )
+                }
+                audios.forEach { item ->
+                    AudioAttachmentPlayer(source = item.source, label = item.label)
+                }
+            }
+        }
+    }
 }
 
 private fun buildToolDetail(step: Message): String {

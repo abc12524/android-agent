@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- 聊天消息与工具结果支持媒体展示：Markdown 图片、`[image:路径]`、`[audio:路径]` 与音频链接；
+  图片支持 http/data/file/应用沙盒路径，音频内联播放（点击才播放）
 - skill 注册取消扁平单文件布局：只识别文件夹式 `skills/<名>/skill.py`；`skills/<名>.py` 不再注册（runner、扫描、删除逻辑同步收紧）
 - 移除内置 `script` 技能：技能不再随应用打包，统一从 skill 仓库安装，便于独立更新；旧版本已部署到设备上的副本不会自动删除，可在「设置 → Skill 仓库」手动删除
 - 工具集精简为 4 个大工具；`system_tool` 保留 `shell` / `python` / `ssh`，SSH 恢复为原生 JSch 并合并 SCP

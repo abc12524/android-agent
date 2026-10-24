@@ -29,6 +29,8 @@ SSH 为原生 JSch 实现（一个 `ssh` 子工具覆盖执行 / 上传 / 下载
 - 传 `action + params` → 执行，子工具参数放进 `params` 对象（如 `{"action":"shell","params":{"command":"ls"}}`）。
 
 > 用户发送图片时自动上传并交由 vision 模型识别，无需 LLM 调用工具。
+> 助手正文与工具结果中的媒体可直接展示：Markdown 图片、`[image:路径]`、`[audio:路径]` 与音频链接；
+> 支持 http / data / file / 应用沙盒路径，图片自动加载，音频点击播放。
 
 ### 🧩 skill 自建工具
 - `skills/` 目录下每个技能文件夹的入口 `skill.py` 按头部元信息**自动注册**为可调用工具：放入即生效，删除即注销，无需改核心代码
