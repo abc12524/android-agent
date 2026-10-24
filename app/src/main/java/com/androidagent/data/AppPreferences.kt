@@ -124,10 +124,10 @@ object AppPreferences {
         get() = prefs.getInt("ov_find_limit", 2)
         set(value) = prefs.edit().putInt("ov_find_limit", value).apply()
 
-    // 系统提示词
-    var systemPrompt: String
-        get() = prefs.getString("system_prompt", "") ?: ""
-        set(value) = prefs.edit().putString("system_prompt", value).apply()
+    // 用户自定义提示：每会话注入一次（<user_tips>），新会话生效
+    var userTips: String
+        get() = prefs.getString("user_tips", "") ?: ""
+        set(value) = prefs.edit().putString("user_tips", value).apply()
 
     // 对象存储 (S3)
     var s3EndpointUrl: String
@@ -184,7 +184,7 @@ object AppPreferences {
      * ov_peer_id / ov_peer_scope / ov_workspace_peer /
      * max_tool_rounds /
      * session_timeout_minutes / background_service_enabled /
-     * ov_score_threshold / ov_search_display_count / system_prompt
+     * ov_score_threshold / ov_search_display_count / user_tips
      * 返回成功应用的字段数量（不存在的 key 会被忽略）。
      */
     /**
@@ -239,7 +239,7 @@ object AppPreferences {
         int("ov_search_display_count")?.let { ovSearchDisplayCount = it; count++ }
         float("ov_find_threshold")?.let { ovFindThreshold = it; count++ }
         int("ov_find_limit")?.let { ovFindLimit = it; count++ }
-        str("system_prompt")?.let { systemPrompt = it; count++ }
+        str("user_tips")?.let { userTips = it; count++ }
         str("s3_endpoint_url")?.let { s3EndpointUrl = it; count++ }
         str("s3_access_key")?.let { s3AccessKey = it; count++ }
         str("s3_secret_key")?.let { s3SecretKey = it; count++ }

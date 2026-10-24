@@ -63,8 +63,8 @@ SSH 为原生 JSch 实现（一个 `ssh` 子工具覆盖执行 / 上传 / 下载
 - 三个开关：每轮按问题检索、每步按问题/助手/工具检索、会话自动抓取并提交（commit）
 - 自动注入相关记忆作为对话上下文；召回与抓取均静默失败，不打断对话
 - 同一会话内不重复注入相同记忆（强制规则，非开关）；每个会话独立，切换会话从零开始
-- skill 名单与记忆召回统一以 `inject_user` 注入，默认不在聊天界面展示；
-  设置「显示注入信息」后可在历史会话中查看
+- skill 名单、记忆召回、轮次与用户提示统一以 `inject_user` 注入（每轮合并为一条
+  `<system-reminder>`），默认不在聊天界面展示；设置「显示注入信息」后可在历史会话中查看
 
 ## 构建
 
@@ -137,7 +137,7 @@ JSON 顶层 key 与应用的设置项一一对应；**顶层值为对象的 key 
     "ov_search_display_count": 2,
     "ov_find_threshold": 0.5,
     "ov_find_limit": 2,
-    "system_prompt": "",
+    "user_tips": "",
     "s3_endpoint_url": "http://192.168.1.100:9000",
     "s3_access_key": "your-access-key",
     "s3_secret_key": "your-secret-key"
@@ -160,7 +160,7 @@ JSON 顶层 key 与应用的设置项一一对应；**顶层值为对象的 key 
     "ov_search_display_count": 2,
     "ov_find_threshold": 0.5,
     "ov_find_limit": 2,
-    "system_prompt": "",
+    "user_tips": "",
     "s3_endpoint_url": "",
     "s3_access_key": "",
     "s3_secret_key": ""

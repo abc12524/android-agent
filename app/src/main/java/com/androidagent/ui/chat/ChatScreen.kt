@@ -710,7 +710,16 @@ fun MessageBubble(msg: Message) {
             when {
                 // ---- 注入消息（skill 名单 / OV 召回）：复用「工具调用」样式，点击弹详情 ----
                 isInjected -> {
-                    val label = if (msg.content.contains("<available_skills>")) "skill-list" else "ov-recall"
+                    val hasSkills = msg.content.contains("<available_skills>")
+                    val hasOv = msg.content.contains("<available_openviking>")
+                    val hasTips = msg.content.contains("<user_tips>")
+                    val label = when {
+                        hasSkills && (hasOv || hasTips) -> "context"
+                        hasSkills -> "skill-list"
+                        hasOv -> "ov-recall"
+                        hasTips -> "user-tips"
+                        else -> "context"
+                    }
                     ToolCallCard(
                         listOf(ToolCallEntry(label, msg.content)),
                         containerColor = Color(250, 244, 224),

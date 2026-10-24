@@ -21,6 +21,12 @@ import java.util.*
  */
 class ChatEngine(private val context: Context) {
 
+    companion object {
+        /** 固定的系统提示词（不再提供设置项，每次请求统一置顶） */
+        const val SYSTEM_PROMPT =
+            "你是运行在android-agent应用上的AI助手，可读写应用空间为:/data/user/0/com.androidagent/files/，使用中文回答用户问题。"
+    }
+
     private val gson = Gson()
     private val deepSeek = DeepSeekClient()
     private val toolRegistry = ToolRegistry(context)
@@ -62,9 +68,13 @@ class ChatEngine(private val context: Context) {
             // 1. 加载历史消息
             val history = db.messageDao().getMessagesBySessionSync(sessionId)
             seedRecallHistory(sessionId, history)
-            val messages = history.map { it.toApiMessage() }.toMutableList()
+            val turnNo = history.count { it.role == "user" && !Recall.isInjectedContent(it.content) } + 1
+            // 系统提示词固定：忽略历史中旧的 system 消息，每次请求前统一置顶
+            val messages = history.filter { it.role != "system" }
+                .map { it.toApiMessage() }.toMutableList()
+            messages.add(0, DeepSeekClient.ChatMessage(role = "system", content = SYSTEM_PROMPT))
 
-            // 2. 添加用户消息（放在最前面），含图片时自动上传 Files API（vision 模型）
+            // 2. 追加用户消息，含图片时自动上传 Files API（vision 模型）
             val (userApiMsg, imageFileId) = buildUserMessage(userMessage, imageFilePath)
             messages.add(userApiMsg)
             if (imageFileId != null && !imageFilePath.isNullOrBlank()) renameLocalImage(imageFilePath, imageFileId)
@@ -72,9 +82,9 @@ class ChatEngine(private val context: Context) {
             insertedIds.add(db.messageDao().insert(userMsgEntity))
             allNewMessages.add(userMsgEntity)
 
-            // 3. 注入 skill 名单 + 自动召回（均为 inject_user，默认不在 UI 展示）
+            // 3. 注入轮次 / skill 名单 / 自动召回 / user_tips（合并为一条 inject_user 消息）
             prepareTurn(
-                sessionId, userMessage, messages, insertedIds, allNewMessages,
+                sessionId, turnNo, userMessage, messages, insertedIds, allNewMessages,
                 skipRecall = imageFilePath != null
             )
 
@@ -190,12 +200,15 @@ class ChatEngine(private val context: Context) {
                 }
                 captureRound(sessionId, roundMessages)
 
-                // 最后一次工具调用：注入停止通知，让 LLM 多一轮来汇总
+                // 工具轮耗尽：注入 user_warning（入库并重放，下一轮必须收尾）
                 if (round == maxRounds) {
-                    messages.add(DeepSeekClient.ChatMessage(
-                        role = "user",
-                        content = "这是最后一次工具调用。请根据已有结果报告当前进度，总结完成情况，然后停止调用。"
-                    ))
+                    persistInjected(
+                        sessionId,
+                        Recall.buildUserWarning(
+                            "本轮已达到工具调用次数上限，请不要再调用工具，直接根据已有结果报告当前进度、总结完成情况，然后停止调用。"
+                        ),
+                        messages, insertedIds, allNewMessages
+                    )
                 }
 
                 // 思考熔断：本轮思考超时 → 在工具结果之后注入提示（不入库），下一轮直接作答
@@ -251,9 +264,13 @@ class ChatEngine(private val context: Context) {
             // 1. 加载历史消息
             val history = db.messageDao().getMessagesBySessionSync(sessionId)
             seedRecallHistory(sessionId, history)
-            val messages = history.map { it.toApiMessage() }.toMutableList()
+            val turnNo = history.count { it.role == "user" && !Recall.isInjectedContent(it.content) } + 1
+            // 系统提示词固定：忽略历史中旧的 system 消息，每次请求前统一置顶
+            val messages = history.filter { it.role != "system" }
+                .map { it.toApiMessage() }.toMutableList()
+            messages.add(0, DeepSeekClient.ChatMessage(role = "system", content = SYSTEM_PROMPT))
 
-            // 2. 添加用户消息（放在最前面），含图片时自动上传 Files API（vision 模型）
+            // 2. 追加用户消息，含图片时自动上传 Files API（vision 模型）
             val (userApiMsg, imageFileId) = buildUserMessage(userMessage, imageFilePath)
             messages.add(userApiMsg)
             if (imageFileId != null && !imageFilePath.isNullOrBlank()) renameLocalImage(imageFilePath, imageFileId)
@@ -261,9 +278,9 @@ class ChatEngine(private val context: Context) {
             insertedIds.add(db.messageDao().insert(userMsgEntity))
             allNewMessages.add(userMsgEntity)
 
-            // 3. 注入 skill 名单 + 自动召回（均为 inject_user，默认不在 UI 展示）
+            // 3. 注入轮次 / skill 名单 / 自动召回 / user_tips（合并为一条 inject_user 消息）
             prepareTurn(
-                sessionId, userMessage, messages, insertedIds, allNewMessages,
+                sessionId, turnNo, userMessage, messages, insertedIds, allNewMessages,
                 skipRecall = imageFilePath != null
             )
 
@@ -403,12 +420,15 @@ class ChatEngine(private val context: Context) {
                 }
                 captureRound(sessionId, roundMessages)
 
-                // 最后一次工具调用：注入停止通知
+                // 工具轮耗尽：注入 user_warning（入库并重放，下一轮必须收尾）
                 if (round == maxRounds) {
-                    messages.add(DeepSeekClient.ChatMessage(
-                        role = "user",
-                        content = "这是最后一次工具调用。请根据已有结果报告当前进度，总结完成情况，然后停止调用。"
-                    ))
+                    persistInjected(
+                        sessionId,
+                        Recall.buildUserWarning(
+                            "本轮已达到工具调用次数上限，请不要再调用工具，直接根据已有结果报告当前进度、总结完成情况，然后停止调用。"
+                        ),
+                        messages, insertedIds, allNewMessages
+                    )
                 }
 
                 // 思考熔断：本轮思考超时 → 在工具结果之后注入提示（不入库），下一轮直接作答
@@ -444,27 +464,32 @@ class ChatEngine(private val context: Context) {
     /** 用会话历史中已注入的召回 URI 初始化去重记录（每个会话独立，切回旧会话也不重复注入）。 */
     private fun seedRecallHistory(sessionId: String, history: List<Message>) {
         val uris = history.asSequence()
-            .filter { it.role == Message.ROLE_INJECT && Recall.RECALL_MARKER in it.content }
+            .filter { it.role == Message.ROLE_INJECT }
             .flatMap { Recall.parseRecallUris(it.content).asSequence() }
             .toList()
         recallEngine.seedSession(sessionId, uris)
     }
 
     /**
-     * 一轮对话开始时的注入：
-     *  1) skill 名单（inject_user，只追加新增的 skill）
-     *  2) ovCommit 开启时建立 OV session 并抓取用户问题
-     *  3) ovRecallQuestion 开启时以用户问题为 query 召回
+     * 一轮对话开始时的注入（合并为一条 inject_user 消息）：
+     *  1) user_turn 轮次提示
+     *  2) skill 名单（首轮全量，之后只补新增）
+     *  3) ovCommit 开启时抓取用户问题
+     *  4) ovRecallQuestion 开启时以用户问题为 query 召回
+     *  5) user_tips（每会话一次）
      */
     private suspend fun prepareTurn(
         sessionId: String,
+        turnNo: Int,
         userMessage: String,
         messages: MutableList<DeepSeekClient.ChatMessage>,
         insertedIds: MutableList<Long>,
         allNewMessages: MutableList<Message>,
         skipRecall: Boolean
     ) {
-        appendSkillDelta(sessionId, messages, insertedIds, allNewMessages)
+        val injected = injectedContents(sessionId)
+        val blocks = mutableListOf<String>()
+        takeSkillBlock(injected)?.let { blocks.add(it) }
 
         if (AppPreferences.ovCommit) {
             val ovSessionId = ensureOvSession(sessionId)
@@ -477,37 +502,45 @@ class ChatEngine(private val context: Context) {
         }
 
         if (!skipRecall && AppPreferences.ovRecallQuestion) {
-            injectRecall(
-                sessionId,
+            val block = recallEngine.recall(
                 listOf(DeepSeekClient.ChatMessage(role = "user", content = userMessage)),
-                messages, insertedIds, allNewMessages
+                sessionId
             )
+            if (block.isNotBlank()) blocks.add(Recall.openvikingBlock(block))
         }
+
+        takeUserTipsBlock(injected)?.let { blocks.add(it) }
+
+        persistInjected(
+            sessionId,
+            Recall.buildTurnContext(turnNo, blocks),
+            messages, insertedIds, allNewMessages
+        )
     }
 
-    /** 追加 skill 名单：首次全量，之后只追加新增项（只追加不重排，保护前缀缓存）。 */
-    private suspend fun appendSkillDelta(
-        sessionId: String,
-        messages: MutableList<DeepSeekClient.ChatMessage>,
-        insertedIds: MutableList<Long>,
-        allNewMessages: MutableList<Message>
-    ) {
+    /** 会话内已落库的注入消息内容（用于 skill 增量与 user_tips 去重）。 */
+    private suspend fun injectedContents(sessionId: String): List<String> =
+        db.messageDao().getMessagesBySessionSync(sessionId)
+            .filter { it.role == Message.ROLE_INJECT }
+            .map { it.content }
+
+    /** 首轮返回全量名单块；之后仅在有新增 skill 时返回增量块，否则 null。 */
+    private fun takeSkillBlock(injected: List<String>): String? {
         val summaries = toolRegistry.skillSummaries()
-        if (summaries.isEmpty()) return
-
-        val known = db.messageDao().getMessagesBySessionSync(sessionId)
-            .filter { it.role == Message.ROLE_INJECT && Recall.SKILL_MARK in it.content }
-            .flatMap { Recall.parseSkillNames(it.content) }
+        if (summaries.isEmpty()) return null
+        val known = injected.filter { Recall.SKILL_MARK in it }
+            .flatMap { Recall.parseSkillNames(it) }
             .toSet()
-
         val fresh = summaries.filter { it.name !in known }
-        if (fresh.isEmpty()) return
+        if (fresh.isEmpty()) return null
+        return Recall.buildSkillBlock(fresh.map { it.name to it.description }, delta = known.isNotEmpty())
+    }
 
-        val content = Recall.buildSkillMessage(
-            fresh.map { it.name to it.description },
-            delta = known.isNotEmpty()
-        )
-        persistInjected(sessionId, content, messages, insertedIds, allNewMessages)
+    /** user_tips 每会话只注入一次。 */
+    private fun takeUserTipsBlock(injected: List<String>): String? {
+        val tips = AppPreferences.userTips.trim()
+        if (tips.isBlank() || injected.any { Recall.USER_TIPS_OPEN in it }) return null
+        return Recall.buildUserTipsBlock(tips)
     }
 
     /** 每步召回：以整批消息（问题 / 助手信息 / 工具结果）为 query。 */
@@ -585,15 +618,6 @@ class ChatEngine(private val context: Context) {
             createdAt = System.currentTimeMillis()
         )
         db.sessionDao().insert(session)
-
-        val systemMsg = AppPreferences.systemPrompt.trim()
-        if (systemMsg.isNotBlank()) {
-            db.messageDao().insert(Message(
-                sessionId = sessionId,
-                role = "system",
-                content = systemMsg
-            ))
-        }
 
         sessionId
     }

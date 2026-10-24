@@ -80,23 +80,7 @@ fun SettingsScreen(
     var s3AccessKey by remember { mutableStateOf(AppPreferences.s3AccessKey) }
     var s3SecretKey by remember { mutableStateOf(AppPreferences.s3SecretKey) }
     var skipSsl by remember { mutableStateOf(AppPreferences.skipSslVerification) }
-    var systemPrompt by remember { mutableStateOf(
-        AppPreferences.systemPrompt.ifBlank {
-            """你是 Android Agent，一个运行在 Android 设备上的 AI 助手。
-可写应用空间：/data/user/0/com.androidagent/files/
-
-请用中文回答用户的问题。
-
-明确对话主题后，调用 phone_tool（action=rename_session）设置简洁的对话标题（≤20字）。
-
-【记忆规则】
-- 发现错误记忆 → 立即修正，不留错误
-
-【工具扩展】
-skill 工具用于调用已注册的自建 Python 工具：省略 action 查看已注册清单，action=<skill 名> 查看用法，action=<skill 名> + params 调用，action=delete 删除。
-需要新增能力时，用 system_tool 的 python 把脚本写入 skills/ 目录即自动注册（编写规范见该目录 README.md）。"""
-        }
-    ) }
+    var userTips by remember { mutableStateOf(AppPreferences.userTips) }
     var showKeys by remember { mutableStateOf(false) }
     var saved by remember { mutableStateOf(false) }
     var updateState by remember { mutableStateOf<UpdateState>(UpdateState.Idle) }
@@ -143,7 +127,7 @@ skill 工具用于调用已注册的自建 Python 工具：省略 action 查看�
         s3AccessKey = AppPreferences.s3AccessKey
         s3SecretKey = AppPreferences.s3SecretKey
         skipSsl = AppPreferences.skipSslVerification
-        systemPrompt = AppPreferences.systemPrompt
+        userTips = AppPreferences.userTips
         configUrl = AppPreferences.configUrl
         skillRepo = AppPreferences.skillHubRepo
         skillBranch = AppPreferences.skillHubBranch
@@ -169,7 +153,7 @@ skill 工具用于调用已注册的自建 Python 工具：省略 action 查看�
         AppPreferences.showInjectedMessages = showInjected
         AppPreferences.maxToolRounds = maxRounds.toIntOrNull() ?: 8
         AppPreferences.thinkingTimeoutMinutes = thinkingTimeout.toIntOrNull() ?: 0
-        AppPreferences.systemPrompt = systemPrompt
+        AppPreferences.userTips = userTips
         AppPreferences.s3EndpointUrl = s3Endpoint
         AppPreferences.s3AccessKey = s3AccessKey
         AppPreferences.s3SecretKey = s3SecretKey
@@ -302,12 +286,12 @@ skill 工具用于调用已注册的自建 Python 工具：省略 action 查看�
                         onToken = { skillToken = it; saved = false },
                     )
                     "features" -> FeaturesPage(
-                        skipSsl, maxRounds, thinkingTimeout, backgroundEnabled, systemPrompt, showInjected,
+                        skipSsl, maxRounds, thinkingTimeout, backgroundEnabled, userTips, showInjected,
                         onSkipSsl = { skipSsl = it; saved = false },
                         onMaxRounds = { maxRounds = it; saved = false },
                         onThinkingTimeout = { thinkingTimeout = it; saved = false },
                         onBackgroundEnabled = { backgroundEnabled = it; saved = false },
-                        onSystemPrompt = { systemPrompt = it; saved = false },
+                        onUserTips = { userTips = it; saved = false },
                         onShowInjected = { showInjected = it; saved = false },
                     )
                     "import" -> ImportPage(
@@ -875,9 +859,10 @@ private fun SkillTag(text: String, color: Color) {
 
 @Composable
 private fun FeaturesPage(
-    skipSsl: Boolean, maxRounds: String, thinkingTimeout: String, backgroundEnabled: Boolean, systemPrompt: String,
-    showInjected: Boolean,
-    onSkipSsl: (Boolean) -> Unit, onMaxRounds: (String) -> Unit, onThinkingTimeout: (String) -> Unit, onBackgroundEnabled: (Boolean) -> Unit, onSystemPrompt: (String) -> Unit,
+    skipSsl: Boolean, maxRounds: String, thinkingTimeout: String, backgroundEnabled: Boolean,
+    userTips: String, showInjected: Boolean,
+    onSkipSsl: (Boolean) -> Unit, onMaxRounds: (String) -> Unit, onThinkingTimeout: (String) -> Unit,
+    onBackgroundEnabled: (Boolean) -> Unit, onUserTips: (String) -> Unit,
     onShowInjected: (Boolean) -> Unit,
 ) {
     FormTitle("功能")
@@ -889,9 +874,9 @@ private fun FeaturesPage(
     FormSwitchRow("跳过证书验证（自签名 HTTPS）", skipSsl, onSkipSsl)
 
     Spacer(Modifier.height(24.dp))
-    FormTitle("系统提示词")
+    FormTitle("用户提示")
     Spacer(Modifier.height(2.dp))
-    FormField("系统提示词（留空用默认，新对话生效）", systemPrompt, onSystemPrompt, singleLine = false)
+    FormField("自定义提示（每会话注入一次，新会话生效）", userTips, onUserTips, singleLine = false)
 }
 
 @Composable

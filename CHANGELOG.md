@@ -9,6 +9,12 @@
   同一会话强制去重，按历史重建、换会话清空
 - 注入消息统一 role=`inject_user`（skill 名单 / OV 召回），默认不在 UI 展示；
   设置「显示注入信息」可在历史会话查看
+- 每轮上下文注入合并为单条 `<system-reminder>`：`user_turn`（第 N 轮）→ skill 名单 →
+  OV 召回（`<available_openviking>`）→ `user_tips`；设置新增「用户提示」`user_tips`
+  （每会话注入一次）
+- 工具轮耗尽提示改为 `<user_warning>` 并入库重放；OV 召回去掉边界说明，标记改为 `## 相关记忆`
+- 移除设置中的系统提示词配置，固定为内置提示（android-agent 应用助手、可读写
+  `/data/user/0/com.androidagent/files/`、中文回答）；每次请求统一置顶，历史旧 system 消息忽略
 - 工具 schema 改为完全静态（移除 skill 名单与仓库地址），保护前缀缓存
 - Room v7：新增 `sessions.ovSessionId`，用于恢复 OV session
 - 新增 `skill_hub` 工具：从远程技能仓库（GitHub / Gitea）查看 / 下载 / 卸载 skill（list / install / remove）
