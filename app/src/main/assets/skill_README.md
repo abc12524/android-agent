@@ -1,23 +1,24 @@
 # android-agent skill 说明文档
 
-本目录（`filesDir/skills/`）存放 **skill（自建 Python 工具）**。每个 `*.py` 脚本即一个
-可被 LLM 调用的工具；`skill` 工具会扫描本目录并按脚本头部**自动注册**：
-**放入脚本即自动生效，删除脚本即自动注销，无需改核心代码。**
+本目录（`filesDir/skills/`）存放 **skill（自建 Python 工具）**。每个技能占用一个
+文件夹，入口为 `skill.py`；`skill` 工具会扫描本目录并按入口头部**自动注册**：
+**放入文件夹即自动生效，删除文件夹即自动注销，无需改核心代码。**
 
-> 以 `_` 开头的文件（如 `_skill_runner.py`、`_envelope.py`）是运行时内部文件，不会被注册。
+> 以 `_` 开头的文件（如 `_skill_runner.py`、`_envelope.py`）是运行时内部文件，不会被注册；
+> 以 `_` 或 `.` 开头的技能目录同样不参与注册。
 
 `skill` 工具只负责**调用**已注册的 skill（以及 `delete` 注销），不再负责创建脚本。
-新增 skill 的方式是把脚本文件写进本目录（例如用 `system_tool` 的 `python` 动作写文件），
+新增 skill 的方式是把脚本写入 `skills/<名称>/skill.py`（例如用 `system_tool` 的 `python` 动作写文件），
 或用 `skill_hub` 工具从远程仓库下载安装。
 
-## 两种布局（可混用）
+## 目录布局
 
-- **扁平**：`skills/<名称>.py` —— 单文件即可，最简单。
-- **文件夹**：`skills/<名称>/skill.py`（入口）—— 可把助手模块（`_` 开头，入口用相对导入
-  `from ._helper import ...` 引用）与配置文件（`config.json`，模板同目录 `config.example.json`）
-  放在一起；适合逻辑复杂或需要密钥的技能。
+只支持**文件夹**式：`skills/<名称>/skill.py`（入口）—— 可把助手模块（`_` 开头，入口用相对导入
+`from ._helper import ...` 引用）与配置文件（`config.json`，模板同目录 `config.example.json`）
+放在一起；适合逻辑复杂或需要密钥的技能。
 
-两种布局都按**入口文件**头部自动注册；以 `_` 或 `.` 开头的文件/目录不参与注册。
+扁平的单文件布局（`skills/<名称>.py`）已取消注册，放进本目录的 `*.py` 不会被识别；
+请迁移为 `skills/<名称>/skill.py`。
 
 ## 目录与运行环境
 

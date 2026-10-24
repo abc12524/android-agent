@@ -580,7 +580,6 @@ private fun SkillHubPage(
         else -> installed.forEach { skill ->
             InstalledSkillRow(
                 skill = skill,
-                bundled = SkillStore.isBundled(context, skill.name),
                 onToggle = { enabled ->
                     scope.launch {
                         val ok = withContext(Dispatchers.IO) {
@@ -680,15 +679,11 @@ private fun SkillHubPage(
     // ---------------- 删除确认 ----------------
 
     pendingDelete?.let { skill ->
-        val bundled = SkillStore.isBundled(context, skill.name)
         AlertDialog(
             onDismissRequest = { pendingDelete = null },
             title = { Text("删除 skill") },
             text = {
-                Text(
-                    "确定删除「${skill.name}」？文件会立即移除，LLM 将无法再调用。" +
-                        if (bundled) "\n\n该 skill 随应用内置，重启应用后会被重新部署。" else ""
-                )
+                Text("确定删除「${skill.name}」？文件会立即移除，LLM 将无法再调用。")
             },
             confirmButton = {
                 TextButton(onClick = {
@@ -720,7 +715,6 @@ private fun SkillHubPage(
 @Composable
 private fun InstalledSkillRow(
     skill: SkillStore.InstalledSkill,
-    bundled: Boolean,
     onToggle: (Boolean) -> Unit,
     onDelete: () -> Unit,
 ) {
@@ -745,10 +739,6 @@ private fun InstalledSkillRow(
                     if (skill.enabled) "启用" else "已隐藏",
                     if (skill.enabled) cs.primary else cs.error,
                 )
-                if (bundled) {
-                    Spacer(Modifier.width(4.dp))
-                    SkillTag("内置", cs.onSurfaceVariant)
-                }
             }
             if (skill.description.isNotBlank()) {
                 Text(
@@ -761,7 +751,7 @@ private fun InstalledSkillRow(
                 )
             }
             Text(
-                if (skill.folder) "文件夹 · ${skill.name}/" else "脚本 · ${skill.name}.py",
+                "文件夹 · ${skill.name}/",
                 fontSize = 11.sp,
                 color = cs.onSurfaceVariant.copy(alpha = 0.7f),
                 modifier = Modifier.padding(top = 2.dp),

@@ -164,8 +164,8 @@ class SkillHubTool(private val context: Context) : Tool {
                     "result" to mapOf(
                         "skill" to name,
                         "removed" to true,
-                        "bundled" to SkillStore.isBundled(context, name),
-                        "note" to "文件已删除；内置技能会在应用重启后重新部署"
+                        "hard" to true,
+                        "note" to "文件已删除"
                     )
                 )
             )
