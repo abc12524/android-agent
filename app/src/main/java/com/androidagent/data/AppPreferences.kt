@@ -19,9 +19,27 @@ object AppPreferences {
     /** 是否在历史会话中展示注入消息（skill 名单 / OV 召回），供 UI 实时订阅 */
     val showInjectedFlow: StateFlow<Boolean> = _showInjected.asStateFlow()
 
+    // 新版聊天界面（思考流）：思维链与工具结果浅灰内联，正文常规渲染
+    private val _chatUiStream = MutableStateFlow(true)
+    val chatUiStreamFlow: StateFlow<Boolean> = _chatUiStream.asStateFlow()
+
+    // 思考流内各区块的展示开关
+    private val _showReasoning = MutableStateFlow(true)
+    val showReasoningFlow: StateFlow<Boolean> = _showReasoning.asStateFlow()
+
+    private val _showToolCalls = MutableStateFlow(true)
+    val showToolCallsFlow: StateFlow<Boolean> = _showToolCalls.asStateFlow()
+
+    private val _showToolEdit = MutableStateFlow(true)
+    val showToolEditFlow: StateFlow<Boolean> = _showToolEdit.asStateFlow()
+
     fun init(context: Context) {
         prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         _showInjected.value = prefs.getBoolean("show_injected_messages", false)
+        _chatUiStream.value = prefs.getBoolean("chat_ui_stream", true)
+        _showReasoning.value = prefs.getBoolean("chat_show_reasoning", true)
+        _showToolCalls.value = prefs.getBoolean("chat_show_tool_calls", true)
+        _showToolEdit.value = prefs.getBoolean("chat_show_tool_edit", true)
     }
 
     // DeepSeek
@@ -85,6 +103,38 @@ object AppPreferences {
         set(value) {
             prefs.edit().putBoolean("show_injected_messages", value).apply()
             _showInjected.value = value
+        }
+
+    // 新版聊天界面（思考流）：思维链 + 工具结果浅灰内联，正文常规渲染；false 回到旧界面
+    var chatUiStream: Boolean
+        get() = prefs.getBoolean("chat_ui_stream", true)
+        set(value) {
+            prefs.edit().putBoolean("chat_ui_stream", value).apply()
+            _chatUiStream.value = value
+        }
+
+    // 思考流内是否展示思维链内容
+    var chatShowReasoning: Boolean
+        get() = prefs.getBoolean("chat_show_reasoning", true)
+        set(value) {
+            prefs.edit().putBoolean("chat_show_reasoning", value).apply()
+            _showReasoning.value = value
+        }
+
+    // 思考流内是否展示工具调用与结果
+    var chatShowToolCalls: Boolean
+        get() = prefs.getBoolean("chat_show_tool_calls", true)
+        set(value) {
+            prefs.edit().putBoolean("chat_show_tool_calls", value).apply()
+            _showToolCalls.value = value
+        }
+
+    // 思考流内是否把 script skill 的改动渲染成代码 diff 编辑界面
+    var chatShowToolEdit: Boolean
+        get() = prefs.getBoolean("chat_show_tool_edit", true)
+        set(value) {
+            prefs.edit().putBoolean("chat_show_tool_edit", value).apply()
+            _showToolEdit.value = value
         }
 
     // 对话设置
@@ -231,6 +281,10 @@ object AppPreferences {
         bool("ov_recall_step")?.let { ovRecallStep = it; count++ }
         bool("ov_commit")?.let { ovCommit = it; count++ }
         bool("show_injected_messages")?.let { showInjectedMessages = it; count++ }
+        bool("chat_ui_stream")?.let { chatUiStream = it; count++ }
+        bool("chat_show_reasoning")?.let { chatShowReasoning = it; count++ }
+        bool("chat_show_tool_calls")?.let { chatShowToolCalls = it; count++ }
+        bool("chat_show_tool_edit")?.let { chatShowToolEdit = it; count++ }
         int("max_tool_rounds")?.let { maxToolRounds = it; count++ }
         int("session_timeout_minutes")?.let { sessionTimeoutMinutes = it; count++ }
         int("thinking_timeout_minutes")?.let { thinkingTimeoutMinutes = it; count++ }

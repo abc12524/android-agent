@@ -75,6 +75,10 @@ fun SettingsScreen(
     var ovRecallStep by remember { mutableStateOf(AppPreferences.ovRecallStep) }
     var ovCommit by remember { mutableStateOf(AppPreferences.ovCommit) }
     var showInjected by remember { mutableStateOf(AppPreferences.showInjectedMessages) }
+    var chatUiStream by remember { mutableStateOf(AppPreferences.chatUiStream) }
+    var chatShowReasoning by remember { mutableStateOf(AppPreferences.chatShowReasoning) }
+    var chatShowToolCalls by remember { mutableStateOf(AppPreferences.chatShowToolCalls) }
+    var chatShowToolEdit by remember { mutableStateOf(AppPreferences.chatShowToolEdit) }
     var backgroundEnabled by remember { mutableStateOf(AppPreferences.backgroundServiceEnabled) }
     var s3Endpoint by remember { mutableStateOf(AppPreferences.s3EndpointUrl) }
     var s3AccessKey by remember { mutableStateOf(AppPreferences.s3AccessKey) }
@@ -122,6 +126,10 @@ fun SettingsScreen(
         ovRecallStep = AppPreferences.ovRecallStep
         ovCommit = AppPreferences.ovCommit
         showInjected = AppPreferences.showInjectedMessages
+        chatUiStream = AppPreferences.chatUiStream
+        chatShowReasoning = AppPreferences.chatShowReasoning
+        chatShowToolCalls = AppPreferences.chatShowToolCalls
+        chatShowToolEdit = AppPreferences.chatShowToolEdit
         backgroundEnabled = AppPreferences.backgroundServiceEnabled
         s3Endpoint = AppPreferences.s3EndpointUrl
         s3AccessKey = AppPreferences.s3AccessKey
@@ -151,6 +159,10 @@ fun SettingsScreen(
         AppPreferences.ovRecallStep = ovRecallStep
         AppPreferences.ovCommit = ovCommit
         AppPreferences.showInjectedMessages = showInjected
+        AppPreferences.chatUiStream = chatUiStream
+        AppPreferences.chatShowReasoning = chatShowReasoning
+        AppPreferences.chatShowToolCalls = chatShowToolCalls
+        AppPreferences.chatShowToolEdit = chatShowToolEdit
         AppPreferences.maxToolRounds = maxRounds.toIntOrNull() ?: 8
         AppPreferences.thinkingTimeoutMinutes = thinkingTimeout.toIntOrNull() ?: 0
         AppPreferences.userTips = userTips
@@ -287,12 +299,17 @@ fun SettingsScreen(
                     )
                     "features" -> FeaturesPage(
                         skipSsl, maxRounds, thinkingTimeout, backgroundEnabled, userTips, showInjected,
+                        chatUiStream, chatShowReasoning, chatShowToolCalls, chatShowToolEdit,
                         onSkipSsl = { skipSsl = it; saved = false },
                         onMaxRounds = { maxRounds = it; saved = false },
                         onThinkingTimeout = { thinkingTimeout = it; saved = false },
                         onBackgroundEnabled = { backgroundEnabled = it; saved = false },
                         onUserTips = { userTips = it; saved = false },
                         onShowInjected = { showInjected = it; saved = false },
+                        onChatUiStream = { chatUiStream = it; saved = false },
+                        onShowReasoning = { chatShowReasoning = it; saved = false },
+                        onShowToolCalls = { chatShowToolCalls = it; saved = false },
+                        onShowToolEdit = { chatShowToolEdit = it; saved = false },
                     )
                     "import" -> ImportPage(
                         configUrl, importing, importMsg, remoteJson,
@@ -851,10 +868,21 @@ private fun SkillTag(text: String, color: Color) {
 private fun FeaturesPage(
     skipSsl: Boolean, maxRounds: String, thinkingTimeout: String, backgroundEnabled: Boolean,
     userTips: String, showInjected: Boolean,
+    chatUiStream: Boolean, showReasoning: Boolean, showToolCalls: Boolean, showToolEdit: Boolean,
     onSkipSsl: (Boolean) -> Unit, onMaxRounds: (String) -> Unit, onThinkingTimeout: (String) -> Unit,
     onBackgroundEnabled: (Boolean) -> Unit, onUserTips: (String) -> Unit,
     onShowInjected: (Boolean) -> Unit,
+    onChatUiStream: (Boolean) -> Unit, onShowReasoning: (Boolean) -> Unit,
+    onShowToolCalls: (Boolean) -> Unit, onShowToolEdit: (Boolean) -> Unit,
 ) {
+    FormTitle("聊天界面")
+    Spacer(Modifier.height(2.dp))
+    FormSwitchRow("新版聊天界面（思考流）", chatUiStream, onChatUiStream)
+    FormSwitchRow("展示思维链内容", showReasoning, onShowReasoning)
+    FormSwitchRow("展示工具调用", showToolCalls, onShowToolCalls)
+    FormSwitchRow("展示编辑工具（script 代码 diff）", showToolEdit, onShowToolEdit)
+
+    Spacer(Modifier.height(24.dp))
     FormTitle("功能")
     Spacer(Modifier.height(2.dp))
     FormField("最大工具调用轮次", maxRounds, onValueChange = { onMaxRounds(it.filter { c -> c.isDigit() }) })

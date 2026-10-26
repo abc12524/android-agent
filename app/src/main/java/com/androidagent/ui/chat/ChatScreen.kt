@@ -298,6 +298,8 @@ fun ChatScreen(
                                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.42f))
                         }
                     }
+                } else if (state.newUi) {
+                    StreamChatList(state, listState)
                 } else {
                     // 过滤 system；注入消息（skill 名单 / OV 召回）默认隐藏，设置中可开启
                     val displayMessages = state.messages.filter { msg ->
@@ -388,7 +390,7 @@ fun ChatScreen(
 // ==================== Token 统计底部 ====================
 
 @Composable
-private fun TokenFooter(
+internal fun TokenFooter(
     cacheHit: Int, cacheMiss: Int, sessionOut: Int,
     costHit: Double, costMiss: Double, costOut: Double,
     family: String, balance: String,
@@ -639,7 +641,7 @@ private fun StreamingReply(content: String, reasoning: String) {
 
 // 微型「正在思考」三点动画
 @Composable
-private fun StreamingDots() {
+internal fun StreamingDots() {
     val transition = rememberInfiniteTransition(label = "streamDots")
     val alpha = transition.animateFloat(
         initialValue = 0.25f,
@@ -662,7 +664,7 @@ private fun StreamingDots() {
 
 // 光标闪烁指示
 @Composable
-private fun BlinkingCursor(color: Color) {
+internal fun BlinkingCursor(color: Color) {
     val transition = rememberInfiniteTransition(label = "cursorBlink")
     val alpha = transition.animateFloat(
         initialValue = 0.2f,
@@ -681,7 +683,7 @@ private fun BlinkingCursor(color: Color) {
 // ==================== 消息气泡 ====================
 
 @Composable
-fun MessageBubble(msg: Message) {
+fun MessageBubble(msg: Message, suppressReasoning: Boolean = false) {
     // 注入消息：skill 名单 / OV 召回（新版本 role=inject_user，旧数据以 user + 前缀标记兼容）
     val isInjected = msg.role == Message.ROLE_INJECT ||
         (msg.role == "user" && msg.content.startsWith("[自动检索的候选记忆"))
@@ -702,8 +704,8 @@ fun MessageBubble(msg: Message) {
             Modifier.fillMaxWidth(),
             horizontalAlignment = if (isUser) Alignment.End else Alignment.Start,
         ) {
-            // 推理内容（统一用「深度思考」折叠卡片展示）
-            if (msg.reasoningContent != null && msg.reasoningContent.isNotBlank()) {
+            // 推理内容（统一用「深度思考」折叠卡片展示）；新版思考流已内联，不再重复展示
+            if (!suppressReasoning && msg.reasoningContent != null && msg.reasoningContent.isNotBlank()) {
                 ReasoningCard(msg.reasoningContent, Modifier.padding(bottom = 4.dp))
             }
 

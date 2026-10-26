@@ -40,7 +40,12 @@ data class ChatUiState(
     val lastUsage: DeepSeekClient.Usage? = null,
     val allSessions: List<ChatSession> = emptyList(),
     val balance: String = "",
-    val showInjected: Boolean = false
+    val showInjected: Boolean = false,
+    // 新版聊天界面（思考流）及展示开关
+    val newUi: Boolean = true,
+    val showReasoning: Boolean = true,
+    val showToolCalls: Boolean = true,
+    val showToolEdit: Boolean = true
 )
 
 class ChatViewModel(application: Application) : AndroidViewModel(application) {
@@ -72,6 +77,28 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             AppPreferences.showInjectedFlow.collect { show ->
                 uiState = uiState.copy(showInjected = show)
+            }
+        }
+
+        // 设置页开关：新旧聊天界面与思考流展示项
+        viewModelScope.launch {
+            AppPreferences.chatUiStreamFlow.collect { on ->
+                uiState = uiState.copy(newUi = on)
+            }
+        }
+        viewModelScope.launch {
+            AppPreferences.showReasoningFlow.collect { on ->
+                uiState = uiState.copy(showReasoning = on)
+            }
+        }
+        viewModelScope.launch {
+            AppPreferences.showToolCallsFlow.collect { on ->
+                uiState = uiState.copy(showToolCalls = on)
+            }
+        }
+        viewModelScope.launch {
+            AppPreferences.showToolEditFlow.collect { on ->
+                uiState = uiState.copy(showToolEdit = on)
             }
         }
     }
