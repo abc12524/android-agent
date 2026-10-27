@@ -1007,7 +1007,11 @@ private fun AboutPage(updateState: UpdateState, onUpdateState: (UpdateState) -> 
                         val info = AppUpdater.checkUpdate()
                         onUpdateState(when {
                             info.error.isNotBlank() -> UpdateState.Error(info.error)
-                            info.hasUpdate -> UpdateState.Available(info.latestVersion, info.downloadUrl)
+                            info.hasUpdate -> UpdateState.Available(
+                                info.latestVersion,
+                                info.downloadUrl,
+                                info.releaseNotes,
+                            )
                             else -> UpdateState.Latest
                         })
                     }
@@ -1015,6 +1019,19 @@ private fun AboutPage(updateState: UpdateState, onUpdateState: (UpdateState) -> 
                 shape = RoundedCornerShape(20.dp),
             ) { Text("检查更新") }
         }
+    }
+
+    // 有新版本时展示发布说明（来自 Release 正文）
+    val available = updateState as? UpdateState.Available
+    if (available != null && available.notes.isNotBlank()) {
+        Spacer(Modifier.height(20.dp))
+        FormTitle("更新内容")
+        Spacer(Modifier.height(6.dp))
+        Text(
+            available.notes,
+            fontSize = 13.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 
@@ -1146,7 +1163,7 @@ private sealed class UpdateState {
     data object Idle : UpdateState()
     data object Checking : UpdateState()
     data object Latest : UpdateState()
-    data class Available(val version: String, val url: String) : UpdateState()
+    data class Available(val version: String, val url: String, val notes: String = "") : UpdateState()
     data object Downloading : UpdateState()
     data class Error(val message: String) : UpdateState()
 }
