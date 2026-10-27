@@ -8,6 +8,8 @@
 - 移除内置 `script` 技能：技能不再随应用打包，统一从 skill 仓库安装，便于独立更新；旧版本已部署到设备上的副本不会自动删除，可在「设置 → Skill 仓库」手动删除
 - 工具集精简为 4 个大工具；`system_tool` 保留 `shell` / `python` / `ssh`，SSH 恢复为原生 JSch 并合并 SCP
   （`params.action=exec|upload|download`）；`wait` / `objstore` / `ov` 改由 skill 提供
+- 移除 `phone_tool` 的 `sensor` 子工具（原 `get_sensor_data`）：传感器读取统一由 `sensor` skill
+  走 libandroid.so 完成，可枚举全部传感器、按名称读值，不再受固定 9 种类型与白名单限制
 - OpenViking 改为内构自动记忆：`ov_recall_question` / `ov_recall_step` / `ov_commit` 三个开关；
   同一会话强制去重，按历史重建、换会话清空
 - 注入消息统一 role=`inject_user`（skill 名单 / OV 召回），默认不在 UI 展示；

@@ -16,7 +16,7 @@
 | 大工具 | 子工具 |
 |------|------|
 | `system_tool` | `shell` / `python` / `ssh`（`params.action=exec` / `upload` / `download`） |
-| `phone_tool` | `system_info` / `gps` / `notify` / `sound` / `sensor` / `rename_session` |
+| `phone_tool` | `system_info` / `gps` / `notify` / `sound` / `rename_session` |
 | `skill` | 已注册的自建工具（子工具名即 skill 名，逐步披露）；`delete` 注销。脚本目录 `skills/` |
 | `skill_hub` | `list` / `install` / `disable` / `enable` / `remove` —— 从远程仓库（GitHub / Gitea）查看 / 下载 / 启停 / 卸载 skill |
 
