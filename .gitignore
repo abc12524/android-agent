@@ -5,6 +5,6 @@ app/build/
 local.properties
 *.iml
 .idea/
-
-
 .kotlin/
+__pycache__/
+*.pyc
