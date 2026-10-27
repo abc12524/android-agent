@@ -31,8 +31,8 @@ class MainActivity : ComponentActivity() {
         // 启用沉浸式状态栏（内容延伸到状态栏和导航栏下方）
         enableEdgeToEdge()
 
-        // 申请通知权限（Android 13+）
-        requestNotificationPermission()
+        // 申请运行时权限（通知 / 传感器计步）
+        requestRuntimePermissions()
 
         setContent {
             // 根据主题明暗自动切换状态栏图标颜色
@@ -80,17 +80,29 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    /** 申请通知权限（Android 13+ 需要） */
-    private fun requestNotificationPermission() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
-                != PackageManager.PERMISSION_GRANTED
-            ) {
-                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+    /**
+     * 申请启动时需要的运行时权限：
+     * - POST_NOTIFICATIONS（Android 13+）：通知工具 / 前台服务
+     * - ACTIVITY_RECOGNITION（Android 10+）：sensor skill 读计步器(19) / 步数检测(18)
+     *
+     * 已授予的自动跳过；用户拒绝后不再骚扰，需在系统设置里手动开启。
+     */
+    private fun requestRuntimePermissions() {
+        val needed = buildList {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                add(Manifest.permission.POST_NOTIFICATIONS)
             }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                add(Manifest.permission.ACTIVITY_RECOGNITION)
+            }
+        }.filter {
+            ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
+        }
+        if (needed.isNotEmpty()) {
+            permissionLauncher.launch(needed.toTypedArray())
         }
     }
 
-    private val notificationPermissionLauncher =
-        registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
+    private val permissionLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { }
 }

@@ -1,5 +1,9 @@
 package com.androidagent.ui.settings
 
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -988,17 +992,9 @@ private fun AboutPage(updateState: UpdateState, onUpdateState: (UpdateState) -> 
             is UpdateState.Checking -> CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
             is UpdateState.Latest -> Text("已是最新", fontSize = 13.sp, color = MaterialTheme.colorScheme.primary)
             is UpdateState.Available -> Button(
-                onClick = {
-                    onUpdateState(UpdateState.Downloading)
-                    scope.launch {
-                        AppUpdater.downloadAndInstall(context, state.url, state.version)
-                        onUpdateState(UpdateState.Idle)
-                    }
-                },
-                enabled = updateState !is UpdateState.Downloading,
+                onClick = { openInBrowser(context, state.url) },
                 shape = RoundedCornerShape(20.dp),
-            ) { Text("下载 ${state.version}") }
-            is UpdateState.Downloading -> CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+            ) { Text("浏览器下载 ${state.version}") }
             is UpdateState.Error -> Text(state.message, fontSize = 13.sp, color = MaterialTheme.colorScheme.error)
             is UpdateState.Idle -> OutlinedButton(
                 onClick = {
@@ -1032,6 +1028,23 @@ private fun AboutPage(updateState: UpdateState, onUpdateState: (UpdateState) -> 
             fontSize = 13.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+    }
+}
+
+/** 新版本跳浏览器下载：应用内不再下载/安装 APK */
+private fun openInBrowser(context: Context, url: String) {
+    if (url.isBlank()) {
+        Toast.makeText(context, "没有可用的下载地址", Toast.LENGTH_SHORT).show()
+        return
+    }
+    try {
+        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+    } catch (e: Exception) {
+        Toast.makeText(
+            context,
+            "无法打开浏览器: ${e.message ?: e.javaClass.simpleName}",
+            Toast.LENGTH_LONG,
+        ).show()
     }
 }
 
@@ -1164,6 +1177,5 @@ private sealed class UpdateState {
     data object Checking : UpdateState()
     data object Latest : UpdateState()
     data class Available(val version: String, val url: String, val notes: String = "") : UpdateState()
-    data object Downloading : UpdateState()
     data class Error(val message: String) : UpdateState()
 }

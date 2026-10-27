@@ -1,23 +1,12 @@
 package com.androidagent.data.updater
 
-import android.app.NotificationChannel
-import android.app.NotificationManager
-import android.app.PendingIntent
-import android.content.Context
-import android.content.Intent
-import androidx.core.app.NotificationCompat
-import androidx.core.content.FileProvider
 import com.androidagent.BuildConfig
-import com.androidagent.MainActivity
-import com.google.gson.Gson
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import java.io.File
-import java.io.FileOutputStream
 import java.util.concurrent.TimeUnit
 
 /**
@@ -32,8 +21,10 @@ data class UpdateInfo(
 )
 
 /**
- * 应用更新管理器
- * 检查 GitHub Releases、下载 APK、安装
+ * 应用更新检查
+ *
+ * 只负责查 GitHub Releases 并给出 APK 下载地址；下载与安装交给浏览器，
+ * 应用内不再下载/安装（旧的内置下载 + 通知进度 + FileProvider 安装已移除）。
  */
 object AppUpdater {
 
@@ -45,14 +36,9 @@ object AppUpdater {
      */
     private const val CHANNEL_PREFIX = "1.1."
 
-    private const val NOTIFICATION_CHANNEL_ID = "app_updater"
-    private const val NOTIFICATION_ID = 2
-    private const val APK_FILENAME = "android-agent-latest.apk"
-
     /** 关于页展示的更新内容上限，避免过长正文撑爆界面 */
     private const val MAX_NOTES_LENGTH = 2000
 
-    private val gson = Gson()
     private val client = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
@@ -61,7 +47,7 @@ object AppUpdater {
     /**
      * 检查 GitHub 是否有新版本
      *
-     * 不再使用 `releases/latest`（预发布与历史标签都会干扰），改为拉取 Releases 列表，
+     * 不使用 `releases/latest`（预发布与历史标签都会干扰），改为拉取 Releases 列表，
      * 只保留 1.1.x 通道、带 .apk 产物的正式发布，按版本号取最高一条。
      */
     suspend fun checkUpdate(): UpdateInfo = withContext(Dispatchers.IO) {
@@ -135,85 +121,6 @@ object AppUpdater {
     }
 
     /**
-     * 下载 APK 并显示进度通知，完成后自动弹出安装
-     */
-    suspend fun downloadAndInstall(context: Context, url: String, version: String) = withContext(Dispatchers.IO) {
-        createNotificationChannel(context)
-
-        val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-
-        // 显示初始通知
-        nm.notify(NOTIFICATION_ID, buildProgressNotification(context, "准备下载...", 0, 0))
-
-        try {
-            val request = Request.Builder().url(url).build()
-            val response = client.newCall(request).execute()
-            val body = response.body ?: throw Exception("下载响应为空")
-
-            val totalBytes = body.contentLength()
-            val downloadDir = File(context.getExternalFilesDir(null), "updates")
-            downloadDir.mkdirs()
-            val apkFile = File(downloadDir, APK_FILENAME)
-
-            var downloadedBytes = 0L
-            val buffer = ByteArray(8192)
-
-            FileOutputStream(apkFile).use { output ->
-                body.byteStream().use { input ->
-                    var bytesRead: Int
-                    while (input.read(buffer).also { bytesRead = it } != -1) {
-                        output.write(buffer, 0, bytesRead)
-                        downloadedBytes += bytesRead
-
-                        // 每 500ms 刷新一次进度
-                        if (totalBytes > 0) {
-                            val progress = (downloadedBytes * 100 / totalBytes).toInt()
-                            nm.notify(NOTIFICATION_ID, buildProgressNotification(
-                                context,
-                                "正在下载 $version...",
-                                progress,
-                                totalBytes.toInt()
-                            ))
-                        }
-                    }
-                }
-            }
-
-            // 下载完成 -> 取消进度通知 -> 安装
-            nm.cancel(NOTIFICATION_ID)
-            installApk(context, apkFile)
-
-        } catch (e: Exception) {
-            // 下载失败通知
-            nm.notify(NOTIFICATION_ID, NotificationCompat.Builder(context, NOTIFICATION_CHANNEL_ID)
-                .setSmallIcon(android.R.drawable.ic_dialog_alert)
-                .setContentTitle("下载失败")
-                .setContentText(e.message ?: "未知错误")
-                .setAutoCancel(true)
-                .build()
-            )
-        }
-    }
-
-    /**
-     * 安装 APK
-     */
-    private fun installApk(context: Context, apkFile: File) {
-        val uri = FileProvider.getUriForFile(
-            context,
-            "${context.packageName}.fileprovider",
-            apkFile
-        )
-
-        val intent = Intent(Intent.ACTION_VIEW).apply {
-            setDataAndType(uri, "application/vnd.android.package-archive")
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
-        context.startActivity(intent)
-    }
-
-    /**
      * 版本号比较（语义化）
      * 返回 >0 表示 v1 > v2，<0 表示 v1 < v2，=0 相等
      */
@@ -227,45 +134,5 @@ object AppUpdater {
             if (a != b) return a - b
         }
         return 0
-    }
-
-    private fun createNotificationChannel(context: Context) {
-        val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        if (nm.getNotificationChannel(NOTIFICATION_CHANNEL_ID) == null) {
-            val channel = NotificationChannel(
-                NOTIFICATION_CHANNEL_ID,
-                "应用更新",
-                NotificationManager.IMPORTANCE_LOW
-            ).apply { setShowBadge(false) }
-            nm.createNotificationChannel(channel)
-        }
-    }
-
-    private fun buildProgressNotification(
-        context: Context, text: String, progress: Int, total: Int
-    ): android.app.Notification {
-        val openIntent = Intent(context, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
-        }
-        val openPendingIntent = PendingIntent.getActivity(
-            context, 2, openIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
-        return NotificationCompat.Builder(context, NOTIFICATION_CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.ic_dialog_info)
-            .setContentTitle("更新")
-            .setContentText(text)
-            .setContentIntent(openPendingIntent)
-            .setOngoing(true)
-            .setSilent(true)
-            .apply {
-                if (total > 0) {
-                    setProgress(total, progress, false)
-                } else {
-                    setProgress(0, 0, true) // 不确定进度
-                }
-            }
-            .build()
     }
 }
