@@ -50,6 +50,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -602,19 +603,25 @@ private fun SwipeAwayDrawer(
                     val down = awaitFirstDown(requireUnconsumed = false)
                     // 关闭时只认左边缘起手（右侧拖动留给列表/输入），打开时任意位置都能推回
                     if (progress.value <= 0.01f && down.position.x > edgePx) return@awaitEachGesture
-                    val moved = awaitHorizontalTouchSlopOrCancellation(down.id) { change, over ->
-                        change.consume()
-                        scope.launch {
-                            progress.snapTo((progress.value + over / panelWidthPx).coerceIn(0f, 1f))
-                        }
-                    } ?: return@awaitEachGesture
-                    horizontalDrag(moved.id) { change, dragAmount ->
-                        change.consume()
-                        scope.launch {
-                            progress.snapTo((progress.value + dragAmount / panelWidthPx).coerceIn(0f, 1f))
+                    // 累计进度改用局部变量，避免每帧读取 Animatable 时拿到上一帧的旧值导致抖动
+                    var latest = progress.value
+                    val applyDelta: (Float) -> Unit = { deltaPx ->
+                        if (deltaPx != 0f) {
+                            latest = (latest + deltaPx / panelWidthPx).coerceIn(0f, 1f)
+                            scope.launch { progress.snapTo(latest) }
                         }
                     }
-                    settleTo(if (progress.value > 0.5f) 1f else 0f)
+                    val moved = awaitHorizontalTouchSlopOrCancellation(down.id) { change, over ->
+                        change.consume()
+                        applyDelta(over)
+                    } ?: return@awaitEachGesture
+                    // 注意：horizontalDrag 的回调只给 PointerInputChange，位移需自行用 positionChange()
+                    horizontalDrag(moved.id) { change ->
+                        val dx = change.positionChange().x
+                        change.consume()
+                        applyDelta(dx)
+                    }
+                    settleTo(if (latest > 0.5f) 1f else 0f)
                 }
             },
     ) {
