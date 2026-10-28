@@ -209,6 +209,7 @@ class SkillRepository(
         val overwritten = dest.isDirectory || File(skillsDir, "$name.py").isFile
         // 覆盖安装：备份本地 config.json（若有），避免被模板重置
         val savedConfig = File(dest, "config.json").takeIf { it.isFile }?.readBytes()
+        val savedMark = SkillStore.inheritedMarkFile(dest).takeIf { it.isFile }?.readBytes()
         dest.deleteRecursively()
         File(skillsDir, "$name.py").takeIf { it.isFile }?.delete() // 清掉同名扁平脚本，避免并存
         if (!tmp.renameTo(dest)) {
@@ -230,6 +231,12 @@ class SkillRepository(
                 configCreated = true
             }
         }
+        // 继承记录（区分「上次从 App 设置写入」与「用户手改」）随覆盖安装一起保留
+        savedMark?.let { SkillStore.inheritedMarkFile(dest).writeBytes(it) }
+
+        // 首次安装即用 App 设置填好 config.json（ov / objstore），省去手填同一份地址与密钥
+        val inherited = SkillStore.syncConfig(dest, SkillConfigDefaults.forSkill(name))
+        if (inherited && !configKept) configCreated = true
 
         SkillInstallResult(
             name = name,

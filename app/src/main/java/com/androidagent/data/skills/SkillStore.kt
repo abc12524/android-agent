@@ -1,6 +1,10 @@
 package com.androidagent.data.skills
 
 import android.content.Context
+import com.google.gson.Gson
+import com.google.gson.GsonBuilder
+import com.google.gson.JsonObject
+import com.google.gson.JsonParser
 import java.io.File
 
 /**
@@ -57,6 +61,75 @@ object SkillStore {
             skill.entry.parentFile?.deleteRecursively() ?: false
         } catch (_: Exception) {
             false
+        }
+    }
+
+    // ---- 配置继承（AppPreferences → skills/<名>/config.json） ----
+
+    /**
+     * 把 App 设置派生的默认值合并进技能目录的 `config.json`。
+     *
+     * 规则（避免「改了 App 设置，技能还用旧值」与「覆盖用户手改的配置」两种坑）：
+     *  - 键缺失 / 空值            → 写入当前设置值；
+     *  - 键值仍等于上次继承的值    → 用新设置值覆盖（跟随设置变化）；
+     *  - 键值被用户手工改过        → 保留，不再动。
+     *
+     * 上次继承的值记在隐藏文件 `.inherited.json`，不写进 `config.json`，
+     * 免得技能把它当环境变量注入。
+     *
+     * @return 是否改动了 `config.json`
+     */
+    fun syncConfig(dir: File, defaults: Map<String, String>): Boolean {
+        if (defaults.isEmpty() || !dir.isDirectory) return false
+        val configFile = File(dir, "config.json")
+        val markFile = inheritedMarkFile(dir)
+        val config = readObject(configFile)
+        val marks = readObject(markFile)
+
+        var configChanged = false
+        var markChanged = false
+        for ((key, value) in defaults) {
+            val current = config.stringOrNull(key)
+            val inherited = marks.stringOrNull(key)
+            // 用户改过（既非空、也不等于上次继承值）→ 跳过
+            if (!current.isNullOrBlank() && current != inherited) continue
+            if (current != value) {
+                config.addProperty(key, value)
+                configChanged = true
+            }
+            if (inherited != value) {
+                marks.addProperty(key, value)
+                markChanged = true
+            }
+        }
+
+        if (configChanged) writeObject(configFile, config)
+        if (markChanged) writeObject(markFile, marks)
+        return configChanged
+    }
+
+    /** 继承记录文件：保存「上次从 App 设置写进 config.json 的值」，用于区分用户手改。 */
+    fun inheritedMarkFile(dir: File): File = File(dir, INHERITED_MARK)
+
+    private fun JsonObject.stringOrNull(key: String): String? =
+        get(key)?.takeIf { it.isJsonPrimitive }?.asString
+
+    private fun readObject(file: File): JsonObject = try {
+        if (file.isFile) {
+            JsonParser.parseString(file.readText(Charsets.UTF_8))
+                .takeIf { it.isJsonObject }?.asJsonObject ?: JsonObject()
+        } else {
+            JsonObject()
+        }
+    } catch (_: Exception) {
+        JsonObject()
+    }
+
+    private fun writeObject(file: File, obj: JsonObject) {
+        try {
+            file.writeText(GSON.toJson(obj), Charsets.UTF_8)
+        } catch (_: Exception) {
+            // 写失败不致命：技能仍会按原 config.json / 环境变量运行
         }
     }
 
@@ -152,6 +225,9 @@ object SkillStore {
     } catch (_: Exception) {
         false
     }
+
+    private const val INHERITED_MARK = ".inherited.json"
+    private val GSON: Gson = GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create()
 
     private val SKILL_RE = Regex("^#\\s*skill\\s*:\\s*([A-Za-z0-9_\\-]+)", RegexOption.IGNORE_CASE)
     private val SKILL_PREFIX_RE = Regex("^#\\s*skill\\s*:", RegexOption.IGNORE_CASE)

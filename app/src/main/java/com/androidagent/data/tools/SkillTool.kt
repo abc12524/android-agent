@@ -1,6 +1,7 @@
 package com.androidagent.data.tools
 
 import android.content.Context
+import com.androidagent.data.skills.SkillConfigDefaults
 import com.androidagent.data.skills.SkillStore
 import com.google.gson.Gson
 import java.io.File
@@ -104,7 +105,7 @@ class SkillTool(private val context: Context) : Tool {
         }
 
         // 执行 skill
-        return run(action, familyParams(args))
+        return run(meta, familyParams(args))
     }
 
     // ---- 自动注册：扫描 skills/ 下的 *.py 并按头部解析元信息 ----
@@ -243,7 +244,9 @@ class SkillTool(private val context: Context) : Tool {
 
     // ---- 执行（委托给内置 Python 3.13 的 skill runner） ----
 
-    private suspend fun run(action: String, arguments: Map<String, Any>): String {
+    private suspend fun run(meta: SkillMeta, arguments: Map<String, Any>): String {
+        val action = meta.name
+
         // 等待 Python 环境初始化（最多 60 秒）
         if (!PythonManager.isReady()) {
             if (PythonManager.status == PythonManager.InitStatus.FAILED) {
@@ -255,6 +258,11 @@ class SkillTool(private val context: Context) : Tool {
         }
 
         ensureDeployed()
+
+        // ov / objstore 等技能：把 App 设置里的地址与密钥同步进 config.json（用户手改过的键不动）
+        File(meta.path).parentFile?.let { dir ->
+            SkillStore.syncConfig(dir, SkillConfigDefaults.forSkill(action))
+        }
 
         val request = mapOf("action" to "run", "skill" to action, "arguments" to arguments)
         val requestFile = File(skillsDir, ".request.json")
