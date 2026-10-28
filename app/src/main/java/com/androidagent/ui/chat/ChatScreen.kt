@@ -16,6 +16,10 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitHorizontalTouchSlopOrCancellation
+import androidx.compose.foundation.gestures.horizontalDrag
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.text.BasicTextField
@@ -38,14 +42,19 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -57,6 +66,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.provider.OpenableColumns
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import com.androidagent.data.model.ChatSession
@@ -77,16 +87,19 @@ fun ChatScreen(
     onNavigateToSettings: () -> Unit,
     viewModel: ChatViewModel = viewModel()
 ) {
-    val drawerState = rememberDrawerState(DrawerValue.Closed)
+    var drawerOpen by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val keyboard = LocalSoftwareKeyboardController.current
 
     LaunchedEffect(sessionId) { viewModel.initSession(sessionId) }
 
     // 打开侧边栏时收起输入法，避免键盘压住抽屉底部（如「设置」）
-    LaunchedEffect(drawerState.isOpen) {
-        if (drawerState.isOpen) keyboard?.hide()
+    LaunchedEffect(drawerOpen) {
+        if (drawerOpen) keyboard?.hide()
     }
+
+    // 抽屉打开时拦截返回键，先收起抽屉
+    BackHandler(enabled = drawerOpen) { drawerOpen = false }
 
     val state = viewModel.uiState
     var inputText by remember { mutableStateOf("") }
@@ -119,12 +132,13 @@ fun ChatScreen(
         }
     }
 
-    ModalNavigationDrawer(
-        drawerState = drawerState, gesturesEnabled = true,
+    SwipeAwayDrawer(
+        open = drawerOpen,
+        onOpenChange = { drawerOpen = it },
         drawerContent = {
             SessionDrawer(state.allSessions, viewModel.getSessionId(),
-                onSelect = { scope.launch { drawerState.close() }; viewModel.switchToSession(it) },
-                onSettings = { scope.launch { drawerState.close() }; onNavigateToSettings() })
+                onSelect = { drawerOpen = false; viewModel.switchToSession(it) },
+                onSettings = { drawerOpen = false; onNavigateToSettings() })
         }
     ) {
         Scaffold(
@@ -144,7 +158,7 @@ fun ChatScreen(
                             .clip(CircleShape)
                             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {
                                 keyboard?.hide()
-                                scope.launch { drawerState.open() }
+                                drawerOpen = true
                                 haptics(HapticsType.Light)
                             },
                         contentAlignment = Alignment.Center,
@@ -492,11 +506,11 @@ private fun SessionDrawer(
     val groups = groupSessions(validSessions)
 
     // 真机：抽屉约占 86%，纯白、无品牌头部、无「新对话」胶囊（新建走顶栏 ⊕）
-    ModalDrawerSheet(
-        modifier = Modifier.fillMaxWidth(0.86f),
-        drawerContainerColor = cs.surface,
-        drawerContentColor = cs.onSurface,
-        drawerShape = RoundedCornerShape(0.dp),
+    Column(
+        Modifier
+            .fillMaxSize()
+            .background(cs.surface)
+            .statusBarsPadding(),
     ) {
         Spacer(Modifier.height(6.dp))
         LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(bottom = 8.dp)) {
@@ -523,7 +537,10 @@ private fun SessionDrawer(
 
         // 底部：只有「⋯」设置入口（真机位置在右下角）
         Row(
-            Modifier.fillMaxWidth().padding(end = 12.dp, top = 4.dp, bottom = 8.dp),
+            Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(end = 12.dp, top = 4.dp, bottom = 8.dp),
             horizontalArrangement = Arrangement.End,
         ) {
             Box(
@@ -537,6 +554,106 @@ private fun SessionDrawer(
                 contentAlignment = Alignment.Center,
             ) {
                 ThreeDotsIcon(tint = cs.onSurface.copy(alpha = 0.8f))
+            }
+        }
+    }
+}
+
+/**
+ * 推拉式抽屉：面板铺在下层（左 86%），主界面整体右移、变圆角卡片压在抽屉之上。
+ * 关闭时从左边缘右拉打开，打开后向左推关闭，松手按过半与否吸附；与原型行为一致。
+ */
+@Composable
+private fun SwipeAwayDrawer(
+    open: Boolean,
+    onOpenChange: (Boolean) -> Unit,
+    drawerContent: @Composable () -> Unit,
+    content: @Composable () -> Unit,
+) {
+    val progress = remember { Animatable(if (open) 1f else 0f) }
+    val scope = rememberCoroutineScope()
+    val density = LocalDensity.current
+    var widthPx by remember { mutableStateOf(0f) }
+    val panelFraction = 0.86f
+    val panelWidthPx = widthPx * panelFraction
+    val cornerPx = with(density) { 24.dp.toPx() }
+    val shadowPx = with(density) { 12.dp.toPx() }
+    val edgePx = with(density) { 22.dp.toPx() }
+    val ease = CubicBezierEasing(0.22f, 0.61f, 0.36f, 1f)
+
+    fun settleTo(target: Float) {
+        onOpenChange(target == 1f)
+        scope.launch { progress.animateTo(target, tween(240, easing = ease)) }
+    }
+
+    // 外部（☰ / 选中会话 / 设置）改变开关状态时做动画
+    LaunchedEffect(open) {
+        progress.animateTo(if (open) 1f else 0f, tween(280, easing = ease))
+    }
+
+    Box(
+        Modifier
+            .fillMaxSize()
+            .clipToBounds()
+            .onSizeChanged { widthPx = it.width.toFloat() }
+            .pointerInput(widthPx) {
+                if (widthPx <= 0f) return@pointerInput
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    // 关闭时只认左边缘起手（右侧拖动留给列表/输入），打开时任意位置都能推回
+                    if (progress.value <= 0.01f && down.position.x > edgePx) return@awaitEachGesture
+                    val moved = awaitHorizontalTouchSlopOrCancellation(down.id) { change, over ->
+                        change.consume()
+                        scope.launch {
+                            progress.snapTo((progress.value + over / panelWidthPx).coerceIn(0f, 1f))
+                        }
+                    } ?: return@awaitEachGesture
+                    horizontalDrag(moved.id) { change, dragAmount ->
+                        change.consume()
+                        scope.launch {
+                            progress.snapTo((progress.value + dragAmount / panelWidthPx).coerceIn(0f, 1f))
+                        }
+                    }
+                    settleTo(if (progress.value > 0.5f) 1f else 0f)
+                }
+            },
+    ) {
+        // 下层：抽屉面板（86% 宽，关闭时整体移到屏幕左侧之外）
+        Box(
+            Modifier
+                .fillMaxHeight()
+                .fillMaxWidth(panelFraction)
+                .graphicsLayer { translationX = progress.value * panelWidthPx - panelWidthPx },
+        ) {
+            drawerContent()
+        }
+
+        // 上层：主界面。右移 + 24dp 圆角 + 左侧投影，形成「压在抽屉上的卡片」
+        Box(
+            Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    translationX = progress.value * panelWidthPx
+                    shape = RoundedCornerShape(cornerPx * progress.value)
+                    clip = true
+                    shadowElevation = shadowPx * progress.value
+                    ambientShadowColor = Color.Black.copy(alpha = 0.30f)
+                    spotShadowColor = Color.Black.copy(alpha = 0.34f)
+                },
+        ) {
+            content()
+
+            // 打开后轻点右侧露出的一截主界面即可关闭
+            val fullyOpen by remember { derivedStateOf { progress.value > 0.99f } }
+            if (fullyOpen) {
+                Box(
+                    Modifier
+                        .matchParentSize()
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                        ) { onOpenChange(false) },
+                )
             }
         }
     }

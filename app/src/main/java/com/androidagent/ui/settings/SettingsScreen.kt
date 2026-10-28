@@ -26,6 +26,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -57,6 +58,9 @@ import javax.net.ssl.HostnameVerifier
 import javax.net.ssl.HttpsURLConnection
 import javax.net.ssl.SSLContext
 import javax.net.ssl.X509TrustManager
+
+/** 设置项自动保存：FormField 失焦时触发（由 SettingsScreen 注入，实际执行 savePrefs） */
+private val LocalSettingsAutoSave = staticCompositionLocalOf<() -> Unit> { {} }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -94,7 +98,6 @@ fun SettingsScreen(
     var skipSsl by remember { mutableStateOf(AppPreferences.skipSslVerification) }
     var userTips by remember { mutableStateOf(AppPreferences.userTips) }
     var showKeys by remember { mutableStateOf(false) }
-    var saved by remember { mutableStateOf(false) }
     var updateState by remember { mutableStateOf<UpdateState>(UpdateState.Idle) }
     var configUrl by remember { mutableStateOf(AppPreferences.configUrl) }
     var skillRepo by remember { mutableStateOf(AppPreferences.skillHubRepo) }
@@ -191,7 +194,12 @@ fun SettingsScreen(
         } else if (!backgroundEnabled && wasEnabled) {
             com.androidagent.ForegroundService.stop(context)
         }
-        saved = true
+    }
+
+    // 自动保存：输入框失焦、离开当前二级页、退出设置页时写入，不再需要右上角「保存」
+    val autoSave = remember { { savePrefs() } }
+    DisposableEffect(page) {
+        onDispose { savePrefs() }
     }
 
     val titles = mapOf(
@@ -208,7 +216,7 @@ fun SettingsScreen(
     Scaffold(
         containerColor = SettingsBg,
         topBar = {
-            // 顶栏：左侧浅灰圆形返回键 · 标题居中 · 二级页右侧「保存」
+            // 顶栏：左侧浅灰圆形返回键 · 标题居中 · 右侧仅留占位（保存已改为自动）
             Row(
                 Modifier
                     .fillMaxWidth()
@@ -247,131 +255,122 @@ fun SettingsScreen(
                     modifier = Modifier.weight(1f),
                 )
 
-                // 右侧占位保持标题绝对居中
-                Box(Modifier.size(52.dp), contentAlignment = Alignment.CenterEnd) {
-                    if (page != "root") {
-                        Text(
-                            if (saved) "已保存" else "保存",
-                            fontSize = 16.sp,
-                            color = if (saved) MaterialTheme.colorScheme.onSurfaceVariant
-                            else MaterialTheme.colorScheme.primary,
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(10.dp))
-                                .clickable(enabled = !saved) { savePrefs() }
-                                .padding(horizontal = 8.dp, vertical = 6.dp),
-                        )
-                    }
-                }
+                // 右侧占位保持标题绝对居中（不再放「保存」：改为失焦 / 离开页面自动保存）
+                Box(Modifier.size(52.dp))
             }
         }
     ) { padding ->
-        if (page == "root") {
-            SettingsRootMenu(
-                modifier = Modifier.padding(padding),
-                showKeys = showKeys,
-                onToggleShowKeys = { showKeys = it },
-                onNavigate = { page = it },
-            )
-        } else {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding)
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 16.dp),
-            ) {
-                when (page) {
-                    "api" -> ApiPage(
-                        deepSeekKey, deepSeekBaseUrl, deepSeekModel,
-                        modelOptions, modelLoading, modelMenuExpanded, modelError,
-                        showKeys,
-                        onKey = { deepSeekKey = it; saved = false },
-                        onBaseUrl = { deepSeekBaseUrl = it; saved = false },
-                        onModel = { deepSeekModel = it; saved = false },
-                        onModelMenuExpanded = { modelMenuExpanded = it },
-                        onRefreshModels = {
-                            modelLoading = true
-                            modelError = null
-                            scope.launch {
-                                try {
-                                    DeepSeekClient().listModels().fold(
-                                        onSuccess = { models ->
-                                            modelOptions = models
-                                            modelMenuExpanded = true
-                                        },
-                                        onFailure = { e ->
-                                            modelError = e.message ?: "获取模型列表失败"
-                                        }
-                                    )
-                                } finally {
-                                    modelLoading = false
+        CompositionLocalProvider(LocalSettingsAutoSave provides autoSave) {
+            if (page == "root") {
+                SettingsRootMenu(
+                    modifier = Modifier.padding(padding),
+                    showKeys = showKeys,
+                    onToggleShowKeys = { showKeys = it },
+                    onNavigate = { page = it },
+                )
+            } else {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(padding)
+                        // 键盘弹出时把内容顶起，保证多行「自定义提示」始终可见可编辑
+                        .imePadding()
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 16.dp),
+                ) {
+                    when (page) {
+                        "api" -> ApiPage(
+                            deepSeekKey, deepSeekBaseUrl, deepSeekModel,
+                            modelOptions, modelLoading, modelMenuExpanded, modelError,
+                            showKeys,
+                            onKey = { deepSeekKey = it },
+                            onBaseUrl = { deepSeekBaseUrl = it },
+                            onModel = { deepSeekModel = it },
+                            onModelMenuExpanded = { modelMenuExpanded = it },
+                            onRefreshModels = {
+                                modelLoading = true
+                                modelError = null
+                                scope.launch {
+                                    try {
+                                        DeepSeekClient().listModels().fold(
+                                            onSuccess = { models ->
+                                                modelOptions = models
+                                                modelMenuExpanded = true
+                                            },
+                                            onFailure = { e ->
+                                                modelError = e.message ?: "获取模型列表失败"
+                                            }
+                                        )
+                                    } finally {
+                                        modelLoading = false
+                                    }
                                 }
-                            }
-                        },
-                    )
-                    "ov" -> OvPage(
-                        ovUrl, ovKey, ovUser,
-                        ovFindThreshold, ovFindLimit,
-                        ovPeerId, ovWorkspacePeer,
-                        ovRecallQuestion, ovRecallStep, ovCommit,
-                        showKeys,
-                        onUrl = { ovUrl = it; saved = false },
-                        onKey = { ovKey = it; saved = false },
-                        onUser = { ovUser = it; saved = false },
-                        onFindThreshold = { ovFindThreshold = it; saved = false },
-                        onFindLimit = { ovFindLimit = it; saved = false },
-                        onPeerId = { ovPeerId = it; saved = false },
-                        onWorkspacePeer = { ovWorkspacePeer = it; saved = false },
-                        onRecallQuestion = { ovRecallQuestion = it; saved = false },
-                        onRecallStep = { ovRecallStep = it; saved = false },
-                        onCommit = { ovCommit = it; saved = false },
-                    )
-                    "storage" -> StoragePage(
-                        s3Endpoint, s3AccessKey, s3SecretKey, showKeys,
-                        onEndpoint = { s3Endpoint = it; saved = false },
-                        onAccessKey = { s3AccessKey = it; saved = false },
-                        onSecretKey = { s3SecretKey = it; saved = false },
-                    )
-                    "skillhub" -> SkillHubPage(
-                        skillRepo, skillBranch, skillType, skillBase, skillToken, showKeys,
-                        onRepo = { skillRepo = it; saved = false },
-                        onBranch = { skillBranch = it; saved = false },
-                        onType = { skillType = it; saved = false },
-                        onBase = { skillBase = it; saved = false },
-                        onToken = { skillToken = it; saved = false },
-                    )
-                    "features" -> FeaturesPage(
-                        skipSsl, maxRounds, thinkingTimeout, backgroundEnabled, userTips, showInjected,
-                        chatUiStream, chatShowReasoning, chatShowToolCalls, chatShowToolEdit,
-                        onSkipSsl = { skipSsl = it; saved = false },
-                        onMaxRounds = { maxRounds = it; saved = false },
-                        onThinkingTimeout = { thinkingTimeout = it; saved = false },
-                        onBackgroundEnabled = { backgroundEnabled = it; saved = false },
-                        onUserTips = { userTips = it; saved = false },
-                        onShowInjected = { showInjected = it; saved = false },
-                        onChatUiStream = { chatUiStream = it; saved = false },
-                        onShowReasoning = { chatShowReasoning = it; saved = false },
-                        onShowToolCalls = { chatShowToolCalls = it; saved = false },
-                        onShowToolEdit = { chatShowToolEdit = it; saved = false },
-                    )
-                    "import" -> ImportPage(
-                        configUrl, importing, importMsg, remoteJson,
-                        accountOptions, accountMenuExpanded, selectedAccount, loadingAccounts,
-                        onConfigUrl = { configUrl = it },
-                        onImporting = { importing = it },
-                        onImportMsg = { importMsg = it },
-                        onRemoteJson = { remoteJson = it },
-                        onAccountOptions = { accountOptions = it },
-                        onAccountMenuExpanded = { accountMenuExpanded = it },
-                        onSelectedAccount = { selectedAccount = it },
-                        onLoadingAccounts = { loadingAccounts = it },
-                        onRefreshFromPrefs = { refreshFromPrefs() },
-                    )
-                    "about" -> AboutPage(
-                        updateState, onUpdateState = { updateState = it },
-                    )
+                            },
+                        )
+                        "ov" -> OvPage(
+                            ovUrl, ovKey, ovUser,
+                            ovFindThreshold, ovFindLimit,
+                            ovPeerId, ovWorkspacePeer,
+                            ovRecallQuestion, ovRecallStep, ovCommit,
+                            showKeys,
+                            onUrl = { ovUrl = it },
+                            onKey = { ovKey = it },
+                            onUser = { ovUser = it },
+                            onFindThreshold = { ovFindThreshold = it },
+                            onFindLimit = { ovFindLimit = it },
+                            onPeerId = { ovPeerId = it },
+                            onWorkspacePeer = { ovWorkspacePeer = it },
+                            onRecallQuestion = { ovRecallQuestion = it },
+                            onRecallStep = { ovRecallStep = it },
+                            onCommit = { ovCommit = it },
+                        )
+                        "storage" -> StoragePage(
+                            s3Endpoint, s3AccessKey, s3SecretKey, showKeys,
+                            onEndpoint = { s3Endpoint = it },
+                            onAccessKey = { s3AccessKey = it },
+                            onSecretKey = { s3SecretKey = it },
+                        )
+                        "skillhub" -> SkillHubPage(
+                            skillRepo, skillBranch, skillType, skillBase, skillToken, showKeys,
+                            onRepo = { skillRepo = it },
+                            onBranch = { skillBranch = it },
+                            onType = { skillType = it },
+                            onBase = { skillBase = it },
+                            onToken = { skillToken = it },
+                        )
+                        "features" -> FeaturesPage(
+                            skipSsl, maxRounds, thinkingTimeout, backgroundEnabled, userTips, showInjected,
+                            chatUiStream, chatShowReasoning, chatShowToolCalls, chatShowToolEdit,
+                            onSkipSsl = { skipSsl = it },
+                            onMaxRounds = { maxRounds = it },
+                            onThinkingTimeout = { thinkingTimeout = it },
+                            onBackgroundEnabled = { backgroundEnabled = it },
+                            onUserTips = { userTips = it },
+                            onShowInjected = { showInjected = it },
+                            onChatUiStream = { chatUiStream = it },
+                            onShowReasoning = { chatShowReasoning = it },
+                            onShowToolCalls = { chatShowToolCalls = it },
+                            onShowToolEdit = { chatShowToolEdit = it },
+                        )
+                        "import" -> ImportPage(
+                            configUrl, importing, importMsg, remoteJson,
+                            accountOptions, accountMenuExpanded, selectedAccount, loadingAccounts,
+                            onConfigUrl = { configUrl = it },
+                            onImporting = { importing = it },
+                            onImportMsg = { importMsg = it },
+                            onRemoteJson = { remoteJson = it },
+                            onAccountOptions = { accountOptions = it },
+                            onAccountMenuExpanded = { accountMenuExpanded = it },
+                            onSelectedAccount = { selectedAccount = it },
+                            onLoadingAccounts = { loadingAccounts = it },
+                            onRefreshFromPrefs = { refreshFromPrefs() },
+                        )
+                        "about" -> AboutPage(
+                            updateState, onUpdateState = { updateState = it },
+                        )
+                    }
+                    Spacer(Modifier.height(32.dp))
                 }
-                Spacer(Modifier.height(32.dp))
             }
         }
     }
@@ -1154,6 +1153,9 @@ private fun FormField(
     trailing: (@Composable () -> Unit)? = null,
 ) {
     val cs = MaterialTheme.colorScheme
+    // 失焦即保存：记录是否真正获得过焦点，避免首次组合时 isFocused=false 触发一次多余写入
+    val autoSave = LocalSettingsAutoSave.current
+    var everFocused by remember { mutableStateOf(false) }
     Column(
         modifier
             .fillMaxWidth()
@@ -1171,7 +1173,16 @@ private fun FormField(
                     textStyle = TextStyle(fontSize = 17.sp, lineHeight = 24.sp, color = cs.onSurface),
                     cursorBrush = SolidColor(cs.primary),
                     visualTransformation = if (masked) PasswordVisualTransformation() else VisualTransformation.None,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .onFocusChanged { state ->
+                            if (state.isFocused) {
+                                everFocused = true
+                            } else if (everFocused) {
+                                everFocused = false
+                                autoSave()
+                            }
+                        },
                 )
                 if (onClick != null) {
                     Box(Modifier.matchParentSize().clickable { onClick() })
@@ -1191,6 +1202,7 @@ private fun FormSwitchRow(
     supporting: String? = null,
 ) {
     val cs = MaterialTheme.colorScheme
+    val autoSave = LocalSettingsAutoSave.current
     Row(
         Modifier
             .fillMaxWidth()
@@ -1206,7 +1218,11 @@ private fun FormSwitchRow(
         }
         Switch(
             checked = checked,
-            onCheckedChange = onChecked,
+            onCheckedChange = {
+                onChecked(it)
+                // 开关没有失焦事件，切换即写盘
+                autoSave()
+            },
             colors = SwitchDefaults.colors(
                 checkedThumbColor = Color.White,
                 checkedTrackColor = cs.primary,
