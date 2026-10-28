@@ -84,6 +84,7 @@ class MainActivity : ComponentActivity() {
      * 申请启动时需要的运行时权限：
      * - POST_NOTIFICATIONS（Android 13+）：通知工具 / 前台服务
      * - ACTIVITY_RECOGNITION（Android 10+）：sensor skill 读计步器(19) / 步数检测(18)
+     * - ACCESS_LOCAL_NETWORK（Android 17+）：访问内网设备（ssh / OpenViking / skill_hub）
      *
      * 已授予的自动跳过；用户拒绝后不再骚扰，需在系统设置里手动开启。
      */
@@ -95,6 +96,10 @@ class MainActivity : ComponentActivity() {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 add(Manifest.permission.ACTIVITY_RECOGNITION)
             }
+            // Build.VERSION_CODES 尚无 37 的常量，直接用数字
+            if (Build.VERSION.SDK_INT >= SDK_LOCAL_NETWORK) {
+                add(PERMISSION_ACCESS_LOCAL_NETWORK)
+            }
         }.filter {
             ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
         }
@@ -105,4 +110,13 @@ class MainActivity : ComponentActivity() {
 
     private val permissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { }
+
+    companion object {
+        /** Android 17（API 37）：访问局域网需要运行时权限。 */
+        private const val SDK_LOCAL_NETWORK = 37
+
+        /** 常量名在低版本 SDK 里不存在，故用字符串。 */
+        private const val PERMISSION_ACCESS_LOCAL_NETWORK =
+            "android.permission.ACCESS_LOCAL_NETWORK"
+    }
 }
