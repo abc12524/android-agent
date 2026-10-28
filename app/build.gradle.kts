@@ -100,4 +100,6 @@ dependencies {
     // Markdown (原生 Compose 渲染：GFM 表格 / 代码高亮 / 链接 / 图片)
     implementation("com.mikepenz:multiplatform-markdown-renderer:0.45.0")
     implementation("com.mikepenz:multiplatform-markdown-renderer-m3:0.45.0")
+    // 代码块语法高亮（内部依赖 dev.snipme:highlights:1.1.0）
+    implementation("com.mikepenz:multiplatform-markdown-renderer-code:0.45.0")
 }
