@@ -396,9 +396,9 @@ internal fun StreamChatList(
 
     LazyColumn(
         state = listState,
-        modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
-        contentPadding = PaddingValues(top = 8.dp, bottom = 72.dp),
+        modifier = Modifier.fillMaxSize().padding(horizontal = 18.dp),
+        verticalArrangement = Arrangement.spacedBy(18.dp),
+        contentPadding = PaddingValues(top = 12.dp, bottom = 72.dp),
     ) {
         items(streamItems.size, key = { index ->
             when (val it = streamItems[index]) {

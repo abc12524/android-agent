@@ -12,11 +12,17 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.res.painterResource
+import com.androidagent.R
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Close
@@ -118,54 +124,65 @@ fun ChatScreen(
         drawerContent = {
             SessionDrawer(state.allSessions, viewModel.getSessionId(),
                 onSelect = { scope.launch { drawerState.close() }; viewModel.switchToSession(it) },
-                onNew = { scope.launch { drawerState.close() }; viewModel.startNewSession() },
                 onSettings = { scope.launch { drawerState.close() }; onNavigateToSettings() })
         }
     ) {
         Scaffold(
             topBar = {
-                // 极简顶栏：左侧圆形会话入口 · 右侧新建对话（无标题，对齐参考设计）
-                Box(
+                // 顶栏：☰ 会话列表 · 标题（左对齐、紧贴 ☰）· ⊕ 新对话
+                Row(
                     Modifier
                         .fillMaxWidth()
                         .statusBarsPadding()
-                        .padding(horizontal = 12.dp, vertical = 6.dp)
-                        .height(40.dp)
+                        .height(56.dp)
+                        .padding(horizontal = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    IconButton(
-                        onClick = {
-                            keyboard?.hide()
-                            scope.launch { drawerState.open() }
-                            haptics(HapticsType.Light)
-                        },
-                        modifier = Modifier
-                            .align(Alignment.CenterStart)
+                    Box(
+                        Modifier
                             .size(40.dp)
                             .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.04f))
-                            .border(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f), CircleShape)
+                            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {
+                                keyboard?.hide()
+                                scope.launch { drawerState.open() }
+                                haptics(HapticsType.Light)
+                            },
+                        contentAlignment = Alignment.Center,
                     ) {
-                        Icon(Icons.Default.Menu, contentDescription = "会话列表",
-                            modifier = Modifier.size(20.dp),
-                            tint = MaterialTheme.colorScheme.onSurface)
+                        TwoLineMenuIcon(tint = MaterialTheme.colorScheme.onSurface)
                     }
 
-                    // 仅在已有消息时显示会话标题，空状态保持极简
+                    // 空会话不显示标题，保持极简
                     if (state.messages.isNotEmpty()) {
-                        Text(state.sessionTitle,
-                            fontSize = 16.sp, fontWeight = FontWeight.SemiBold,
-                            maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        Text(
+                            state.sessionTitle,
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                             color = MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.align(Alignment.Center).padding(horizontal = 60.dp))
+                            modifier = Modifier.weight(1f).padding(start = 10.dp, end = 8.dp),
+                        )
+                    } else {
+                        Spacer(Modifier.weight(1f))
                     }
 
-                    IconButton(
-                        onClick = { viewModel.startNewSession(); haptics(HapticsType.Light) },
-                        modifier = Modifier.align(Alignment.CenterEnd).size(40.dp)
+                    Box(
+                        Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {
+                                viewModel.startNewSession()
+                                haptics(HapticsType.Light)
+                            },
+                        contentAlignment = Alignment.Center,
                     ) {
-                        Icon(Icons.Outlined.Add, contentDescription = "新对话",
+                        Icon(
+                            Icons.Outlined.Add,
+                            contentDescription = "新对话",
                             modifier = Modifier.size(26.dp),
-                            tint = MaterialTheme.colorScheme.onSurface)
+                            tint = MaterialTheme.colorScheme.onSurface,
+                        )
                     }
                 }
             },
@@ -215,70 +232,97 @@ fun ChatScreen(
                     }
 
                     val canSend = (inputText.isNotBlank() || pendingImagePath != null) && !state.isLoading
+                    // 输入卡：白底 · 圆角 26 · 上下两段（上行输入、下行右侧 ⊕ / 发送）
                     Surface(
                         shape = RoundedCornerShape(26.dp),
                         color = MaterialTheme.colorScheme.surface,
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)),
-                        modifier = Modifier.fillMaxWidth()
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                        modifier = Modifier.fillMaxWidth(),
                     ) {
-                        Row(
-                            Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 5.dp),
-                            verticalAlignment = Alignment.Bottom
+                        Column(
+                            Modifier.padding(start = 16.dp, end = 10.dp, top = 13.dp, bottom = 9.dp)
                         ) {
-                            // 左侧「+」：选择文件 / 图片
-                            IconButton(
-                                onClick = { filePickerLauncher.launch(arrayOf("*/*")) },
-                                enabled = !state.isLoading,
-                                modifier = Modifier.size(40.dp)
-                            ) {
-                                Icon(Icons.Outlined.Add, contentDescription = "选择文件",
-                                    modifier = Modifier.size(24.dp),
-                                    tint = MaterialTheme.colorScheme.onSurface)
-                            }
-
-                            // 中间输入区（占位符「发消息」）
+                            // 上行：输入区（占位符「发消息或按住说话」）
                             Box(
-                                Modifier.weight(1f).padding(horizontal = 8.dp),
-                                contentAlignment = Alignment.CenterStart
+                                Modifier.fillMaxWidth().padding(end = 6.dp),
+                                contentAlignment = Alignment.CenterStart,
                             ) {
                                 BasicTextField(
                                     value = inputText,
                                     onValueChange = { inputText = it },
                                     enabled = !state.isLoading,
-                                    textStyle = TextStyle(fontSize = 16.sp,
-                                        color = MaterialTheme.colorScheme.onSurface),
+                                    textStyle = TextStyle(
+                                        fontSize = 16.sp,
+                                        lineHeight = 22.sp,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                    ),
                                     cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                                     maxLines = 5,
-                                    modifier = Modifier.fillMaxWidth().padding(vertical = 9.dp)
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
                                 )
                                 if (inputText.isEmpty()) {
-                                    Text("发消息", fontSize = 16.sp,
-                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f))
+                                    Text(
+                                        "发消息或按住说话",
+                                        fontSize = 16.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
+                                    )
                                 }
                             }
 
-                            // 右侧圆形发送按钮（↑）
-                            Box(
-                                modifier = Modifier
-                                    .size(38.dp)
-                                    .clip(CircleShape)
-                                    .background(
-                                        if (canSend) MaterialTheme.colorScheme.primary
-                                        else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f)
+                            Spacer(Modifier.height(10.dp))
+
+                            // 下行：右侧「⊕ 添加」+「发送」（有内容才出现，蓝色圆形 ↑）
+                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                Spacer(Modifier.weight(1f))
+                                Box(
+                                    Modifier
+                                        .size(32.dp)
+                                        .clip(CircleShape)
+                                        .clickable(
+                                            interactionSource = remember { MutableInteractionSource() },
+                                            indication = null,
+                                            enabled = !state.isLoading,
+                                        ) { filePickerLauncher.launch(arrayOf("*/*")) },
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Icon(
+                                        Icons.Outlined.Add,
+                                        contentDescription = "选择文件",
+                                        modifier = Modifier.size(25.dp),
+                                        tint = MaterialTheme.colorScheme.onSurface,
                                     )
-                                    .clickable(enabled = canSend) {
-                                        viewModel.sendMessage(inputText.trim(), pendingImagePath)
-                                        inputText = ""
-                                        pendingImagePath = null
-                                        pendingImageName = null
-                                        haptics(HapticsType.Light)
-                                    },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(Icons.Default.ArrowUpward, contentDescription = "发送",
-                                    modifier = Modifier.size(22.dp),
-                                    tint = if (canSend) MaterialTheme.colorScheme.onPrimary
-                                           else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.28f))
+                                }
+                                if (inputText.isNotBlank() || pendingImagePath != null) {
+                                    Spacer(Modifier.width(12.dp))
+                                    Box(
+                                        modifier = Modifier
+                                            .size(34.dp)
+                                            .clip(CircleShape)
+                                            .background(
+                                                if (canSend) MaterialTheme.colorScheme.primary
+                                                else MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)
+                                            )
+                                            .clickable(
+                                                interactionSource = remember { MutableInteractionSource() },
+                                                indication = null,
+                                                enabled = canSend,
+                                            ) {
+                                                viewModel.sendMessage(inputText.trim(), pendingImagePath)
+                                                inputText = ""
+                                                pendingImagePath = null
+                                                pendingImageName = null
+                                                haptics(HapticsType.Light)
+                                            },
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        Icon(
+                                            Icons.Default.ArrowUpward,
+                                            contentDescription = "发送",
+                                            modifier = Modifier.size(20.dp),
+                                            tint = Color.White,
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
@@ -287,15 +331,21 @@ fun ChatScreen(
         ) { padding ->
             Box(Modifier.fillMaxSize().padding(padding)) {
                 if (state.messages.isEmpty() && !state.isLoading) {
+                    // 空会话：鲸鱼 logo + 「你好，让我们开始聊天吧」
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            SelectionContainer {
-                                Text("有什么想聊的?", fontSize = 30.sp, fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurface)
-                            }
-                            Spacer(Modifier.height(16.dp))
-                            Text("一个问题，一个想法，都可以从这里开始。", fontSize = 15.sp,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.42f))
+                            Image(
+                                painter = painterResource(R.drawable.ic_deepseek_logo),
+                                contentDescription = null,
+                                modifier = Modifier.width(43.dp).height(32.dp),
+                            )
+                            Spacer(Modifier.height(24.dp))
+                            Text(
+                                "你好，让我们开始聊天吧",
+                                fontSize = 19.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
                         }
                     }
                 } else if (state.newUi) {
@@ -328,9 +378,9 @@ fun ChatScreen(
 
                     LazyColumn(
                         state = listState,
-                        modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp),
-                        verticalArrangement = Arrangement.spacedBy(14.dp),
-                        contentPadding = PaddingValues(top = 8.dp, bottom = 72.dp)
+                        modifier = Modifier.fillMaxSize().padding(horizontal = 18.dp),
+                        verticalArrangement = Arrangement.spacedBy(18.dp),
+                        contentPadding = PaddingValues(top = 12.dp, bottom = 72.dp)
                     ) {
                         items(chatItems.size, key = { index ->
                             when (val it = chatItems[index]) {
@@ -435,37 +485,31 @@ private fun TokenCostRow(label: String, tokens: Int, cost: Double) {
 @Composable
 private fun SessionDrawer(
     sessions: List<ChatSession>, currentId: String,
-    onSelect: (String) -> Unit, onNew: () -> Unit, onSettings: () -> Unit
+    onSelect: (String) -> Unit, onSettings: () -> Unit
 ) {
     val cs = MaterialTheme.colorScheme
     val validSessions = sessions.filter { it.messageCount > 0 }
     val groups = groupSessions(validSessions)
 
+    // 真机：抽屉约占 86%，纯白、无品牌头部、无「新对话」胶囊（新建走顶栏 ⊕）
     ModalDrawerSheet(
-        modifier = Modifier.width(300.dp),
+        modifier = Modifier.fillMaxWidth(0.86f),
         drawerContainerColor = cs.surface,
         drawerContentColor = cs.onSurface,
+        drawerShape = RoundedCornerShape(0.dp),
     ) {
-        // 头部：品牌名 + 新对话
-        Column(Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
-            Text("Android Agent",
-                fontSize = 18.sp, fontWeight = FontWeight.Bold,
-                color = cs.onSurface)
-            Text("AI 助手 · 本地工具",
-                fontSize = 12.sp, color = cs.onSurface.copy(alpha = 0.55f))
-            Spacer(Modifier.height(14.dp))
-            NewChatPill(onClick = onNew)
-        }
-
-        HorizontalDivider(color = cs.outlineVariant.copy(alpha = 0.5f))
-
-        LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(vertical = 8.dp)) {
+        Spacer(Modifier.height(6.dp))
+        LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(bottom = 8.dp)) {
             groups.forEach { (label, list) ->
-                item(key = "hdr_$label") {
-                    Text(label,
-                        Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
-                        fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
-                        color = cs.onSurfaceVariant.copy(alpha = 0.8f))
+                item(key = "hdr_" + label) {
+                    Text(
+                        label,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = 22.dp, end = 22.dp, top = 16.dp, bottom = 8.dp),
+                        fontSize = 15.sp,
+                        color = cs.onSurfaceVariant,
+                    )
                 }
                 items(list, key = { it.id }) { session ->
                     SessionTile(
@@ -474,49 +518,31 @@ private fun SessionDrawer(
                         onClick = { onSelect(session.id) },
                     )
                 }
-                item(key = "gap_$label") { Spacer(Modifier.height(6.dp)) }
             }
         }
 
-        HorizontalDivider(color = cs.outlineVariant.copy(alpha = 0.5f))
-        DrawerFooterRow(
-            icon = Icons.Outlined.Settings,
-            label = "设置",
-            onClick = onSettings,
-        )
-    }
-}
-
-// ---- 侧边栏「新对话」按钮 ----
-@Composable
-private fun NewChatPill(onClick: () -> Unit) {
-    val cs = MaterialTheme.colorScheme
-    val haptics = rememberHaptics()
-    val interaction = remember { MutableInteractionSource() }
-    val pressed by interaction.collectIsPressedAsState()
-    val bg by animateColorAsState(
-        if (pressed) cs.primary.copy(alpha = 0.78f) else cs.primary,
-        label = "newChat",
-    )
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .clip(AppRadii.card)
-            .background(bg)
-            .clickable(interactionSource = interaction, indication = null) {
-                haptics(HapticsType.Medium); onClick()
+        // 底部：只有「⋯」设置入口（真机位置在右下角）
+        Row(
+            Modifier.fillMaxWidth().padding(end = 12.dp, top = 4.dp, bottom = 8.dp),
+            horizontalArrangement = Arrangement.End,
+        ) {
+            Box(
+                Modifier
+                    .size(44.dp)
+                    .clip(CircleShape)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                    ) { onSettings() },
+                contentAlignment = Alignment.Center,
+            ) {
+                ThreeDotsIcon(tint = cs.onSurface.copy(alpha = 0.8f))
             }
-            .padding(horizontal = 14.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(Icons.Outlined.Add, contentDescription = null, tint = cs.onPrimary)
-        Spacer(Modifier.width(8.dp))
-        Text("新对话", fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
-            color = cs.onPrimary)
+        }
     }
 }
 
-// ---- 会话列表卡片（按压反馈 + 激活高亮） ----
+// ---- 会话条目：纯文本行（真机没有副标题、没有卡片底） ----
 @Composable
 private fun SessionTile(session: ChatSession, active: Boolean, onClick: () -> Unit) {
     val cs = MaterialTheme.colorScheme
@@ -525,73 +551,52 @@ private fun SessionTile(session: ChatSession, active: Boolean, onClick: () -> Un
     val pressed by interaction.collectIsPressedAsState()
     val bg by animateColorAsState(
         when {
-            active -> cs.primary.copy(alpha = 0.12f)
-            pressed -> cs.onSurface.copy(alpha = 0.06f)
+            active -> cs.onSurface.copy(alpha = 0.05f)
+            pressed -> cs.onSurface.copy(alpha = 0.05f)
             else -> Color.Transparent
         },
         label = "sessionTile",
     )
     val title = if (session.title != "新对话") session.title else fmtSessionTime(session.createdAt)
 
-    Row(
-        Modifier
+    Text(
+        title,
+        modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 8.dp, vertical = 2.dp)
-            .clip(AppRadii.card)
             .background(bg)
             .clickable(interactionSource = interaction, indication = null) {
-                haptics(HapticsType.Light); onClick()
+                haptics(HapticsType.Light)
+                onClick()
             }
-            .padding(horizontal = 12.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(Modifier.weight(1f)) {
-            Text(title,
-                fontSize = 14.sp,
-                fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
-                color = cs.onSurface,
-                maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Spacer(Modifier.height(2.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("${session.messageCount} 条", fontSize = 11.sp,
-                    color = cs.onSurface.copy(alpha = 0.55f))
-                if (session.title != "新对话") {
-                    Text(" · ${fmtSessionTime(session.createdAt)}", fontSize = 11.sp,
-                        color = cs.onSurface.copy(alpha = 0.45f))
-                }
-            }
-        }
-        if (active) {
-            Spacer(Modifier.width(6.dp))
-            Box(Modifier.size(6.dp).clip(CircleShape).background(cs.primary))
-        }
+            .padding(horizontal = 22.dp, vertical = 15.dp),
+        fontSize = 17.sp,
+        color = cs.onSurface,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+    )
+}
+
+/** 顶栏 ☰：真机是两横（上长下短），不是系统三横图标 */
+@Composable
+private fun TwoLineMenuIcon(tint: Color) {
+    Canvas(Modifier.size(24.dp)) {
+        val stroke = 2.dp.toPx()
+        drawLine(tint, Offset(size.width * 0.14f, size.height * 0.34f),
+            Offset(size.width * 0.86f, size.height * 0.34f), stroke, StrokeCap.Round)
+        drawLine(tint, Offset(size.width * 0.14f, size.height * 0.64f),
+            Offset(size.width * 0.62f, size.height * 0.64f), stroke, StrokeCap.Round)
     }
 }
 
-// ---- 侧边栏底部设置行 ----
+/** 抽屉底部「⋯」设置入口 */
 @Composable
-private fun DrawerFooterRow(icon: ImageVector, label: String, onClick: () -> Unit) {
-    val cs = MaterialTheme.colorScheme
-    val haptics = rememberHaptics()
-    val interaction = remember { MutableInteractionSource() }
-    val pressed by interaction.collectIsPressedAsState()
-    val bg by animateColorAsState(
-        if (pressed) cs.onSurface.copy(alpha = 0.06f) else Color.Transparent,
-        label = "footer",
-    )
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .background(bg)
-            .clickable(interactionSource = interaction, indication = null) {
-                haptics(HapticsType.Light); onClick()
-            }
-            .padding(horizontal = 20.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(icon, contentDescription = null, tint = cs.onSurfaceVariant)
-        Spacer(Modifier.width(12.dp))
-        Text(label, fontSize = 15.sp, color = cs.onSurfaceVariant)
+private fun ThreeDotsIcon(tint: Color) {
+    Canvas(Modifier.size(24.dp)) {
+        val r = 1.9.dp.toPx()
+        val y = size.height / 2f
+        listOf(0.22f, 0.5f, 0.78f).forEach { fx ->
+            drawCircle(tint, r, Offset(size.width * fx, y))
+        }
     }
 }
 
@@ -608,32 +613,25 @@ private fun StreamingReply(content: String, reasoning: String) {
         if (reasoning.isNotBlank()) {
             StreamingReasoning(reasoning, modifier = Modifier.padding(bottom = 4.dp))
         }
-        Surface(
-            modifier = Modifier
-                .fillMaxWidth(0.92f)
-                .animateContentSize(tween(220)),
-            shape = RoundedCornerShape(
-                topStart = 16.dp, topEnd = 16.dp,
-                bottomStart = 4.dp, bottomEnd = 16.dp,
-            ),
-            color = BubbleAssistant,
-        ) {
+        // 助手正文：与已完成的消息一致，整宽无气泡
+        Column(Modifier.fillMaxWidth().animateContentSize(tween(220))) {
             if (content.isBlank()) {
-                // 首包前：思考中
                 Row(
-                    Modifier.padding(horizontal = 14.dp, vertical = 14.dp),
+                    Modifier.padding(vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     StreamingDots()
                     Spacer(Modifier.width(10.dp))
-                    Text("正在思考…", fontSize = 13.sp, color = BubbleAssistantText.copy(alpha = 0.6f))
+                    Text(
+                        "正在思考…",
+                        fontSize = 14.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             } else {
-                Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
-                    MarkdownBody(content)
-                    // 光标脉冲
-                    BlinkingCursor(color = cs.onSurface.copy(alpha = 0.6f))
-                }
+                MarkdownBody(content)
+                // 光标脉冲
+                BlinkingCursor(color = cs.onSurface.copy(alpha = 0.6f))
             }
         }
     }
@@ -734,12 +732,12 @@ fun MessageBubble(msg: Message, suppressReasoning: Boolean = false) {
                         Surface(
                             modifier = Modifier.widthIn(max = maxBubbleWidth),   // 自适应内容
                             shape = RoundedCornerShape(
-                                topStart = 16.dp, topEnd = 16.dp,
-                                bottomStart = 16.dp, bottomEnd = 4.dp,
+                                topStart = 18.dp, topEnd = 18.dp,
+                                bottomStart = 18.dp, bottomEnd = 6.dp,
                             ),
                             color = bc,
                         ) {
-                            Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+                            Column(Modifier.padding(horizontal = 15.dp, vertical = 11.dp)) {
                                 if (userImage != null) {
                                     MessageImage(
                                         path = userImage,
@@ -760,14 +758,7 @@ fun MessageBubble(msg: Message, suppressReasoning: Boolean = false) {
                 }
             }
 
-            // 仅正式回复（用户消息 / AI 正文回复）下方显示时间，思考、工具调用与注入信息不显示
-            if (!isInjected && (isUser || (msg.role == "assistant" && msg.content.isNotBlank()))) {
-                Text(
-                    fmtTime(msg.timestamp), fontSize = 10.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                )
-            }
+            // 真机消息区不显示发送时间，保持整屏干净
         }
     }
 }

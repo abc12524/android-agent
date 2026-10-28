@@ -7,12 +7,15 @@ import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Refresh
@@ -42,6 +45,7 @@ import com.androidagent.data.skills.SkillRepository
 import com.androidagent.data.skills.RemoteSkill
 import com.androidagent.data.skills.SkillStore
 import com.androidagent.data.updater.AppUpdater
+import com.androidagent.ui.theme.SettingsBg
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -202,35 +206,70 @@ fun SettingsScreen(
     )
 
     Scaffold(
+        containerColor = SettingsBg,
         topBar = {
-            TopAppBar(
-                title = { Text(titles[page] ?: "设置", fontWeight = FontWeight.SemiBold) },
-                navigationIcon = {
-                    IconButton(onClick = { if (page == "root") onBack() else page = "root" }) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "返回")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color.Transparent,
-                    scrolledContainerColor = Color.Transparent,
-                ),
-                actions = {
+            // 顶栏：左侧浅灰圆形返回键 · 标题居中 · 二级页右侧「保存」
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .statusBarsPadding()
+                    .height(56.dp)
+                    .padding(horizontal = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(
+                    Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f))
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                        ) { if (page == "root") onBack() else page = "root" },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+                        contentDescription = "返回",
+                        modifier = Modifier.size(22.dp),
+                        tint = MaterialTheme.colorScheme.onSurface,
+                    )
+                }
+
+                Text(
+                    titles[page] ?: "设置",
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    modifier = Modifier.weight(1f),
+                )
+
+                // 右侧占位保持标题绝对居中
+                Box(Modifier.size(52.dp), contentAlignment = Alignment.CenterEnd) {
                     if (page != "root") {
-                        TextButton(onClick = { savePrefs() }, enabled = !saved) {
-                            Text(if (saved) "已保存" else "保存")
-                        }
+                        Text(
+                            if (saved) "已保存" else "保存",
+                            fontSize = 16.sp,
+                            color = if (saved) MaterialTheme.colorScheme.onSurfaceVariant
+                            else MaterialTheme.colorScheme.primary,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(10.dp))
+                                .clickable(enabled = !saved) { savePrefs() }
+                                .padding(horizontal = 8.dp, vertical = 6.dp),
+                        )
                     }
-                },
-            )
+                }
+            }
         }
     ) { padding ->
         if (page == "root") {
             SettingsRootMenu(
                 modifier = Modifier.padding(padding),
                 showKeys = showKeys,
-                saved = saved,
                 onToggleShowKeys = { showKeys = it },
-                onSave = { savePrefs() },
                 onNavigate = { page = it },
             )
         } else {
@@ -239,7 +278,7 @@ fun SettingsScreen(
                     .fillMaxSize()
                     .padding(padding)
                     .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 20.dp),
+                    .padding(horizontal = 16.dp),
             ) {
                 when (page) {
                     "api" -> ApiPage(
@@ -338,95 +377,92 @@ fun SettingsScreen(
     }
 }
 
-// ==================== 根菜单（分组列表风格） ====================
+// ==================== 一级菜单：灰底 + 白色卡片 ====================
 
 @Composable
 private fun SettingsRootMenu(
     modifier: Modifier = Modifier,
     showKeys: Boolean,
-    saved: Boolean,
     onToggleShowKeys: (Boolean) -> Unit,
-    onSave: () -> Unit,
     onNavigate: (String) -> Unit,
 ) {
     Column(
         modifier = modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp),
+            .padding(horizontal = 16.dp),
     ) {
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(6.dp))
 
-        MenuSectionTitle("通用设置")
-        MenuNavRow(Icons.Outlined.Tune, "功能与提示词") { onNavigate("features") }
-        MenuDivider()
-        MenuNavRow(Icons.Outlined.Info, "关于") { onNavigate("about") }
-
-        Spacer(Modifier.height(28.dp))
-
-        MenuSectionTitle("模型与服务")
-        MenuNavRow(Icons.Outlined.Cloud, "API 配置") { onNavigate("api") }
-        MenuDivider()
-        MenuNavRow(Icons.Outlined.Psychology, "OpenViking 记忆") { onNavigate("ov") }
-        MenuDivider()
-        MenuNavRow(Icons.Outlined.Storage, "对象存储 / S3") { onNavigate("storage") }
-        MenuDivider()
-        MenuNavRow(Icons.Outlined.Extension, "Skill 仓库") { onNavigate("skillhub") }
-        MenuDivider()
-        MenuNavRow(Icons.Outlined.Download, "配置导入") { onNavigate("import") }
-
-        Spacer(Modifier.height(28.dp))
-
-        MenuSectionTitle("其它")
-        MenuNavRow(Icons.Outlined.Image, "显示 API Key", value = if (showKeys) "开" else "关") {
-            onToggleShowKeys(!showKeys)
+        SettingsGroup("模型与服务") {
+            SettingsNavRow(Icons.Outlined.Cloud, "API 配置") { onNavigate("api") }
+            SettingsNavRow(Icons.Outlined.Psychology, "OpenViking 记忆") { onNavigate("ov") }
+            SettingsNavRow(Icons.Outlined.Storage, "对象存储 / S3") { onNavigate("storage") }
+            SettingsNavRow(Icons.Outlined.Extension, "Skill 仓库") { onNavigate("skillhub") }
+            SettingsNavRow(Icons.Outlined.Download, "配置导入") { onNavigate("import") }
         }
 
-        Spacer(Modifier.height(20.dp))
-        PillButton(text = if (saved) "已保存" else "保存", enabled = !saved, onClick = onSave)
-        Spacer(Modifier.height(24.dp))
+        SettingsGroup("通用") {
+            SettingsNavRow(Icons.Outlined.Tune, "功能与提示词") { onNavigate("features") }
+            FormSwitchRow("显示 API Key", showKeys, onToggleShowKeys)
+            SettingsNavRow(Icons.Outlined.Info, "关于") { onNavigate("about") }
+        }
+
+        Spacer(Modifier.height(28.dp))
     }
 }
 
+/** 分组：可选灰色小标题 + 白色圆角卡片（卡片内不画分隔线，与真机一致） */
 @Composable
-private fun MenuSectionTitle(text: String) {
-    Text(
-        text,
-        fontSize = 13.sp,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(start = 2.dp, top = 4.dp, bottom = 6.dp),
-    )
+private fun SettingsGroup(
+    title: String? = null,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    if (title != null) {
+        Text(
+            title,
+            fontSize = 13.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(start = 6.dp, top = 20.dp, bottom = 8.dp),
+        )
+    }
+    Surface(
+        color = MaterialTheme.colorScheme.surface,
+        shape = RoundedCornerShape(14.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(Modifier.padding(vertical = 2.dp), content = content)
+    }
 }
 
+/** 一级菜单行：图标 + 标题 + 右侧值 + › */
 @Composable
-private fun MenuDivider() {
-    HorizontalDivider(
-        thickness = 0.6.dp,
-        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
-        modifier = Modifier.padding(start = 40.dp),
-    )
-}
-
-@Composable
-private fun MenuNavRow(icon: ImageVector, label: String, value: String? = null, onClick: () -> Unit) {
+private fun SettingsNavRow(
+    icon: ImageVector,
+    label: String,
+    value: String? = null,
+    onClick: () -> Unit,
+) {
     val cs = MaterialTheme.colorScheme
     Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable(onClick = onClick)
-            .padding(vertical = 14.dp),
+        Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 20.dp, vertical = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(icon, contentDescription = null, tint = cs.onSurface, modifier = Modifier.size(24.dp))
-        Spacer(Modifier.width(16.dp))
-        Text(label, fontSize = 16.sp, color = cs.onSurface, modifier = Modifier.weight(1f))
+        Icon(icon, contentDescription = null, tint = cs.onSurface, modifier = Modifier.size(22.dp))
+        Spacer(Modifier.width(15.dp))
+        Text(label, fontSize = 17.sp, color = cs.onSurface, modifier = Modifier.weight(1f))
         if (value != null) {
-            Text(value, fontSize = 14.sp, color = cs.onSurfaceVariant)
-            Spacer(Modifier.width(4.dp))
+            Text(value, fontSize = 16.sp, color = cs.onSurfaceVariant)
+            Spacer(Modifier.width(6.dp))
         }
         Icon(
             Icons.AutoMirrored.Outlined.KeyboardArrowRight,
             contentDescription = null,
-            tint = cs.onSurface.copy(alpha = 0.35f),
-            modifier = Modifier.size(20.dp),
+            tint = cs.onSurface.copy(alpha = 0.28f),
+            modifier = Modifier.size(18.dp),
         )
     }
 }
@@ -441,32 +477,34 @@ private fun ApiPage(
     onKey: (String) -> Unit, onBaseUrl: (String) -> Unit, onModel: (String) -> Unit,
     onModelMenuExpanded: (Boolean) -> Unit, onRefreshModels: (() -> Unit),
 ) {
-    FormTitle("DeepSeek API")
-    Spacer(Modifier.height(2.dp))
-    FormField("API Key", deepSeekKey, onKey, masked = !showKeys)
-    FormField("Base URL", deepSeekBaseUrl, onBaseUrl)
-    Box {
-        FormField(
-            label = "模型",
-            value = deepSeekModel,
-            onValueChange = {},
-            readOnly = true,
-            onClick = { if (modelOptions.isNotEmpty()) onModelMenuExpanded(true) },
-            trailing = {
-                IconButton(onClick = onRefreshModels, enabled = !modelLoading) {
-                    if (modelLoading) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                    else Icon(Icons.Default.Refresh, contentDescription = "刷新模型列表",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant)
+    Spacer(Modifier.height(6.dp))
+    SettingsGroup("DeepSeek API") {
+        FormField("API Key", deepSeekKey, onKey, masked = !showKeys)
+        FormField("Base URL", deepSeekBaseUrl, onBaseUrl)
+        Box {
+            FormField(
+                label = "模型",
+                value = deepSeekModel,
+                onValueChange = {},
+                readOnly = true,
+                onClick = { if (modelOptions.isNotEmpty()) onModelMenuExpanded(true) },
+                trailing = {
+                    IconButton(onClick = onRefreshModels, enabled = !modelLoading) {
+                        if (modelLoading) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                        else Icon(Icons.Default.Refresh, contentDescription = "刷新模型列表",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                },
+            )
+            DropdownMenu(expanded = modelMenuExpanded, onDismissRequest = { onModelMenuExpanded(false) }) {
+                modelOptions.forEach { m ->
+                    DropdownMenuItem(text = { Text(m) }, onClick = { onModel(m); onModelMenuExpanded(false) })
                 }
-            },
-        )
-        DropdownMenu(expanded = modelMenuExpanded, onDismissRequest = { onModelMenuExpanded(false) }) {
-            modelOptions.forEach { m ->
-                DropdownMenuItem(text = { Text(m) }, onClick = { onModel(m); onModelMenuExpanded(false) })
             }
         }
     }
     if (modelError != null) FormNote(modelError, isError = true)
+    Spacer(Modifier.height(24.dp))
 }
 
 @Composable
@@ -481,31 +519,32 @@ private fun OvPage(
     onWorkspacePeer: (Boolean) -> Unit,
     onRecallQuestion: (Boolean) -> Unit, onRecallStep: (Boolean) -> Unit, onCommit: (Boolean) -> Unit,
 ) {
-    FormTitle("连接")
-    Spacer(Modifier.height(2.dp))
-    FormField("服务器地址", ovUrl, onUrl)
-    FormField("API Key", ovKey, onKey, masked = !showKeys)
-    FormField("用户名", ovUser, onUser)
+    Spacer(Modifier.height(6.dp))
+    SettingsGroup("连接") {
+        FormField("服务器地址", ovUrl, onUrl)
+        FormField("API Key", ovKey, onKey, masked = !showKeys)
+        FormField("用户名", ovUser, onUser)
+    }
+
+    SettingsGroup("自动记忆") {
+        FormSwitchRow("对问题检索（每轮）", ovRecallQuestion, onRecallQuestion)
+        FormSwitchRow("对问题/助手/工具检索（每步）", ovRecallStep, onRecallStep)
+        FormSwitchRow("会话自动抓取并提交（commit）", ovCommit, onCommit)
+        FormField("匹配阈值 (0-1)", ovFindThreshold, onValueChange = { v ->
+            onFindThreshold(v.filter { c -> c.isDigit() || c == '.' })
+        })
+        FormField("注入条数 (0=关闭)", ovFindLimit, onValueChange = { v ->
+            val filtered = v.filter { c -> c.isDigit() }
+            if ((filtered.toIntOrNull() ?: 0) in 0..10) onFindLimit(filtered)
+        })
+    }
+
+    SettingsGroup("记忆高级") {
+        FormField("Peer ID（留空则按应用自动派生）", ovPeerId, onPeerId)
+        FormSwitchRow("按应用派生 Peer", ovWorkspacePeer, onWorkspacePeer)
+    }
 
     Spacer(Modifier.height(24.dp))
-    FormTitle("自动记忆")
-    Spacer(Modifier.height(2.dp))
-    FormSwitchRow("对问题检索（每轮）", ovRecallQuestion, onRecallQuestion)
-    FormSwitchRow("对问题/助手/工具检索（每步）", ovRecallStep, onRecallStep)
-    FormSwitchRow("会话自动抓取并提交（commit）", ovCommit, onCommit)
-    FormField("匹配阈值 (0-1)", ovFindThreshold, onValueChange = { v ->
-        onFindThreshold(v.filter { c -> c.isDigit() || c == '.' })
-    })
-    FormField("注入条数 (0=关闭)", ovFindLimit, onValueChange = { v ->
-        val filtered = v.filter { c -> c.isDigit() }
-        if ((filtered.toIntOrNull() ?: 0) in 0..10) onFindLimit(filtered)
-    })
-
-    Spacer(Modifier.height(24.dp))
-    FormTitle("记忆高级")
-    Spacer(Modifier.height(2.dp))
-    FormField("Peer ID（留空则按应用自动派生）", ovPeerId, onPeerId)
-    FormSwitchRow("按应用派生 Peer", ovWorkspacePeer, onWorkspacePeer)
 }
 
 @Composable
@@ -513,11 +552,13 @@ private fun StoragePage(
     s3Endpoint: String, s3AccessKey: String, s3SecretKey: String, showKeys: Boolean,
     onEndpoint: (String) -> Unit, onAccessKey: (String) -> Unit, onSecretKey: (String) -> Unit,
 ) {
-    FormTitle("连接设置")
-    Spacer(Modifier.height(2.dp))
-    FormField("端点", s3Endpoint, onEndpoint)
-    FormField("访问密钥 ID", s3AccessKey, onAccessKey, masked = !showKeys)
-    FormField("秘密访问密钥", s3SecretKey, onSecretKey, masked = !showKeys)
+    Spacer(Modifier.height(6.dp))
+    SettingsGroup("连接设置") {
+        FormField("端点", s3Endpoint, onEndpoint)
+        FormField("访问密钥 ID", s3AccessKey, onAccessKey, masked = !showKeys)
+        FormField("秘密访问密钥", s3SecretKey, onSecretKey, masked = !showKeys)
+    }
+    Spacer(Modifier.height(24.dp))
 }
 
 @Composable
@@ -555,93 +596,86 @@ private fun SkillHubPage(
 
     // ---------------- 仓库设置 ----------------
 
-    FormTitle("远程技能仓库")
-    Spacer(Modifier.height(2.dp))
-    FormField("仓库 (owner/repo)", repo, onRepo)
-    FormField("分支", branch, onBranch)
-    FormField("类型 (github/gitea，留空自动)", type, onType)
-    FormField("Gitea 基址 (如 http://192.168.30.181:3000)", base, onBase)
-    FormField("访问令牌（私有仓库，可选）", token, onToken, masked = !showKeys)
-    Spacer(Modifier.height(8.dp))
-    Text(
-        "配置 Gitea 基址后默认按 gitea 处理；同名技能为覆盖安装（会保留本地 config.json）。" +
-            "下载即在进程内执行其代码，仅从可信来源安装。",
-        fontSize = 12.sp,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
+    Spacer(Modifier.height(6.dp))
+    SettingsGroup("远程技能仓库") {
+        FormField("仓库 (owner/repo)", repo, onRepo)
+        FormField("分支", branch, onBranch)
+        FormField("类型 (github/gitea，留空自动)", type, onType)
+        FormField("Gitea 基址 (如 http://192.168.30.181:3000)", base, onBase)
+        FormField("访问令牌（私有仓库，可选）", token, onToken, masked = !showKeys)
+        FormHint(
+            "配置 Gitea 基址后默认按 gitea 处理；同名技能为覆盖安装（会保留本地 config.json）。"
+                + "下载即在进程内执行其代码，仅从可信来源安装。"
+        )
+    }
 
     // ---------------- 已安装技能 ----------------
 
-    Spacer(Modifier.height(28.dp))
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f)) {
-            FormTitle("已安装 Skills（${installed.size}）")
-            Text(
-                "关闭开关即对 LLM 隐藏（改写 # status: disable，文件保留）",
-                fontSize = 11.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        IconButton(onClick = { localLoading = true; reloadLocal() }) {
-            if (localLoading) {
-                CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-            } else {
-                Icon(
-                    Icons.Default.Refresh,
-                    contentDescription = "刷新已安装列表",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+    SettingsHeaderRow(
+        title = "已安装 Skills（${installed.size}）",
+        subtitle = "关闭开关即对 LLM 隐藏（改写 # status: disable，文件保留）",
+        trailing = {
+            IconButton(onClick = { localLoading = true; reloadLocal() }) {
+                if (localLoading) {
+                    CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                } else {
+                    Icon(
+                        Icons.Default.Refresh,
+                        contentDescription = "刷新已安装列表",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        },
+    )
+    SettingsGroup {
+        when {
+            localLoading -> Box(Modifier.fillMaxWidth().padding(20.dp)) {
+                LinearProgressIndicator(Modifier.fillMaxWidth())
+            }
+            installed.isEmpty() -> FormHint("暂无已安装 skill，可从下方远程仓库下载。")
+            else -> installed.forEach { skill ->
+                InstalledSkillRow(
+                    skill = skill,
+                    onToggle = { enabled ->
+                        scope.launch {
+                            val ok = withContext(Dispatchers.IO) {
+                                SkillStore.setEnabled(context, skill.name, enabled)
+                            }
+                            if (ok) {
+                                localMessage = (
+                                    if (enabled) "已启用「${skill.name}」，LLM 可再次调用"
+                                    else "已隐藏「${skill.name}」，LLM 不再可见"
+                                    ) to false
+                                installed = installed.map {
+                                    if (it.name == skill.name) it.copy(enabled = enabled) else it
+                                }
+                                remote = remote.map {
+                                    if (it.name == skill.name) it.copy(enabled = enabled) else it
+                                }
+                            } else {
+                                localMessage = ("操作失败：无法写入 ${skill.path}") to true
+                            }
+                        }
+                    },
+                    onDelete = { pendingDelete = skill },
                 )
             }
-        }
-    }
-
-    when {
-        localLoading -> LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 6.dp))
-        installed.isEmpty() -> FormNote("暂无已安装 skill，可从下方远程仓库下载。")
-        else -> installed.forEach { skill ->
-            InstalledSkillRow(
-                skill = skill,
-                onToggle = { enabled ->
-                    scope.launch {
-                        val ok = withContext(Dispatchers.IO) {
-                            SkillStore.setEnabled(context, skill.name, enabled)
-                        }
-                        if (ok) {
-                            localMessage = (
-                                if (enabled) "已启用「${skill.name}」，LLM 可再次调用"
-                                else "已隐藏「${skill.name}」，LLM 不再可见"
-                                ) to false
-                            installed = installed.map {
-                                if (it.name == skill.name) it.copy(enabled = enabled) else it
-                            }
-                            remote = remote.map {
-                                if (it.name == skill.name) it.copy(enabled = enabled) else it
-                            }
-                        } else {
-                            localMessage = ("操作失败：无法写入 ${skill.path}") to true
-                        }
-                    }
-                },
-                onDelete = { pendingDelete = skill },
-            )
         }
     }
     localMessage?.let { (text, isError) -> FormNote(text, isError) }
 
     // ---------------- 远程技能 ----------------
 
-    Spacer(Modifier.height(28.dp))
-    FormTitle("远程仓库")
-    Text(
-        config.label(),
-        fontSize = 11.sp,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(bottom = 8.dp),
+    SettingsHeaderRow(
+        title = "远程仓库",
+        subtitle = config.label(),
     )
     PillButton(
         text = if (remoteLoaded) "刷新远程列表" else "获取远程技能列表",
         icon = Icons.Outlined.CloudDownload,
         loading = remoteLoading,
+        modifier = Modifier.padding(bottom = 10.dp),
     ) {
         scope.launch {
             remoteLoading = true
@@ -665,37 +699,41 @@ private fun SkillHubPage(
         if (remote.isEmpty()) {
             FormNote("仓库索引为空")
         } else {
-            remote.forEach { item ->
-                RemoteSkillRow(
-                    skill = item,
-                    busy = busySkill == item.name,
-                    onInstall = {
-                        scope.launch {
-                            busySkill = item.name
-                            remoteMessage = null
-                            try {
-                                val result = withContext(Dispatchers.IO) {
-                                    SkillRepository(context, config).install(item.name)
+            SettingsGroup {
+                remote.forEach { item ->
+                    RemoteSkillRow(
+                        skill = item,
+                        busy = busySkill == item.name,
+                        onInstall = {
+                            scope.launch {
+                                busySkill = item.name
+                                remoteMessage = null
+                                try {
+                                    val result = withContext(Dispatchers.IO) {
+                                        SkillRepository(context, config).install(item.name)
+                                    }
+                                    installed = withContext(Dispatchers.IO) { SkillStore.list(context) }
+                                    remote = remote.map {
+                                        if (it.name == item.name) it.copy(installed = true, enabled = true) else it
+                                    }
+                                    val extra = if (result.configCreated) "；已生成 config.json，请按需填写" else ""
+                                    remoteMessage = (
+                                        "已下载「${result.name}」（${result.files.size} 个文件）" + extra
+                                        ) to false
+                                } catch (e: Exception) {
+                                    remoteMessage = ("下载失败：" + (e.message ?: e.javaClass.simpleName)) to true
+                                } finally {
+                                    busySkill = null
                                 }
-                                installed = withContext(Dispatchers.IO) { SkillStore.list(context) }
-                                remote = remote.map {
-                                    if (it.name == item.name) it.copy(installed = true, enabled = true) else it
-                                }
-                                val extra = if (result.configCreated) "；已生成 config.json，请按需填写" else ""
-                                remoteMessage = (
-                                    "已下载「${result.name}」（${result.files.size} 个文件）" + extra
-                                    ) to false
-                            } catch (e: Exception) {
-                                remoteMessage = ("下载失败：" + (e.message ?: e.javaClass.simpleName)) to true
-                            } finally {
-                                busySkill = null
                             }
-                        }
-                    },
-                )
+                        },
+                    )
+                }
             }
         }
     }
+
+    Spacer(Modifier.height(24.dp))
 
     // ---------------- 删除确认 ----------------
 
@@ -732,7 +770,6 @@ private fun SkillHubPage(
     }
 }
 
-/** 已安装 skill 行：名称 / 说明 / 启用开关 / 删除。 */
 @Composable
 private fun InstalledSkillRow(
     skill: SkillStore.InstalledSkill,
@@ -741,7 +778,7 @@ private fun InstalledSkillRow(
 ) {
     val cs = MaterialTheme.colorScheme
     Row(
-        Modifier.fillMaxWidth().padding(vertical = 10.dp),
+        Modifier.fillMaxWidth().padding(start = 20.dp, end = 12.dp, top = 12.dp, bottom = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
@@ -788,7 +825,6 @@ private fun InstalledSkillRow(
             )
         }
     }
-    HorizontalDivider(thickness = 0.6.dp, color = cs.outlineVariant.copy(alpha = 0.5f))
 }
 
 /** 远程 skill 行：名称 / 说明 / 平台依赖 / 下载按钮。 */
@@ -800,7 +836,7 @@ private fun RemoteSkillRow(
 ) {
     val cs = MaterialTheme.colorScheme
     Row(
-        Modifier.fillMaxWidth().padding(vertical = 10.dp),
+        Modifier.fillMaxWidth().padding(start = 20.dp, end = 12.dp, top = 12.dp, bottom = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
@@ -853,7 +889,6 @@ private fun RemoteSkillRow(
             }
         }
     }
-    HorizontalDivider(thickness = 0.6.dp, color = cs.outlineVariant.copy(alpha = 0.5f))
 }
 
 @Composable
@@ -879,26 +914,28 @@ private fun FeaturesPage(
     onChatUiStream: (Boolean) -> Unit, onShowReasoning: (Boolean) -> Unit,
     onShowToolCalls: (Boolean) -> Unit, onShowToolEdit: (Boolean) -> Unit,
 ) {
-    FormTitle("聊天界面")
-    Spacer(Modifier.height(2.dp))
-    FormSwitchRow("新版聊天界面（思考流）", chatUiStream, onChatUiStream)
-    FormSwitchRow("展示思维链内容", showReasoning, onShowReasoning)
-    FormSwitchRow("展示工具调用", showToolCalls, onShowToolCalls)
-    FormSwitchRow("展示编辑工具（script 代码 diff）", showToolEdit, onShowToolEdit)
+    Spacer(Modifier.height(6.dp))
+    SettingsGroup("聊天界面") {
+        FormSwitchRow("新版聊天界面（思考流）", chatUiStream, onChatUiStream)
+        FormSwitchRow("展示思维链内容", showReasoning, onShowReasoning)
+        FormSwitchRow("展示工具调用", showToolCalls, onShowToolCalls)
+        FormSwitchRow("展示编辑工具（script 代码 diff）", showToolEdit, onShowToolEdit)
+    }
+
+    SettingsGroup("功能") {
+        FormField("最大工具调用轮次", maxRounds, onValueChange = { onMaxRounds(it.filter { c -> c.isDigit() }) })
+        FormField("思考熔断（分钟，0=关闭）", thinkingTimeout, onValueChange = { onThinkingTimeout(it.filter { c -> c.isDigit() }) })
+        FormSwitchRow("后台保活", backgroundEnabled, onBackgroundEnabled)
+        FormSwitchRow("显示注入信息（skill 名单 / 记忆召回）", showInjected, onShowInjected)
+        FormSwitchRow("跳过证书验证（自签名 HTTPS）", skipSsl, onSkipSsl)
+    }
+
+    SettingsGroup("用户提示") {
+        FormField("自定义提示", userTips, onUserTips, singleLine = false)
+        FormHint("每个会话注入一次，新会话生效")
+    }
 
     Spacer(Modifier.height(24.dp))
-    FormTitle("功能")
-    Spacer(Modifier.height(2.dp))
-    FormField("最大工具调用轮次", maxRounds, onValueChange = { onMaxRounds(it.filter { c -> c.isDigit() }) })
-    FormField("思考熔断（分钟，0=关闭）", thinkingTimeout, onValueChange = { onThinkingTimeout(it.filter { c -> c.isDigit() }) })
-    FormSwitchRow("后台保活", backgroundEnabled, onBackgroundEnabled)
-    FormSwitchRow("显示注入信息（skill 名单 / 记忆召回）", showInjected, onShowInjected)
-    FormSwitchRow("跳过证书验证（自签名 HTTPS）", skipSsl, onSkipSsl)
-
-    Spacer(Modifier.height(24.dp))
-    FormTitle("用户提示")
-    Spacer(Modifier.height(2.dp))
-    FormField("自定义提示（每会话注入一次，新会话生效）", userTips, onUserTips, singleLine = false)
 }
 
 @Composable
@@ -910,27 +947,28 @@ private fun ImportPage(
     onRefreshFromPrefs: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
-    FormTitle("配置导入")
-    Spacer(Modifier.height(2.dp))
-    FormField("配置地址 (JSON)", configUrl, onConfigUrl)
-    if (accountOptions.isNotEmpty()) {
-        Box {
-            FormField(
-                label = "账号",
-                value = selectedAccount ?: "选择账号",
-                onValueChange = {},
-                readOnly = true,
-                onClick = { onAccountMenuExpanded(true) },
-            )
-            DropdownMenu(expanded = accountMenuExpanded, onDismissRequest = { onAccountMenuExpanded(false) }) {
-                accountOptions.forEach { a ->
-                    DropdownMenuItem(text = { Text(a) }, onClick = { onSelectedAccount(a); onAccountMenuExpanded(false) })
+    Spacer(Modifier.height(6.dp))
+    SettingsGroup("配置导入") {
+        FormField("配置地址 (JSON)", configUrl, onConfigUrl)
+        if (accountOptions.isNotEmpty()) {
+            Box {
+                FormField(
+                    label = "账号",
+                    value = selectedAccount ?: "选择账号",
+                    onValueChange = {},
+                    readOnly = true,
+                    onClick = { onAccountMenuExpanded(true) },
+                )
+                DropdownMenu(expanded = accountMenuExpanded, onDismissRequest = { onAccountMenuExpanded(false) }) {
+                    accountOptions.forEach { a ->
+                        DropdownMenuItem(text = { Text(a) }, onClick = { onSelectedAccount(a); onAccountMenuExpanded(false) })
+                    }
                 }
             }
         }
     }
 
-    Spacer(Modifier.height(20.dp))
+    Spacer(Modifier.height(16.dp))
     PillButton(text = "加载", loading = loadingAccounts, enabled = configUrl.isNotBlank()) {
         onLoadingAccounts(true); onImportMsg(null)
         scope.launch {
@@ -966,102 +1004,141 @@ private fun ImportPage(
         }
     }
     if (importMsg != null) FormNote(importMsg, isError = importMsg.startsWith("加载失败") || importMsg.startsWith("应用失败"))
+    Spacer(Modifier.height(24.dp))
 }
 
 @Composable
 private fun AboutPage(updateState: UpdateState, onUpdateState: (UpdateState) -> Unit) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
-    FormTitle("说明")
     Spacer(Modifier.height(6.dp))
-    Text(
-        "• DeepSeek API Key 是必填项\n• OpenViking 用于长期记忆（可选）\n• Python 首次使用自动解压\n• 设置保存后立即生效",
-        fontSize = 13.sp,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
+    SettingsGroup("说明") {
+        CardText(
+            "• DeepSeek API Key 是必填项\n"
+                + "• OpenViking 用于长期记忆（可选）\n"
+                + "• Python 首次使用自动解压\n"
+                + "• 设置保存后立即生效"
+        )
+    }
 
-    Spacer(Modifier.height(24.dp))
-    FormTitle("版本")
-    Spacer(Modifier.height(8.dp))
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f)) {
-            Text("版本 ${BuildConfig.VERSION_NAME}", fontSize = 16.sp, color = MaterialTheme.colorScheme.onSurface)
-            Text("Build ${BuildConfig.VERSION_CODE}", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        when (val state = updateState) {
-            is UpdateState.Checking -> CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
-            is UpdateState.Latest -> Text("已是最新", fontSize = 13.sp, color = MaterialTheme.colorScheme.primary)
-            is UpdateState.Available -> Button(
-                onClick = { openInBrowser(context, state.url) },
-                shape = RoundedCornerShape(20.dp),
-            ) { Text("浏览器下载 ${state.version}") }
-            is UpdateState.Error -> Text(state.message, fontSize = 13.sp, color = MaterialTheme.colorScheme.error)
-            is UpdateState.Idle -> OutlinedButton(
-                onClick = {
-                    onUpdateState(UpdateState.Checking)
-                    scope.launch {
-                        val info = AppUpdater.checkUpdate()
-                        onUpdateState(when {
-                            info.error.isNotBlank() -> UpdateState.Error(info.error)
-                            info.hasUpdate -> UpdateState.Available(
-                                info.latestVersion,
-                                info.downloadUrl,
-                                info.releaseNotes,
-                            )
-                            else -> UpdateState.Latest
-                        })
-                    }
-                },
-                shape = RoundedCornerShape(20.dp),
-            ) { Text("检查更新") }
+    SettingsGroup("版本") {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text("版本 ${BuildConfig.VERSION_NAME}", fontSize = 17.sp,
+                    color = MaterialTheme.colorScheme.onSurface)
+                Text("Build ${BuildConfig.VERSION_CODE}", fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            when (val state = updateState) {
+                is UpdateState.Checking -> CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                is UpdateState.Latest -> Text("已是最新", fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.primary)
+                is UpdateState.Available -> Button(
+                    onClick = { openInBrowser(context, state.url) },
+                    shape = RoundedCornerShape(20.dp),
+                ) { Text("浏览器下载 ${state.version}") }
+                is UpdateState.Error -> Text(state.message, fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.error)
+                is UpdateState.Idle -> OutlinedButton(
+                    onClick = {
+                        onUpdateState(UpdateState.Checking)
+                        scope.launch {
+                            val info = AppUpdater.checkUpdate()
+                            onUpdateState(when {
+                                info.error.isNotBlank() -> UpdateState.Error(info.error)
+                                info.hasUpdate -> UpdateState.Available(
+                                    info.latestVersion,
+                                    info.downloadUrl,
+                                    info.releaseNotes,
+                                )
+                                else -> UpdateState.Latest
+                            })
+                        }
+                    },
+                    shape = RoundedCornerShape(20.dp),
+                ) { Text("检查更新") }
+            }
         }
     }
 
     // 有新版本时展示发布说明（来自 Release 正文）
     val available = updateState as? UpdateState.Available
     if (available != null && available.notes.isNotBlank()) {
-        Spacer(Modifier.height(20.dp))
-        FormTitle("更新内容")
-        Spacer(Modifier.height(6.dp))
-        Text(
-            available.notes,
-            fontSize = 13.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        SettingsGroup("更新内容") { CardText(available.notes) }
     }
+    Spacer(Modifier.height(24.dp))
 }
 
-/** 新版本跳浏览器下载：应用内不再下载/安装 APK */
-private fun openInBrowser(context: Context, url: String) {
-    if (url.isBlank()) {
-        Toast.makeText(context, "没有可用的下载地址", Toast.LENGTH_SHORT).show()
-        return
-    }
-    try {
-        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-    } catch (e: Exception) {
-        Toast.makeText(
-            context,
-            "无法打开浏览器: ${e.message ?: e.javaClass.simpleName}",
-            Toast.LENGTH_LONG,
-        ).show()
-    }
-}
+// ==================== 卡片内的行与控件 ====================
 
-// ==================== 小工具 ====================
-
+/** 带副标题与右侧动作的分组头（与 SettingsGroup 的小标题同一基线） */
 @Composable
-private fun FormTitle(text: String) {
+private fun SettingsHeaderRow(
+    title: String,
+    subtitle: String? = null,
+    trailing: (@Composable () -> Unit)? = null,
+) {
+    Row(
+        Modifier.fillMaxWidth().padding(start = 6.dp, top = 22.dp, bottom = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(title, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (subtitle != null) {
+                Text(
+                    subtitle,
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                    modifier = Modifier.padding(top = 2.dp),
+                )
+            }
+        }
+        trailing?.invoke()
+    }
+}
+
+/** 卡片内的纯文本块 */
+@Composable
+private fun CardText(text: String) {
     Text(
         text,
-        fontSize = 13.sp,
+        fontSize = 14.sp,
+        lineHeight = 22.sp,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(top = 4.dp),
+        modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
+    )
+}
+
+/** 卡片内说明文字（灰色小字） */
+@Composable
+private fun FormNote(text: String, isError: Boolean = false) {
+    Text(
+        text,
+        fontSize = 12.sp,
+        lineHeight = 18.sp,
+        color = if (isError) MaterialTheme.colorScheme.error
+        else MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(horizontal = 6.dp, vertical = 8.dp),
+    )
+}
+
+/** 卡片内提示（紧贴字段下方，左对齐、留白小） */
+@Composable
+private fun FormHint(text: String) {
+    Text(
+        text,
+        fontSize = 12.sp,
+        lineHeight = 18.sp,
+        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f),
+        modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 14.dp),
     )
 }
 
 /**
- * 表单字段：标签在上、无边框输入值在下，字段底部一条发丝分隔线。
+ * 卡片内字段行：标签在上（13sp 灰）、值在下（17sp），无边框无分隔线。
  * masked=密码遮罩；readOnly+onClick=只读可点击（用于选择/弹菜单）；trailing=右侧附加控件。
  */
 @Composable
@@ -1077,17 +1154,21 @@ private fun FormField(
     trailing: (@Composable () -> Unit)? = null,
 ) {
     val cs = MaterialTheme.colorScheme
-    Column(modifier.fillMaxWidth().padding(top = 14.dp)) {
+    Column(
+        modifier
+            .fillMaxWidth()
+            .padding(start = 20.dp, end = 12.dp, top = 12.dp, bottom = 12.dp)
+    ) {
         Text(label, fontSize = 13.sp, color = cs.onSurfaceVariant)
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(5.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.weight(1f)) {
+            Box(Modifier.weight(1f).padding(end = 8.dp)) {
                 BasicTextField(
                     value = value,
                     onValueChange = onValueChange,
                     readOnly = readOnly,
                     singleLine = singleLine,
-                    textStyle = TextStyle(fontSize = 17.sp, color = cs.onSurface),
+                    textStyle = TextStyle(fontSize = 17.sp, lineHeight = 24.sp, color = cs.onSurface),
                     cursorBrush = SolidColor(cs.primary),
                     visualTransformation = if (masked) PasswordVisualTransformation() else VisualTransformation.None,
                     modifier = Modifier.fillMaxWidth(),
@@ -1096,36 +1177,45 @@ private fun FormField(
                     Box(Modifier.matchParentSize().clickable { onClick() })
                 }
             }
-            if (trailing != null) {
-                Spacer(Modifier.width(8.dp))
-                trailing()
+            if (trailing != null) trailing()
+        }
+    }
+}
+
+/** 卡片内开关行：标题 + 右侧 Switch（无分隔线） */
+@Composable
+private fun FormSwitchRow(
+    label: String,
+    checked: Boolean,
+    onChecked: (Boolean) -> Unit,
+    supporting: String? = null,
+) {
+    val cs = MaterialTheme.colorScheme
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(start = 20.dp, end = 12.dp, top = 8.dp, bottom = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(label, fontSize = 17.sp, color = cs.onSurface)
+            if (supporting != null) {
+                Text(supporting, fontSize = 12.sp, color = cs.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 2.dp))
             }
         }
-        Spacer(Modifier.height(12.dp))
-        HorizontalDivider(thickness = 0.6.dp, color = cs.outlineVariant.copy(alpha = 0.5f))
+        Switch(
+            checked = checked,
+            onCheckedChange = onChecked,
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = Color.White,
+                checkedTrackColor = cs.primary,
+            ),
+        )
     }
 }
 
-@Composable
-private fun FormSwitchRow(label: String, checked: Boolean, onChecked: (Boolean) -> Unit) {
-    val cs = MaterialTheme.colorScheme
-    Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(label, fontSize = 16.sp, color = cs.onSurface, modifier = Modifier.weight(1f))
-        Switch(checked = checked, onCheckedChange = onChecked)
-    }
-    HorizontalDivider(thickness = 0.6.dp, color = cs.outlineVariant.copy(alpha = 0.5f))
-}
-
-@Composable
-private fun FormNote(text: String, isError: Boolean = false) {
-    Text(
-        text,
-        fontSize = 12.sp,
-        color = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(top = 8.dp),
-    )
-}
-
+/** 主按钮：品牌蓝、圆角 28、通栏 */
 @Composable
 private fun PillButton(
     text: String,
@@ -1151,6 +1241,23 @@ private fun PillButton(
             }
             Text(text, fontSize = 16.sp)
         }
+    }
+}
+
+/** 新版本跳浏览器下载：应用内不再下载/安装 APK */
+private fun openInBrowser(context: Context, url: String) {
+    if (url.isBlank()) {
+        Toast.makeText(context, "没有可用的下载地址", Toast.LENGTH_SHORT).show()
+        return
+    }
+    try {
+        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+    } catch (e: Exception) {
+        Toast.makeText(
+            context,
+            "无法打开浏览器: " + (e.message ?: e.javaClass.simpleName),
+            Toast.LENGTH_LONG,
+        ).show()
     }
 }
 
