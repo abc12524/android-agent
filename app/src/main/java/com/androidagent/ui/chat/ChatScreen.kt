@@ -18,7 +18,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.awaitHorizontalTouchSlopOrCancellation
+import androidx.compose.foundation.gestures.awaitTouchSlopOrCancellation
 import androidx.compose.foundation.gestures.horizontalDrag
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -77,6 +77,7 @@ import java.io.File
 import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.*
+import kotlin.math.abs
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -506,7 +507,7 @@ private fun SessionDrawer(
     val validSessions = sessions.filter { it.messageCount > 0 }
     val groups = groupSessions(validSessions)
 
-    // 真机：抽屉约占 86%，纯白、无品牌头部、无「新对话」胶囊（新建走顶栏 ⊕）
+    // 真机：抽屉约占 80%，纯白、无品牌头部、无「新对话」胶囊（新建走顶栏 ⊕）
     Column(
         Modifier
             .fillMaxSize()
@@ -561,8 +562,8 @@ private fun SessionDrawer(
 }
 
 /**
- * 推拉式抽屉：面板铺在下层（左 86%），主界面整体右移、变圆角卡片压在抽屉之上。
- * 关闭时从左边缘右拉打开，打开后向左推关闭，松手按过半与否吸附；与原型行为一致。
+ * 推拉式抽屉：面板铺在下层（左 80%），主界面整体右移、变圆角卡片压在抽屉之上。
+ * 关闭时右拉打开、打开时左推关闭（不限定起手位置，只认方向），松手按过半与否吸附。
  */
 @Composable
 private fun SwipeAwayDrawer(
@@ -575,11 +576,10 @@ private fun SwipeAwayDrawer(
     val scope = rememberCoroutineScope()
     val density = LocalDensity.current
     var widthPx by remember { mutableStateOf(0f) }
-    val panelFraction = 0.86f
+    val panelFraction = 0.80f
     val panelWidthPx = widthPx * panelFraction
     val cornerPx = with(density) { 24.dp.toPx() }
     val shadowPx = with(density) { 12.dp.toPx() }
-    val edgePx = with(density) { 22.dp.toPx() }
     val ease = CubicBezierEasing(0.22f, 0.61f, 0.36f, 1f)
 
     fun settleTo(target: Float) {
@@ -601,9 +601,8 @@ private fun SwipeAwayDrawer(
                 if (widthPx <= 0f) return@pointerInput
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
-                    // 关闭时只认左边缘起手（右侧拖动留给列表/输入），打开时任意位置都能推回
-                    if (progress.value <= 0.01f && down.position.x > edgePx) return@awaitEachGesture
-                    // 累计进度改用局部变量，避免每帧读取 Animatable 时拿到上一帧的旧值导致抖动
+                    val wasOpen = progress.value > 0.5f
+                    // 累计进度用局部变量，避免每帧读 Animatable 拿到上一帧旧值而抖动
                     var latest = progress.value
                     val applyDelta: (Float) -> Unit = { deltaPx ->
                         if (deltaPx != 0f) {
@@ -611,10 +610,20 @@ private fun SwipeAwayDrawer(
                             scope.launch { progress.snapTo(latest) }
                         }
                     }
-                    val moved = awaitHorizontalTouchSlopOrCancellation(down.id) { change, over ->
-                        change.consume()
-                        applyDelta(over)
+                    // 不限定起手位置（手势导航把左边缘 20dp 划给系统返回，边缘判定必然失效），
+                    // 改为只认「方向」：关闭时右拉才算打开、打开时左推才算关闭，
+                    // 竖向滚动的 over.y 会更大，直接放过；代码块等横向可滚子项会先消费，这里拿到 null。
+                    var accepted = false
+                    val moved = awaitTouchSlopOrCancellation(down.id) { change, over ->
+                        val horizontal = abs(over.x) > abs(over.y)
+                        val towardOpen = over.x > 0f
+                        if (horizontal && towardOpen != wasOpen) {
+                            accepted = true
+                            change.consume()
+                            applyDelta(over.x)
+                        }
                     } ?: return@awaitEachGesture
+                    if (!accepted) return@awaitEachGesture
                     // 注意：horizontalDrag 的回调只给 PointerInputChange，位移需自行用 positionChange()
                     horizontalDrag(moved.id) { change ->
                         val dx = change.positionChange().x
@@ -625,7 +634,7 @@ private fun SwipeAwayDrawer(
                 }
             },
     ) {
-        // 下层：抽屉面板（86% 宽，关闭时整体移到屏幕左侧之外）
+        // 下层：抽屉面板（80% 宽，关闭时整体移到屏幕左侧之外）
         Box(
             Modifier
                 .fillMaxHeight()
