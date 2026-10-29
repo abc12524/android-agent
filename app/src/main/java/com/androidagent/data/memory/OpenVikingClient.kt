@@ -31,6 +31,33 @@ class OpenVikingClient {
 
     companion object {
         private var peerCache: String? = null
+
+        /** 缓存版（HTTP 头用）；设置变更需重启进程才刷新 */
+        fun peerId(): String {
+            peerCache?.let { return it }
+            val peer = resolvePeerId()
+            peerCache = peer
+            return peer
+        }
+
+        /**
+         * 按当前设置直接解析 actor peer：显式 ovPeerId > 按包名派生 ws-* > 回退 default
+         * （对齐官方 DSH 插件）。不走缓存，供需要「设置一改就生效」的调用方使用
+         * （例如把 peer 继承进 skill 的 config.json）。
+         */
+        fun resolvePeerId(): String {
+            val explicit = AppPreferences.ovPeerId.trim()
+            return if (explicit.isNotBlank()) {
+                explicit
+            } else if (AppPreferences.ovWorkspacePeer) {
+                val digest = MessageDigest.getInstance("MD5")
+                    .digest(BuildConfig.APPLICATION_ID.toByteArray(Charsets.UTF_8))
+                    .joinToString("") { "%02x".format(it) }.take(12)
+                "ws-$digest"
+            } else {
+                "default"
+            }
+        }
     }
 
     private fun getBaseUrl(): String = AppPreferences.openVikingUrl.trimEnd('/')
@@ -44,24 +71,6 @@ class OpenVikingClient {
             "X-OpenViking-User" to user,
             "X-OpenViking-Peer" to peerId()
         )
-    }
-
-    /** 解析当前 actor peer：显式 ovPeerId > 按包名派生 ws-* > 回退 default（对齐官方 DSH 插件） */
-    fun peerId(): String {
-        peerCache?.let { return it }
-        val explicit = AppPreferences.ovPeerId.trim()
-        val peer = if (explicit.isNotBlank()) {
-            explicit
-        } else if (AppPreferences.ovWorkspacePeer) {
-            val digest = MessageDigest.getInstance("MD5")
-                .digest(BuildConfig.APPLICATION_ID.toByteArray(Charsets.UTF_8))
-                .joinToString("") { "%02x".format(it) }.take(12)
-            "ws-$digest"
-        } else {
-            "default"
-        }
-        peerCache = peer
-        return peer
     }
 
     private fun buildRequest(method: String, path: String, body: String? = null): Request {

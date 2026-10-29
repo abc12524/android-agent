@@ -67,6 +67,8 @@ data class SkillInstallResult(
     val overwritten: Boolean,
     val configCreated: Boolean,
     val configKept: Boolean,
+    /** 这次安装从 App 设置继承进 config.json 的键数（0 表示没有可继承的配置） */
+    val inherited: Int,
     val requires: List<String>,
 )
 
@@ -234,9 +236,10 @@ class SkillRepository(
         // 继承记录（区分「上次从 App 设置写入」与「用户手改」）随覆盖安装一起保留
         savedMark?.let { SkillStore.inheritedMarkFile(dest).writeBytes(it) }
 
-        // 首次安装即用 App 设置填好 config.json（ov / objstore），省去手填同一份地址与密钥
+        // 首次安装即用 App 设置填好 config.json（ov / objstore），省去手填同一份地址与密钥。
+        // 模板里的占位值（your-xxx / 127.0.0.1）不算「用户手改」，会被设置值覆盖。
         val inherited = SkillStore.syncConfig(dest, SkillConfigDefaults.forSkill(name))
-        if (inherited && !configKept) configCreated = true
+        if (inherited > 0 && !configKept) configCreated = true
 
         SkillInstallResult(
             name = name,
@@ -245,6 +248,7 @@ class SkillRepository(
             overwritten = overwritten,
             configCreated = configCreated,
             configKept = configKept,
+            inherited = inherited,
             requires = strList(entry, "requires"),
         )
     }

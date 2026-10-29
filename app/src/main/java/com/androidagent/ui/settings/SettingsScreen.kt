@@ -715,7 +715,15 @@ private fun SkillHubPage(
                                     remote = remote.map {
                                         if (it.name == item.name) it.copy(installed = true, enabled = true) else it
                                     }
-                                    val extra = if (result.configCreated) "；已生成 config.json，请按需填写" else ""
+                                    val extra = when {
+                                        result.configKept && result.inherited > 0 ->
+                                            "；已按 App 设置更新 ${result.inherited} 项配置"
+                                        result.configKept -> "；保留本地 config.json"
+                                        result.inherited > 0 ->
+                                            "；已从 App 设置填入 ${result.inherited} 项配置"
+                                        result.configCreated -> "；已生成 config.json，请按需填写"
+                                        else -> ""
+                                    }
                                     remoteMessage = (
                                         "已下载「${result.name}」（${result.files.size} 个文件）" + extra
                                         ) to false

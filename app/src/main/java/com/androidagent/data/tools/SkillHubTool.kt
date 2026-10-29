@@ -125,9 +125,20 @@ class SkillHubTool(private val context: Context) : Tool {
                     "overwritten" to result.overwritten,
                     "config_created" to result.configCreated,
                     "config_kept" to result.configKept,
+                    "config_inherited" to result.inherited,
                     "requires" to result.requires,
                     "repo" to cfg.label(),
-                    "note" to "已安装并自动注册；如需配置请编辑 " + result.path + "/config.json"
+                    "note" to buildString {
+                        append("已安装并自动注册")
+                        if (result.inherited > 0) {
+                            append("；config.json 已按 App 设置填入 ")
+                            append(result.inherited)
+                            append(" 项")
+                        }
+                        append("；其余配置可编辑 ")
+                        append(result.path)
+                        append("/config.json")
+                    }
                 )
             )
         )

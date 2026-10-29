@@ -70,32 +70,49 @@ object SkillStore {
      * 把 App 设置派生的默认值合并进技能目录的 `config.json`。
      *
      * 规则（避免「改了 App 设置，技能还用旧值」与「覆盖用户手改的配置」两种坑）：
-     *  - 键缺失 / 空值            → 写入当前设置值；
-     *  - 键值仍等于上次继承的值    → 用新设置值覆盖（跟随设置变化）；
-     *  - 键值被用户手工改过        → 保留，不再动。
+     *  - 键缺失 / 空值              → 写入当前设置值；
+     *  - 键值仍等于上次继承的值      → 用新设置值覆盖（跟随设置变化）；
+     *  - 键值仍等于 `config.example.json` 的模板占位值 → 同样视为「没被人动过」，覆盖；
+     *  - 键值被用户手工改过          → 保留，不再动。
+     *
+     * 第三条是关键：安装时 `config.json` 是从 `config.example.json` 拷来的，里面是
+     * `your-openviking-key` / `http://127.0.0.1:1933` 这类非空占位值，若只看「非空」，
+     * 会把模板占位值误判成用户手改，导致这些键永远继承不上（老版本的 bug）。
+     * 模板快照首次运行时写进 `.inherited.json` 的 `__baseline__`，之后即便上游仓库改了
+     * 模板，既有安装的判定也不会漂移。
      *
      * 上次继承的值记在隐藏文件 `.inherited.json`，不写进 `config.json`，
      * 免得技能把它当环境变量注入。
      *
-     * @return 是否改动了 `config.json`
+     * @return 实际写入 `config.json` 的键数（0 表示无需改动）
      */
-    fun syncConfig(dir: File, defaults: Map<String, String>): Boolean {
-        if (defaults.isEmpty() || !dir.isDirectory) return false
+    fun syncConfig(dir: File, defaults: Map<String, String>): Int {
+        if (defaults.isEmpty() || !dir.isDirectory) return 0
         val configFile = File(dir, "config.json")
         val markFile = inheritedMarkFile(dir)
         val config = readObject(configFile)
         val marks = readObject(markFile)
 
-        var configChanged = false
         var markChanged = false
+        // 模板基线：优先用上次记录的模板快照，缺失时现读 config.example.json 并落盘
+        val baseline = marks.get(INHERITED_BASELINE)?.takeIf { it.isJsonObject }?.asJsonObject
+            ?: readObject(File(dir, EXAMPLE_CONFIG)).also { snapshot ->
+                if (snapshot.size() > 0) {
+                    marks.add(INHERITED_BASELINE, snapshot.deepCopy())
+                    markChanged = true
+                }
+            }
+
+        var written = 0
         for ((key, value) in defaults) {
             val current = config.stringOrNull(key)
             val inherited = marks.stringOrNull(key)
-            // 用户改过（既非空、也不等于上次继承值）→ 跳过
-            if (!current.isNullOrBlank() && current != inherited) continue
+            val placeholder = baseline.stringOrNull(key)
+            // 用户改过：既非空、也不等于上次继承值、也不等于模板占位值 → 跳过
+            if (!current.isNullOrBlank() && current != inherited && current != placeholder) continue
             if (current != value) {
                 config.addProperty(key, value)
-                configChanged = true
+                written++
             }
             if (inherited != value) {
                 marks.addProperty(key, value)
@@ -103,9 +120,9 @@ object SkillStore {
             }
         }
 
-        if (configChanged) writeObject(configFile, config)
+        if (written > 0) writeObject(configFile, config)
         if (markChanged) writeObject(markFile, marks)
-        return configChanged
+        return written
     }
 
     /** 继承记录文件：保存「上次从 App 设置写进 config.json 的值」，用于区分用户手改。 */
@@ -227,6 +244,10 @@ object SkillStore {
     }
 
     private const val INHERITED_MARK = ".inherited.json"
+    /** `.inherited.json` 里存模板快照的保留键（不是技能配置键，只供本类判定用） */
+    private const val INHERITED_BASELINE = "__baseline__"
+    /** 技能仓库里的配置模板，安装时拷成 `config.json`，其值即「占位基线」 */
+    private const val EXAMPLE_CONFIG = "config.example.json"
     private val GSON: Gson = GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create()
 
     private val SKILL_RE = Regex("^#\\s*skill\\s*:\\s*([A-Za-z0-9_\\-]+)", RegexOption.IGNORE_CASE)

@@ -1,12 +1,13 @@
 package com.androidagent.data.skills
 
 import com.androidagent.data.AppPreferences
+import com.androidagent.data.memory.OpenVikingClient
 
 /**
  * 从 App 设置（[AppPreferences]）派生内置 skill 的默认 `config.json`。
  *
  * 目前覆盖：
- *  - `ov`（OpenViking）：地址 / 密钥 / 用户 / peer 继承「设置 → OpenViking」；
+ *  - `ov`（OpenViking）：地址 / 密钥 / 用户 / actor peer 继承「设置 → OpenViking」；
  *  - `objstore`（S3）：endpoint / AK / SK 继承「设置 → 对象存储」，跳过证书校验也一并继承。
  *
  * 技能里 `_load_config()` 只补「环境变量里没有」的键，所以这里写进 `config.json` 的值
@@ -24,7 +25,9 @@ object SkillConfigDefaults {
         putIfNotBlank("OPENVIKING_URL", AppPreferences.openVikingUrl)
         putIfNotBlank("OPENVIKING_KEY", AppPreferences.openVikingKey)
         putIfNotBlank("OPENVIKING_USER", AppPreferences.openVikingUser)
-        putIfNotBlank("OV_PEER_ID", AppPreferences.ovPeerId)
+        // actor peer 直接继承 App 解析出的结果：技能侧若自己按 cwd 派生 ws-*，
+        // 会得到与 App（按包名派生）不同的 peer，写进 OV 的记忆在 App 召回里就看不见了。
+        putIfNotBlank("OV_PEER_ID", OpenVikingClient.resolvePeerId())
     }
 
     private fun objStore(): Map<String, String> = buildMap {
