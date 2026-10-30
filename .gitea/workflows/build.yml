@@ -1,7 +1,7 @@
 name: Android Build
 
+# 与 .github/workflows/android-build.yml 对齐：只手动触发，推送不再构建
 on:
-  push:
   workflow_dispatch:
 
 jobs:
