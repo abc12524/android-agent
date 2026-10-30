@@ -8,6 +8,12 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
@@ -50,7 +56,28 @@ class MainActivity : ComponentActivity() {
                     val navController = rememberNavController()
                     NavHost(
                         navController = navController,
-                        startDestination = "chat"
+                        startDestination = "chat",
+                        // 进入设置：设置页从右侧滑入；聊天页原地淡出（不横移，避免主界面残影）
+                        enterTransition = {
+                            slideInHorizontally(
+                                animationSpec = tween(260, easing = FastOutSlowInEasing),
+                                initialOffsetX = { it / 4 },
+                            ) + fadeIn(tween(260, delayMillis = 40))
+                        },
+                        exitTransition = { fadeOut(tween(160)) },
+                        // 从设置返回：主界面从左侧被推回来，设置页向右滑走
+                        popEnterTransition = {
+                            slideInHorizontally(
+                                animationSpec = tween(280, easing = FastOutSlowInEasing),
+                                initialOffsetX = { -it / 4 },
+                            ) + fadeIn(tween(280, delayMillis = 60))
+                        },
+                        popExitTransition = {
+                            slideOutHorizontally(
+                                animationSpec = tween(280, easing = FastOutSlowInEasing),
+                                targetOffsetX = { it / 4 },
+                            ) + fadeOut(tween(220))
+                        },
                     ) {
                         composable("chat") {
                             ChatScreen(

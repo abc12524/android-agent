@@ -5,9 +5,26 @@ import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.ContentTransform
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -17,7 +34,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
@@ -29,12 +45,16 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -46,7 +66,8 @@ import com.androidagent.data.skills.SkillRepository
 import com.androidagent.data.skills.RemoteSkill
 import com.androidagent.data.skills.SkillStore
 import com.androidagent.data.updater.AppUpdater
-import com.androidagent.ui.theme.SettingsBg
+import com.androidagent.ui.theme.Accent
+import com.androidagent.ui.theme.AppRadii
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -58,6 +79,25 @@ import javax.net.ssl.HostnameVerifier
 import javax.net.ssl.HttpsURLConnection
 import javax.net.ssl.SSLContext
 import javax.net.ssl.X509TrustManager
+
+/**
+ * 设置页内部转场：进入二级页从右侧滑入，返回一级页时方向相反（跟着「返回」的语义走）。
+ * 右上角退出设置同样会回到 root，因此这里覆盖了所有返回路径（含系统返回键）。
+ */
+private fun settingsPageTransition(): AnimatedContentTransitionScope<String>.() -> ContentTransform = {
+    val dur = 240
+    if (targetState == "root") {
+        slideInHorizontally(animationSpec = tween(dur), initialOffsetX = { -it / 4 }) +
+            fadeIn(tween(dur)) togetherWith
+            slideOutHorizontally(animationSpec = tween(dur), targetOffsetX = { it / 4 }) +
+            fadeOut(tween(dur))
+    } else {
+        slideInHorizontally(animationSpec = tween(dur), initialOffsetX = { it / 4 }) +
+            fadeIn(tween(dur)) togetherWith
+            slideOutHorizontally(animationSpec = tween(dur), targetOffsetX = { -it / 4 }) +
+            fadeOut(tween(dur))
+    }
+}
 
 /** 设置项自动保存：FormField 失焦时触发（由 SettingsScreen 注入，实际执行 savePrefs） */
 private val LocalSettingsAutoSave = staticCompositionLocalOf<() -> Unit> { {} }
@@ -214,9 +254,10 @@ fun SettingsScreen(
     )
 
     Scaffold(
-        containerColor = SettingsBg,
+        // 页面底比卡片深一档（浅色 #F5F5F6 / 深色 #101012），让白色卡片浮起来
+        containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
         topBar = {
-            // 顶栏：左侧浅灰圆形返回键 · 标题居中 · 右侧仅留占位（保存已改为自动）
+            // 顶栏：左侧圆角方形返回键 · 标题居中 · 右侧仅留占位（保存已改为自动）
             Row(
                 Modifier
                     .fillMaxWidth()
@@ -225,35 +266,64 @@ fun SettingsScreen(
                     .padding(horizontal = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                val cs = MaterialTheme.colorScheme
+                val backInteraction = remember { MutableInteractionSource() }
+                val backPressed by backInteraction.collectIsPressedAsState()
+                // 按下缩到 88%，抬起弹回——返回动作有明确的手感反馈
+                val backScale by animateFloatAsState(
+                    targetValue = if (backPressed) 0.88f else 1f,
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioMediumBouncy,
+                        stiffness = Spring.StiffnessMedium,
+                    ),
+                    label = "backScale",
+                )
                 Box(
                     Modifier
                         .size(40.dp)
+                        .graphicsLayer {
+                            scaleX = backScale
+                            scaleY = backScale
+                        }
                         .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f))
+                        .background(cs.surface)
                         .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null,
+                            interactionSource = backInteraction,
+                            indication = ripple(bounded = false),
                         ) { if (page == "root") onBack() else page = "root" },
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
                         Icons.AutoMirrored.Filled.KeyboardArrowLeft,
                         contentDescription = "返回",
-                        modifier = Modifier.size(22.dp),
-                        tint = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.size(20.dp),
+                        tint = cs.onSurface,
                     )
                 }
 
-                Text(
-                    titles[page] ?: "设置",
-                    fontSize = 17.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                // 标题跟着页面一起动：返回时旧标题上滑淡出、新标题从下方淡入
+                AnimatedContent(
+                    targetState = titles[page] ?: "设置",
                     modifier = Modifier.weight(1f),
-                )
+                    transitionSpec = {
+                        slideInVertically(animationSpec = tween(220), initialOffsetY = { it / 2 }) +
+                            fadeIn(tween(220)) togetherWith
+                            slideOutVertically(animationSpec = tween(220), targetOffsetY = { -it / 2 }) +
+                            fadeOut(tween(220))
+                    },
+                    label = "title",
+                ) { title ->
+                    Text(
+                        title,
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = cs.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
 
                 // 右侧占位保持标题绝对居中（不再放「保存」：改为失焦 / 离开页面自动保存）
                 Box(Modifier.size(52.dp))
@@ -261,24 +331,29 @@ fun SettingsScreen(
         }
     ) { padding ->
         CompositionLocalProvider(LocalSettingsAutoSave provides autoSave) {
-            if (page == "root") {
-                SettingsRootMenu(
-                    modifier = Modifier.padding(padding),
-                    showKeys = showKeys,
-                    onToggleShowKeys = { showKeys = it },
-                    onNavigate = { page = it },
-                )
-            } else {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(padding)
-                        // 键盘弹出时把内容顶起，保证多行「自定义提示」始终可见可编辑
-                        .imePadding()
-                        .verticalScroll(rememberScrollState())
-                        .padding(horizontal = 16.dp),
-                ) {
-                    when (page) {
+            // 页面转场：进二级页从右侧滑入，返回一级页时当前页向右滑出 + 一级页从左侧进入
+            AnimatedContent(
+                targetState = page,
+                modifier = Modifier.padding(padding),
+                transitionSpec = settingsPageTransition(),
+                label = "settingsPage",
+            ) { target ->
+                if (target == "root") {
+                    SettingsRootMenu(
+                        showKeys = showKeys,
+                        onToggleShowKeys = { showKeys = it },
+                        onNavigate = { page = it },
+                    )
+                } else {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            // 键盘弹出时把内容顶起，保证多行「自定义提示」始终可见可编辑
+                            .imePadding()
+                            .verticalScroll(rememberScrollState())
+                            .padding(horizontal = 16.dp),
+                    ) {
+                        when (target) {
                         "api" -> ApiPage(
                             deepSeekKey, deepSeekBaseUrl, deepSeekModel,
                             modelOptions, modelLoading, modelMenuExpanded, modelError,
@@ -369,7 +444,8 @@ fun SettingsScreen(
                             updateState, onUpdateState = { updateState = it },
                         )
                     }
-                    Spacer(Modifier.height(32.dp))
+                        Spacer(Modifier.height(32.dp))
+                    }
                 }
             }
         }
@@ -391,9 +467,9 @@ private fun SettingsRootMenu(
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 16.dp),
     ) {
-        Spacer(Modifier.height(6.dp))
+        Spacer(Modifier.height(4.dp))
 
-        SettingsGroup("模型与服务") {
+        SettingsGroup(title = "模型与服务") {
             SettingsNavRow(Icons.Outlined.Cloud, "API 配置") { onNavigate("api") }
             SettingsNavRow(Icons.Outlined.Psychology, "OpenViking 记忆") { onNavigate("ov") }
             SettingsNavRow(Icons.Outlined.Storage, "对象存储 / S3") { onNavigate("storage") }
@@ -401,45 +477,82 @@ private fun SettingsRootMenu(
             SettingsNavRow(Icons.Outlined.Download, "配置导入") { onNavigate("import") }
         }
 
-        SettingsGroup("通用") {
+        SettingsGroup(title = "通用") {
             SettingsNavRow(Icons.Outlined.Tune, "功能与提示词") { onNavigate("features") }
             FormSwitchRow("显示 API Key", showKeys, onToggleShowKeys)
             SettingsNavRow(Icons.Outlined.Info, "关于") { onNavigate("about") }
         }
 
         Spacer(Modifier.height(28.dp))
+
+        // 底部说明：与官方一致的小字页脚
+        Text(
+            "内容由 AI 生成，请仔细甄别，并合法使用",
+            fontSize = 12.sp,
+            lineHeight = 18.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(Modifier.height(24.dp))
     }
 }
 
-/** 分组：可选灰色小标题 + 白色圆角卡片（卡片内不画分隔线，与真机一致） */
+/**
+ * 分组：灰色小标题（在卡片外）+ 白色大圆角卡片，无描边无阴影，卡内不分隔线。
+ */
 @Composable
 private fun SettingsGroup(
     title: String? = null,
+    subtitle: String? = null,
+    modifier: Modifier = Modifier,
     content: @Composable ColumnScope.() -> Unit,
 ) {
+    val cs = MaterialTheme.colorScheme
     if (title != null) {
-        Text(
-            title,
-            fontSize = 13.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(start = 6.dp, top = 20.dp, bottom = 8.dp),
-        )
+        Column(Modifier.padding(start = 8.dp, top = 18.dp, bottom = 8.dp)) {
+            Text(
+                title,
+                fontSize = 14.sp,
+                color = cs.onSurfaceVariant,
+            )
+            if (subtitle != null) {
+                Text(
+                    subtitle,
+                    fontSize = 11.sp,
+                    lineHeight = 16.sp,
+                    color = cs.onSurfaceVariant.copy(alpha = 0.75f),
+                    modifier = Modifier.padding(top = 2.dp),
+                )
+            }
+        }
     }
     Surface(
-        color = MaterialTheme.colorScheme.surface,
-        shape = RoundedCornerShape(14.dp),
-        modifier = Modifier.fillMaxWidth(),
+        color = cs.surface,
+        shape = AppRadii.group,
+        modifier = modifier.fillMaxWidth(),
     ) {
         Column(Modifier.padding(vertical = 2.dp), content = content)
     }
 }
 
-/** 一级菜单行：图标 + 标题 + 右侧值 + › */
+/** 卡内分隔线（仅长表单使用）：右侧留 16dp */
+@Composable
+private fun SettingsDivider(inset: Dp = 16.dp) {
+    HorizontalDivider(
+        Modifier.padding(start = inset, end = 16.dp),
+        thickness = 1.dp,
+        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+    )
+}
+
+/** 一级菜单行：线性图标 + 标题 + 右侧值 + ›（官方扁平样式） */
 @Composable
 private fun SettingsNavRow(
     icon: ImageVector,
     label: String,
     value: String? = null,
+    tint: Color = MaterialTheme.colorScheme.onSurface,
     onClick: () -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
@@ -447,23 +560,37 @@ private fun SettingsNavRow(
         Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .padding(horizontal = 20.dp, vertical = 16.dp),
+            .padding(horizontal = 16.dp, vertical = 15.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(icon, contentDescription = null, tint = cs.onSurface, modifier = Modifier.size(22.dp))
+        Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(23.dp))
         Spacer(Modifier.width(15.dp))
-        Text(label, fontSize = 17.sp, color = cs.onSurface, modifier = Modifier.weight(1f))
+        Text(label, fontSize = 16.sp, color = cs.onSurface, modifier = Modifier.weight(1f))
         if (value != null) {
-            Text(value, fontSize = 16.sp, color = cs.onSurfaceVariant)
+            Text(value, fontSize = 14.sp, color = cs.onSurfaceVariant)
             Spacer(Modifier.width(6.dp))
         }
         Icon(
             Icons.AutoMirrored.Outlined.KeyboardArrowRight,
             contentDescription = null,
-            tint = cs.onSurface.copy(alpha = 0.28f),
-            modifier = Modifier.size(18.dp),
+            tint = cs.onSurfaceVariant.copy(alpha = 0.6f),
+            modifier = Modifier.size(17.dp),
         )
     }
+}
+
+/**
+ * 行内图标：官方风格的纯线性图标，无底色无瓦片。
+ * dialog 的大号场景（size>=40）稍放大，其余统一 23dp。
+ */
+@Composable
+private fun IconTile(icon: ImageVector, tint: Color, size: Dp = 32.dp) {
+    Icon(
+        icon,
+        contentDescription = null,
+        tint = tint,
+        modifier = Modifier.size(if (size >= 40.dp) 30.dp else 23.dp),
+    )
 }
 
 // ==================== 各分页 ====================
@@ -477,30 +604,33 @@ private fun ApiPage(
     onModelMenuExpanded: (Boolean) -> Unit, onRefreshModels: (() -> Unit),
 ) {
     Spacer(Modifier.height(6.dp))
-    SettingsGroup("DeepSeek API") {
+    SettingsGroup("DeepSeek API", subtitle = "Key 与接口地址改动后立即生效") {
         FormField("API Key", deepSeekKey, onKey, masked = !showKeys)
+        SettingsDivider()
         FormField("Base URL", deepSeekBaseUrl, onBaseUrl)
-        Box {
-            FormField(
-                label = "模型",
-                value = deepSeekModel,
-                onValueChange = {},
-                readOnly = true,
-                onClick = { if (modelOptions.isNotEmpty()) onModelMenuExpanded(true) },
-                trailing = {
-                    IconButton(onClick = onRefreshModels, enabled = !modelLoading) {
-                        if (modelLoading) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                        else Icon(Icons.Default.Refresh, contentDescription = "刷新模型列表",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        SettingsDivider()
+        SelectField(
+            label = "模型",
+            value = deepSeekModel,
+            placeholder = "点右侧刷新拉取可用模型",
+            options = modelOptions,
+            expanded = modelMenuExpanded,
+            onExpandedChange = onModelMenuExpanded,
+            onSelect = onModel,
+            trailing = {
+                IconButton(onClick = onRefreshModels, enabled = !modelLoading) {
+                    if (modelLoading) {
+                        CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                    } else {
+                        Icon(
+                            Icons.Default.Refresh,
+                            contentDescription = "刷新模型列表",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
-                },
-            )
-            DropdownMenu(expanded = modelMenuExpanded, onDismissRequest = { onModelMenuExpanded(false) }) {
-                modelOptions.forEach { m ->
-                    DropdownMenuItem(text = { Text(m) }, onClick = { onModel(m); onModelMenuExpanded(false) })
                 }
-            }
-        }
+            },
+        )
     }
     if (modelError != null) FormNote(modelError, isError = true)
     Spacer(Modifier.height(24.dp))
@@ -521,26 +651,37 @@ private fun OvPage(
     Spacer(Modifier.height(6.dp))
     SettingsGroup("连接") {
         FormField("服务器地址", ovUrl, onUrl)
+        SettingsDivider()
         FormField("API Key", ovKey, onKey, masked = !showKeys)
+        SettingsDivider()
         FormField("用户名", ovUser, onUser)
     }
 
-    SettingsGroup("自动记忆") {
-        FormSwitchRow("对问题检索（每轮）", ovRecallQuestion, onRecallQuestion)
-        FormSwitchRow("对问题/助手/工具检索（每步）", ovRecallStep, onRecallStep)
-        FormSwitchRow("会话自动抓取并提交（commit）", ovCommit, onCommit)
+    SettingsGroup("自动记忆", subtitle = "控制每轮对话去记忆库捞多少、捞多准") {
+        FormSwitchRow("对问题检索（每轮）", ovRecallQuestion, onRecallQuestion,
+            icon = Icons.Outlined.Textsms)
+        SettingsDivider()
+        FormSwitchRow("对问题/助手/工具检索（每步）", ovRecallStep, onRecallStep,
+            icon = Icons.Outlined.Psychology)
+        SettingsDivider()
+        FormSwitchRow("会话自动抓取并提交（commit）", ovCommit, onCommit,
+            icon = Icons.Outlined.Cloud)
+        SettingsDivider()
         FormField("匹配阈值 (0-1)", ovFindThreshold, onValueChange = { v ->
             onFindThreshold(v.filter { c -> c.isDigit() || c == '.' })
-        })
+        }, supporting = "相似度低于该值的记忆不会注入")
+        SettingsDivider()
         FormField("注入条数 (0=关闭)", ovFindLimit, onValueChange = { v ->
             val filtered = v.filter { c -> c.isDigit() }
             if ((filtered.toIntOrNull() ?: 0) in 0..10) onFindLimit(filtered)
-        })
+        }, supporting = "最多 10 条，0 表示完全关闭记忆注入")
     }
 
     SettingsGroup("记忆高级") {
         FormField("Peer ID（留空则按应用自动派生）", ovPeerId, onPeerId)
-        FormSwitchRow("按应用派生 Peer", ovWorkspacePeer, onWorkspacePeer)
+        SettingsDivider()
+        FormSwitchRow("按应用派生 Peer", ovWorkspacePeer, onWorkspacePeer,
+            icon = Icons.Outlined.Extension)
     }
 
     Spacer(Modifier.height(24.dp))
@@ -552,9 +693,11 @@ private fun StoragePage(
     onEndpoint: (String) -> Unit, onAccessKey: (String) -> Unit, onSecretKey: (String) -> Unit,
 ) {
     Spacer(Modifier.height(6.dp))
-    SettingsGroup("连接设置") {
+    SettingsGroup("连接设置", subtitle = "用于 objstore 技能的 S3 兼容对象存储") {
         FormField("端点", s3Endpoint, onEndpoint)
+        SettingsDivider()
         FormField("访问密钥 ID", s3AccessKey, onAccessKey, masked = !showKeys)
+        SettingsDivider()
         FormField("秘密访问密钥", s3SecretKey, onSecretKey, masked = !showKeys)
     }
     Spacer(Modifier.height(24.dp))
@@ -598,9 +741,13 @@ private fun SkillHubPage(
     Spacer(Modifier.height(6.dp))
     SettingsGroup("远程技能仓库") {
         FormField("仓库 (owner/repo)", repo, onRepo)
+        SettingsDivider()
         FormField("分支", branch, onBranch)
+        SettingsDivider()
         FormField("类型 (github/gitea，留空自动)", type, onType)
+        SettingsDivider()
         FormField("Gitea 基址 (如 http://192.168.30.181:3000)", base, onBase)
+        SettingsDivider()
         FormField("访问令牌（私有仓库，可选）", token, onToken, masked = !showKeys)
         FormHint(
             "配置 Gitea 基址后默认按 gitea 处理；同名技能为覆盖安装（会保留本地 config.json）。"
@@ -633,7 +780,7 @@ private fun SkillHubPage(
                 LinearProgressIndicator(Modifier.fillMaxWidth())
             }
             installed.isEmpty() -> FormHint("暂无已安装 skill，可从下方远程仓库下载。")
-            else -> installed.forEach { skill ->
+            else -> installed.forEachIndexed { index, skill ->
                 InstalledSkillRow(
                     skill = skill,
                     onToggle = { enabled ->
@@ -659,6 +806,7 @@ private fun SkillHubPage(
                     },
                     onDelete = { pendingDelete = skill },
                 )
+                if (index < installed.lastIndex) SettingsDivider(inset = 16.dp)
             }
         }
     }
@@ -699,7 +847,7 @@ private fun SkillHubPage(
             FormNote("仓库索引为空")
         } else {
             SettingsGroup {
-                remote.forEach { item ->
+                remote.forEachIndexed { index, item ->
                     RemoteSkillRow(
                         skill = item,
                         busy = busySkill == item.name,
@@ -735,6 +883,7 @@ private fun SkillHubPage(
                             }
                         },
                     )
+                    if (index < remote.lastIndex) SettingsDivider(inset = 16.dp)
                 }
             }
         }
@@ -747,31 +896,61 @@ private fun SkillHubPage(
     pendingDelete?.let { skill ->
         AlertDialog(
             onDismissRequest = { pendingDelete = null },
-            title = { Text("删除 skill") },
+            shape = RoundedCornerShape(24.dp),
+            icon = {
+                IconTile(
+                    icon = Icons.Outlined.DeleteOutline,
+                    tint = MaterialTheme.colorScheme.error,
+                    size = 44.dp,
+                )
+            },
+            title = {
+                Text(
+                    "删除 skill",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            },
             text = {
-                Text("确定删除「${skill.name}」？文件会立即移除，LLM 将无法再调用。")
+                Text(
+                    "确定删除「${skill.name}」？文件会立即移除，LLM 将无法再调用。",
+                    fontSize = 14.sp,
+                    lineHeight = 21.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                )
             },
             confirmButton = {
-                TextButton(onClick = {
-                    pendingDelete = null
-                    scope.launch {
-                        val ok = withContext(Dispatchers.IO) { SkillStore.delete(context, skill.name) }
-                        if (ok) {
-                            installed = installed.filterNot { it.name == skill.name }
-                            remote = remote.map {
-                                if (it.name == skill.name) it.copy(installed = false, enabled = false) else it
+                Button(
+                    onClick = {
+                        pendingDelete = null
+                        scope.launch {
+                            val ok = withContext(Dispatchers.IO) { SkillStore.delete(context, skill.name) }
+                            if (ok) {
+                                installed = installed.filterNot { it.name == skill.name }
+                                remote = remote.map {
+                                    if (it.name == skill.name) it.copy(installed = false, enabled = false) else it
+                                }
+                                localMessage = "已删除「${skill.name}」" to false
+                            } else {
+                                localMessage = ("删除失败：" + skill.path) to true
                             }
-                            localMessage = "已删除「${skill.name}」" to false
-                        } else {
-                            localMessage = ("删除失败：" + skill.path) to true
                         }
-                    }
-                }) {
-                    Text("删除", color = MaterialTheme.colorScheme.error)
-                }
+                    },
+                    shape = AppRadii.capsule,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error,
+                        contentColor = MaterialTheme.colorScheme.onError,
+                    ),
+                ) { Text("删除") }
             },
             dismissButton = {
-                TextButton(onClick = { pendingDelete = null }) { Text("取消") }
+                OutlinedButton(
+                    onClick = { pendingDelete = null },
+                    shape = AppRadii.capsule,
+                ) { Text("取消") }
             },
         )
     }
@@ -785,14 +964,23 @@ private fun InstalledSkillRow(
 ) {
     val cs = MaterialTheme.colorScheme
     Row(
-        Modifier.fillMaxWidth().padding(start = 20.dp, end = 12.dp, top = 12.dp, bottom = 12.dp),
+        Modifier
+            .fillMaxWidth()
+            .padding(start = 16.dp, end = 10.dp, top = 12.dp, bottom = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        Icon(
+            Icons.Outlined.Extension,
+            contentDescription = null,
+            tint = if (skill.enabled) cs.onSurface else cs.onSurfaceVariant,
+            modifier = Modifier.size(23.dp),
+        )
+        Spacer(Modifier.width(15.dp))
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     skill.name,
-                    fontSize = 16.sp,
+                    fontSize = 15.sp,
                     fontWeight = FontWeight.Medium,
                     color = cs.onSurface,
                     maxLines = 1,
@@ -802,13 +990,14 @@ private fun InstalledSkillRow(
                 Spacer(Modifier.width(6.dp))
                 SkillTag(
                     if (skill.enabled) "启用" else "已隐藏",
-                    if (skill.enabled) cs.primary else cs.error,
+                    if (skill.enabled) Accent.green else cs.onSurfaceVariant,
                 )
             }
             if (skill.description.isNotBlank()) {
                 Text(
                     skill.description,
                     fontSize = 12.sp,
+                    lineHeight = 17.sp,
                     color = cs.onSurfaceVariant,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
@@ -823,16 +1012,27 @@ private fun InstalledSkillRow(
             )
         }
         Spacer(Modifier.width(4.dp))
-        Switch(checked = skill.enabled, onCheckedChange = onToggle)
+        Switch(checked = skill.enabled, onCheckedChange = onToggle, colors = switchColors())
         IconButton(onClick = onDelete) {
             Icon(
                 Icons.Outlined.DeleteOutline,
                 contentDescription = "删除 ${skill.name}",
+                modifier = Modifier.size(20.dp),
                 tint = cs.error,
             )
         }
     }
 }
+
+/** 全站统一的开关配色：开启=品牌蓝 + 白滑块，关闭=灰轨道 + 描边 */
+@Composable
+private fun switchColors(): SwitchColors = SwitchDefaults.colors(
+    checkedThumbColor = Color.White,
+    checkedTrackColor = MaterialTheme.colorScheme.primary,
+    uncheckedThumbColor = Color.White,
+    uncheckedTrackColor = MaterialTheme.colorScheme.surfaceVariant,
+    uncheckedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+)
 
 /** 远程 skill 行：名称 / 说明 / 平台依赖 / 下载按钮。 */
 @Composable
@@ -843,14 +1043,23 @@ private fun RemoteSkillRow(
 ) {
     val cs = MaterialTheme.colorScheme
     Row(
-        Modifier.fillMaxWidth().padding(start = 20.dp, end = 12.dp, top = 12.dp, bottom = 12.dp),
+        Modifier
+            .fillMaxWidth()
+            .padding(start = 16.dp, end = 12.dp, top = 12.dp, bottom = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        Icon(
+            Icons.Outlined.CloudDownload,
+            contentDescription = null,
+            tint = if (skill.installed) cs.onSurface else cs.onSurfaceVariant,
+            modifier = Modifier.size(23.dp),
+        )
+        Spacer(Modifier.width(15.dp))
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     skill.name,
-                    fontSize = 16.sp,
+                    fontSize = 15.sp,
                     fontWeight = FontWeight.Medium,
                     color = cs.onSurface,
                     maxLines = 1,
@@ -859,7 +1068,7 @@ private fun RemoteSkillRow(
                 )
                 Spacer(Modifier.width(6.dp))
                 when {
-                    skill.installed && skill.enabled -> SkillTag("已安装", cs.primary)
+                    skill.installed && skill.enabled -> SkillTag("已安装", Accent.green)
                     skill.installed -> SkillTag("已安装 · 已隐藏", cs.onSurfaceVariant)
                     else -> SkillTag("未安装", cs.onSurfaceVariant)
                 }
@@ -890,23 +1099,39 @@ private fun RemoteSkillRow(
         Spacer(Modifier.width(8.dp))
         if (busy) {
             CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+        } else if (skill.installed) {
+            OutlinedButton(
+                onClick = onInstall,
+                shape = AppRadii.capsule,
+                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
+            ) { Text("重新下载", fontSize = 13.sp) }
         } else {
-            TextButton(onClick = onInstall) {
-                Text(if (skill.installed) "重新下载" else "下载", fontSize = 13.sp)
-            }
+            Button(
+                onClick = onInstall,
+                shape = AppRadii.capsule,
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
+            ) { Text("下载", fontSize = 13.sp) }
         }
     }
 }
 
+/** 状态徽章：底色取强调色 12%，文字用本色，保证浅/深色都读得清 */
 @Composable
 private fun SkillTag(text: String, color: Color) {
+    val cs = MaterialTheme.colorScheme
+    val dark = cs.surface.luminance() < 0.5f
     Box(
         Modifier
-            .clip(RoundedCornerShape(4.dp))
-            .background(color.copy(alpha = 0.12f))
-            .padding(horizontal = 6.dp, vertical = 1.dp),
+            .clip(AppRadii.tag)
+            .background(color.copy(alpha = if (dark) 0.22f else 0.12f))
+            .padding(horizontal = 7.dp, vertical = 2.dp),
     ) {
-        Text(text, fontSize = 10.sp, color = color)
+        Text(
+            text,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Medium,
+            color = if (dark) color.copy(alpha = 0.95f) else color,
+        )
     }
 }
 
@@ -922,19 +1147,38 @@ private fun FeaturesPage(
     onShowToolCalls: (Boolean) -> Unit, onShowToolEdit: (Boolean) -> Unit,
 ) {
     Spacer(Modifier.height(6.dp))
-    SettingsGroup("聊天界面") {
-        FormSwitchRow("新版聊天界面（思考流）", chatUiStream, onChatUiStream)
-        FormSwitchRow("展示思维链内容", showReasoning, onShowReasoning)
-        FormSwitchRow("展示工具调用", showToolCalls, onShowToolCalls)
-        FormSwitchRow("展示编辑工具（script 代码 diff）", showToolEdit, onShowToolEdit)
+    SettingsGroup("聊天界面", subtitle = "控制会话里展示哪些过程信息") {
+        FormSwitchRow("新版聊天界面（思考流）", chatUiStream, onChatUiStream,
+            icon = Icons.Outlined.Stars)
+        SettingsDivider()
+        FormSwitchRow("展示思维链内容", showReasoning, onShowReasoning,
+            icon = Icons.Outlined.Psychology)
+        SettingsDivider()
+        FormSwitchRow("展示工具调用", showToolCalls, onShowToolCalls,
+            icon = Icons.Outlined.Build)
+        SettingsDivider()
+        FormSwitchRow("展示编辑工具（script 代码 diff）", showToolEdit, onShowToolEdit,
+            icon = Icons.Outlined.Edit)
     }
 
     SettingsGroup("功能") {
-        FormField("最大工具调用轮次", maxRounds, onValueChange = { onMaxRounds(it.filter { c -> c.isDigit() }) })
-        FormField("思考熔断（分钟，0=关闭）", thinkingTimeout, onValueChange = { onThinkingTimeout(it.filter { c -> c.isDigit() }) })
-        FormSwitchRow("后台保活", backgroundEnabled, onBackgroundEnabled)
-        FormSwitchRow("显示注入信息（skill 名单 / 记忆召回）", showInjected, onShowInjected)
-        FormSwitchRow("跳过证书验证（自签名 HTTPS）", skipSsl, onSkipSsl)
+        FormField("最大工具调用轮次", maxRounds,
+            onValueChange = { onMaxRounds(it.filter { c -> c.isDigit() }) },
+            supporting = "单次回复最多循环调用工具的次数")
+        SettingsDivider()
+        FormField("思考熔断（分钟，0=关闭）", thinkingTimeout,
+            onValueChange = { onThinkingTimeout(it.filter { c -> c.isDigit() }) },
+            supporting = "超过时长自动中断，避免长任务卡死")
+        SettingsDivider()
+        FormSwitchRow("后台保活", backgroundEnabled, onBackgroundEnabled,
+            icon = Icons.Outlined.Bolt)
+        SettingsDivider()
+        FormSwitchRow("显示注入信息（skill 名单 / 记忆召回）", showInjected, onShowInjected,
+            icon = Icons.Outlined.Visibility)
+        SettingsDivider()
+        FormSwitchRow("跳过证书验证（自签名 HTTPS）", skipSsl, onSkipSsl,
+            icon = Icons.Outlined.Lock,
+            supporting = "仅内网自签名服务需要，公网友情提示关闭")
     }
 
     SettingsGroup("用户提示") {
@@ -955,23 +1199,19 @@ private fun ImportPage(
 ) {
     val scope = rememberCoroutineScope()
     Spacer(Modifier.height(6.dp))
-    SettingsGroup("配置导入") {
+    SettingsGroup("配置导入", subtitle = "从远端 JSON 一次性拉齐 Key / 端点 / 记忆配置") {
         FormField("配置地址 (JSON)", configUrl, onConfigUrl)
         if (accountOptions.isNotEmpty()) {
-            Box {
-                FormField(
-                    label = "账号",
-                    value = selectedAccount ?: "选择账号",
-                    onValueChange = {},
-                    readOnly = true,
-                    onClick = { onAccountMenuExpanded(true) },
-                )
-                DropdownMenu(expanded = accountMenuExpanded, onDismissRequest = { onAccountMenuExpanded(false) }) {
-                    accountOptions.forEach { a ->
-                        DropdownMenuItem(text = { Text(a) }, onClick = { onSelectedAccount(a); onAccountMenuExpanded(false) })
-                    }
-                }
-            }
+            SettingsDivider()
+            SelectField(
+                label = "账号",
+                value = selectedAccount ?: "",
+                placeholder = "选择账号",
+                options = accountOptions,
+                expanded = accountMenuExpanded,
+                onExpandedChange = onAccountMenuExpanded,
+                onSelect = onSelectedAccount,
+            )
         }
     }
 
@@ -1018,37 +1258,57 @@ private fun ImportPage(
 private fun AboutPage(updateState: UpdateState, onUpdateState: (UpdateState) -> Unit) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    val cs = MaterialTheme.colorScheme
     Spacer(Modifier.height(6.dp))
     SettingsGroup("说明") {
-        CardText(
-            "• DeepSeek API Key 是必填项\n"
-                + "• OpenViking 用于长期记忆（可选）\n"
-                + "• Python 首次使用自动解压\n"
-                + "• 设置保存后立即生效"
-        )
+        InfoRow(Icons.Outlined.Lock, "DeepSeek API Key 是必填项")
+        InfoRow(Icons.Outlined.Psychology, "OpenViking 用于长期记忆（可选）")
+        InfoRow(Icons.Outlined.Build, "Python 首次使用自动解压")
+        InfoRow(Icons.Outlined.Bolt, "设置保存后立即生效")
     }
 
     SettingsGroup("版本") {
         Row(
-            Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp),
+            Modifier
+                .fillMaxWidth()
+                .padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            IconTile(icon = Icons.Outlined.Info, tint = cs.onSurfaceVariant)
+            Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
-                Text("版本 ${BuildConfig.VERSION_NAME}", fontSize = 17.sp,
-                    color = MaterialTheme.colorScheme.onSurface)
-                Text("Build ${BuildConfig.VERSION_CODE}", fontSize = 13.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    "版本 ${BuildConfig.VERSION_NAME}",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = cs.onSurface,
+                )
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    "Build ${BuildConfig.VERSION_CODE}",
+                    fontSize = 12.sp,
+                    color = cs.onSurfaceVariant,
+                )
             }
             when (val state = updateState) {
-                is UpdateState.Checking -> CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
-                is UpdateState.Latest -> Text("已是最新", fontSize = 13.sp,
-                    color = MaterialTheme.colorScheme.primary)
+                is UpdateState.Checking ->
+                    CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+
+                is UpdateState.Latest -> SkillTag("已是最新", Accent.green)
+
                 is UpdateState.Available -> Button(
                     onClick = { openInBrowser(context, state.url) },
-                    shape = RoundedCornerShape(20.dp),
-                ) { Text("浏览器下载 ${state.version}") }
-                is UpdateState.Error -> Text(state.message, fontSize = 13.sp,
-                    color = MaterialTheme.colorScheme.error)
+                    shape = AppRadii.capsule,
+                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
+                ) { Text("下载 ${state.version}", fontSize = 13.sp) }
+
+                is UpdateState.Error -> Text(
+                    state.message,
+                    fontSize = 12.sp,
+                    color = cs.error,
+                    modifier = Modifier.widthIn(max = 120.dp),
+                )
+
                 is UpdateState.Idle -> OutlinedButton(
                     onClick = {
                         onUpdateState(UpdateState.Checking)
@@ -1065,8 +1325,9 @@ private fun AboutPage(updateState: UpdateState, onUpdateState: (UpdateState) -> 
                             })
                         }
                     },
-                    shape = RoundedCornerShape(20.dp),
-                ) { Text("检查更新") }
+                    shape = AppRadii.capsule,
+                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
+                ) { Text("检查更新", fontSize = 13.sp) }
             }
         }
     }
@@ -1088,17 +1349,27 @@ private fun SettingsHeaderRow(
     subtitle: String? = null,
     trailing: (@Composable () -> Unit)? = null,
 ) {
+    val cs = MaterialTheme.colorScheme
     Row(
-        Modifier.fillMaxWidth().padding(start = 6.dp, top = 22.dp, bottom = 8.dp),
+        Modifier
+            .fillMaxWidth()
+            .padding(start = 8.dp, end = 6.dp, top = 22.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
-            Text(title, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+                title,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = cs.onSurfaceVariant,
+                letterSpacing = 0.2.sp,
+            )
             if (subtitle != null) {
                 Text(
                     subtitle,
                     fontSize = 11.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                    lineHeight = 16.sp,
+                    color = cs.onSurfaceVariant.copy(alpha = 0.75f),
                     modifier = Modifier.padding(top = 2.dp),
                 )
             }
@@ -1112,24 +1383,66 @@ private fun SettingsHeaderRow(
 private fun CardText(text: String) {
     Text(
         text,
-        fontSize = 14.sp,
-        lineHeight = 22.sp,
+        fontSize = 13.sp,
+        lineHeight = 21.sp,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
+        modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp),
     )
 }
 
-/** 卡片内说明文字（灰色小字） */
+/** 说明行：线性图标 + 一句话（关于页的「说明」用） */
+@Composable
+private fun InfoRow(icon: ImageVector, text: String) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(start = 16.dp, end = 16.dp, top = 13.dp, bottom = 13.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            icon,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.size(21.dp),
+        )
+        Spacer(Modifier.width(15.dp))
+        Text(
+            text,
+            fontSize = 14.sp,
+            lineHeight = 20.sp,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f),
+        )
+    }
+}
+
+/** 结果反馈条：成功/失败用色彩区分，比纯灰字更容易被看到 */
 @Composable
 private fun FormNote(text: String, isError: Boolean = false) {
-    Text(
-        text,
-        fontSize = 12.sp,
-        lineHeight = 18.sp,
-        color = if (isError) MaterialTheme.colorScheme.error
-        else MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(horizontal = 6.dp, vertical = 8.dp),
-    )
+    val cs = MaterialTheme.colorScheme
+    val tint = if (isError) cs.error else Accent.green
+    Surface(
+        color = tint.copy(alpha = 0.10f),
+        shape = AppRadii.field,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 2.dp, vertical = 8.dp),
+    ) {
+        Row(
+            Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                if (isError) Icons.Outlined.Info else Icons.Outlined.CheckCircle,
+                contentDescription = null,
+                tint = tint,
+                modifier = Modifier.size(16.dp),
+            )
+            Spacer(Modifier.width(9.dp))
+            Text(text, fontSize = 12.sp, lineHeight = 18.sp, color = cs.onSurface,
+                modifier = Modifier.weight(1f))
+        }
+    }
 }
 
 /** 卡片内提示（紧贴字段下方，左对齐、留白小） */
@@ -1140,13 +1453,13 @@ private fun FormHint(text: String) {
         fontSize = 12.sp,
         lineHeight = 18.sp,
         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f),
-        modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 14.dp),
+        modifier = Modifier.padding(start = 18.dp, end = 18.dp, top = 2.dp, bottom = 14.dp),
     )
 }
 
 /**
- * 卡片内字段行：标签在上（13sp 灰）、值在下（17sp），无边框无分隔线。
- * masked=密码遮罩；readOnly+onClick=只读可点击（用于选择/弹菜单）；trailing=右侧附加控件。
+ * 卡片内可编辑字段：标签在上（12sp 灰），值包在浅灰圆角容器里，
+ * 聚焦时描边转为品牌蓝（1.6dp）。masked=密码遮罩，右侧附「显/隐」按钮。
  */
 @Composable
 private fun FormField(
@@ -1159,31 +1472,56 @@ private fun FormField(
     readOnly: Boolean = false,
     onClick: (() -> Unit)? = null,
     trailing: (@Composable () -> Unit)? = null,
+    supporting: String? = null,
 ) {
     val cs = MaterialTheme.colorScheme
     // 失焦即保存：记录是否真正获得过焦点，避免首次组合时 isFocused=false 触发一次多余写入
     val autoSave = LocalSettingsAutoSave.current
     var everFocused by remember { mutableStateOf(false) }
+    var focused by remember { mutableStateOf(false) }
+    var revealed by remember { mutableStateOf(false) }
+    val borderColor by animateColorAsState(
+        targetValue = if (focused) cs.primary else cs.outlineVariant,
+        label = "fieldBorder",
+    )
+
     Column(
         modifier
             .fillMaxWidth()
-            .padding(start = 20.dp, end = 12.dp, top = 12.dp, bottom = 12.dp)
+            .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 12.dp)
     ) {
-        Text(label, fontSize = 13.sp, color = cs.onSurfaceVariant)
-        Spacer(Modifier.height(5.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.weight(1f).padding(end = 8.dp)) {
+        Text(label, fontSize = 12.sp, fontWeight = FontWeight.Medium, color = cs.onSurfaceVariant)
+        Spacer(Modifier.height(6.dp))
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .clip(AppRadii.field)
+                .background(cs.surfaceVariant.copy(alpha = 0.55f))
+                .border(
+                    width = if (focused) 1.6.dp else 1.dp,
+                    color = borderColor,
+                    shape = AppRadii.field,
+                ),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(Modifier.weight(1f)) {
                 BasicTextField(
                     value = value,
                     onValueChange = onValueChange,
                     readOnly = readOnly,
                     singleLine = singleLine,
-                    textStyle = TextStyle(fontSize = 17.sp, lineHeight = 24.sp, color = cs.onSurface),
+                    textStyle = TextStyle(fontSize = 15.sp, lineHeight = 21.sp, color = cs.onSurface),
                     cursorBrush = SolidColor(cs.primary),
-                    visualTransformation = if (masked) PasswordVisualTransformation() else VisualTransformation.None,
+                    visualTransformation = if (masked && !revealed) {
+                        PasswordVisualTransformation()
+                    } else {
+                        VisualTransformation.None
+                    },
                     modifier = Modifier
                         .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 11.dp)
                         .onFocusChanged { state ->
+                            focused = state.isFocused
                             if (state.isFocused) {
                                 everFocused = true
                             } else if (everFocused) {
@@ -1196,17 +1534,104 @@ private fun FormField(
                     Box(Modifier.matchParentSize().clickable { onClick() })
                 }
             }
+            // 密文字段：就地切换显/隐，不必回一级页改全局开关
+            if (masked) {
+                IconButton(onClick = { revealed = !revealed }, modifier = Modifier.size(38.dp)) {
+                    Icon(
+                        if (revealed) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
+                        contentDescription = if (revealed) "隐藏" else "显示",
+                        modifier = Modifier.size(18.dp),
+                        tint = cs.onSurfaceVariant,
+                    )
+                }
+            }
             if (trailing != null) trailing()
+        }
+        if (supporting != null) {
+            Text(
+                supporting,
+                fontSize = 11.sp,
+                lineHeight = 16.sp,
+                color = cs.onSurfaceVariant.copy(alpha = 0.8f),
+                modifier = Modifier.padding(start = 2.dp, top = 6.dp),
+            )
         }
     }
 }
 
-/** 卡片内开关行：标题 + 右侧 Switch（无分隔线） */
+/**
+ * 只读下拉字段：外观与 FormField 的容器一致，右侧加向下箭头；
+ * 选项为空时不可点（模型列表需要先刷新）。
+ */
+@Composable
+private fun SelectField(
+    label: String,
+    value: String,
+    options: List<String>,
+    expanded: Boolean,
+    onExpandedChange: (Boolean) -> Unit,
+    onSelect: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    placeholder: String = "请选择",
+    trailing: (@Composable () -> Unit)? = null,
+) {
+    val cs = MaterialTheme.colorScheme
+    Column(
+        modifier
+            .fillMaxWidth()
+            .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 12.dp)
+    ) {
+        Text(label, fontSize = 12.sp, fontWeight = FontWeight.Medium, color = cs.onSurfaceVariant)
+        Spacer(Modifier.height(6.dp))
+        Box {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(AppRadii.field)
+                    .background(cs.surfaceVariant.copy(alpha = 0.55f))
+                    .border(1.dp, cs.outlineVariant, AppRadii.field)
+                    .clickable(enabled = options.isNotEmpty()) { onExpandedChange(true) }
+                    .padding(horizontal = 12.dp, vertical = 11.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    value.ifBlank { placeholder },
+                    fontSize = 15.sp,
+                    color = if (value.isBlank()) cs.onSurfaceVariant else cs.onSurface,
+                    modifier = Modifier.weight(1f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (trailing != null) trailing()
+                Icon(
+                    Icons.Outlined.ArrowDropDown,
+                    contentDescription = "展开",
+                    tint = cs.onSurfaceVariant,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+            DropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { onExpandedChange(false) },
+            ) {
+                options.forEach { option ->
+                    DropdownMenuItem(
+                        text = { Text(option, fontSize = 15.sp) },
+                        onClick = { onSelect(option); onExpandedChange(false) },
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** 卡片内开关行：可选线性图标 + 标题（+ 说明）+ 右侧 Switch */
 @Composable
 private fun FormSwitchRow(
     label: String,
     checked: Boolean,
     onChecked: (Boolean) -> Unit,
+    icon: ImageVector? = null,
     supporting: String? = null,
 ) {
     val cs = MaterialTheme.colorScheme
@@ -1214,16 +1639,31 @@ private fun FormSwitchRow(
     Row(
         Modifier
             .fillMaxWidth()
-            .padding(start = 20.dp, end = 12.dp, top = 8.dp, bottom = 8.dp),
+            .padding(
+                start = if (icon != null) 16.dp else 20.dp,
+                end = 14.dp,
+                top = 12.dp,
+                bottom = 12.dp,
+            ),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        if (icon != null) {
+            Icon(icon, contentDescription = null, tint = cs.onSurface, modifier = Modifier.size(23.dp))
+            Spacer(Modifier.width(15.dp))
+        }
         Column(Modifier.weight(1f)) {
-            Text(label, fontSize = 17.sp, color = cs.onSurface)
+            Text(label, fontSize = 15.sp, color = cs.onSurface)
             if (supporting != null) {
-                Text(supporting, fontSize = 12.sp, color = cs.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 2.dp))
+                Text(
+                    supporting,
+                    fontSize = 11.sp,
+                    lineHeight = 16.sp,
+                    color = cs.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 2.dp),
+                )
             }
         }
+        Spacer(Modifier.width(8.dp))
         Switch(
             checked = checked,
             onCheckedChange = {
@@ -1231,15 +1671,12 @@ private fun FormSwitchRow(
                 // 开关没有失焦事件，切换即写盘
                 autoSave()
             },
-            colors = SwitchDefaults.colors(
-                checkedThumbColor = Color.White,
-                checkedTrackColor = cs.primary,
-            ),
+            colors = switchColors(),
         )
     }
 }
 
-/** 主按钮：品牌蓝、圆角 28、通栏 */
+/** 主按钮：品牌蓝、胶囊形、通栏 */
 @Composable
 private fun PillButton(
     text: String,
@@ -1252,18 +1689,23 @@ private fun PillButton(
     Button(
         onClick = onClick,
         enabled = enabled && !loading,
-        shape = RoundedCornerShape(28.dp),
+        shape = AppRadii.capsule,
         contentPadding = PaddingValues(vertical = 14.dp),
+        elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp),
         modifier = modifier.fillMaxWidth(),
     ) {
         if (loading) {
-            CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
+            CircularProgressIndicator(
+                Modifier.size(18.dp),
+                strokeWidth = 2.dp,
+                color = MaterialTheme.colorScheme.onPrimary,
+            )
         } else {
             if (icon != null) {
                 Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
             }
-            Text(text, fontSize = 16.sp)
+            Text(text, fontSize = 15.sp, fontWeight = FontWeight.Medium)
         }
     }
 }

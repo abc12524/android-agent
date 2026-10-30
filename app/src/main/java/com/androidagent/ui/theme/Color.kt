@@ -34,6 +34,25 @@ val DarkField = Color(0xFF2A2A2E)
 val DarkHair = Color(0xFF2C2C31)
 val UserBubbleBgDark = Color(0xFF253052)
 
+/** 设置页在深色模式下的底色（比聊天底更沉，衬托卡片） */
+val SettingsBgDark = Color(0xFF101012)
+
+// ---------- 强调色板（设置项图标瓦片 / 标签 / 图表）----------
+/**
+ * 均为 500 级色，浅色下用于「瓦片底 alpha 0.12 + 图标本色」，深色下同理（alpha 提到 0.18）。
+ * 选色避开品牌蓝以免与主色抢焦点，仅 API / 主操作保留品牌蓝。
+ */
+object Accent {
+    val blue = Color(0xFF426EFE)   // 品牌蓝：API / 主服务
+    val violet = Color(0xFF8B5CF6) // 记忆
+    val teal = Color(0xFF14B8A6)   // 存储
+    val amber = Color(0xFFF59E0B)  // 提示 / 导入
+    val rose = Color(0xFFF43F5E)   // 危险 / 删除
+    val indigo = Color(0xFF6366F1) // 技能
+    val slate = Color(0xFF64748B)  // 通用 / 关于
+    val green = Color(0xFF22C55E)  // 成功 / 已连接
+}
+
 // ---------- 兼容聊天页既有引用 ----------
 val BubbleUser = UserBubbleBg
 val BubbleUserText = Ink
