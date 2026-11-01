@@ -61,22 +61,40 @@ class MainActivity : ComponentActivity() {
                         enterTransition = {
                             slideInHorizontally(
                                 animationSpec = tween(260, easing = FastOutSlowInEasing),
-                                initialOffsetX = { it / 4 },
+                                initialOffsetX = { it / 2 },
                             ) + fadeIn(tween(260, delayMillis = 40))
                         },
                         exitTransition = { fadeOut(tween(160)) },
-                        // 从设置返回：主界面从左侧被推回来，设置页向右滑走
+                        // 从设置返回：主界面从左侧被推回来，设置页向右滑走。
+                        // 位移取半屏、且淡出走完得晚（80ms 后才开始），前段是纯推移，
+                        // 观感比 1/4 + 220ms 淡出明显得多。
                         popEnterTransition = {
                             slideInHorizontally(
                                 animationSpec = tween(280, easing = FastOutSlowInEasing),
-                                initialOffsetX = { -it / 4 },
-                            ) + fadeIn(tween(280, delayMillis = 60))
+                                initialOffsetX = { -it / 2 },
+                            ) + fadeIn(tween(200, delayMillis = 60))
                         },
                         popExitTransition = {
                             slideOutHorizontally(
                                 animationSpec = tween(280, easing = FastOutSlowInEasing),
-                                targetOffsetX = { it / 4 },
-                            ) + fadeOut(tween(220))
+                                targetOffsetX = { it / 2 },
+                            ) + fadeOut(tween(180, delayMillis = 80))
+                        },
+                        // 手势返回（预测性返回）走的是另一条分支：NavHost 会忽略上面的 pop*，
+                        // 改用库内置默认值 scaleOut(targetScale = 0.7f) + fadeIn(spring)，
+                        // 在 Android 16+ 强制启用预测性返回后观感变成「设置页缩小淡出」。
+                        // 这里显式覆盖成与点按返回一致的推移淡出，保证两条路径观感统一。
+                        predictivePopEnterTransition = { _ ->
+                            slideInHorizontally(
+                                animationSpec = tween(280, easing = FastOutSlowInEasing),
+                                initialOffsetX = { -it / 2 },
+                            ) + fadeIn(tween(200, delayMillis = 60))
+                        },
+                        predictivePopExitTransition = { _ ->
+                            slideOutHorizontally(
+                                animationSpec = tween(280, easing = FastOutSlowInEasing),
+                                targetOffsetX = { it / 2 },
+                            ) + fadeOut(tween(180, delayMillis = 80))
                         },
                     ) {
                         composable("chat") {
