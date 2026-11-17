@@ -30,13 +30,14 @@ jobs:
       image: android-build:latest
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: 🔧 git safe.directory
-        run: git config --global --add safe.directory '*'
+      # 不用 actions/checkout：runner 拉 https://github.com/actions/checkout 会超时/断流
+      # （日志：Get .../info/refs: unexpected EOF），直接从内网 Gitea 克隆
+      - name: 📥 Checkout（内网直连）
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory '*'
+          git clone --depth 1 "${GITEA_URL}/${GITHUB_REPOSITORY}.git" .
+          git log -1 --oneline
 
       - name: 🇨🇳 切换 Gradle 发行包到腾讯镜像
         run: |
