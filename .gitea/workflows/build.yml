@@ -1,48 +1,109 @@
-name: Android Build
+name: Android Build (Gitea)
 
-# 与 .github/workflows/android-build.yml 对齐：只手动触发，推送不再构建
+# 【Gitea 专用】与 .github/workflows/android-build.yml 刻意分开，改动请各改各的：
+#   - GitHub 侧：官方源（services.gradle.org / google() / mavenCentral()），
+#                版本号 1.1.<GitHub run_number>，发布 GitHub Release，
+#                是客户端 AppUpdater 的更新通道。
+#   - Gitea 侧（本文件）：国内镜像源（腾讯 Gradle 发行包 + 阿里云 Maven 镜像），
+#                版本号 1.1.<Gitea run_number>，发布 Gitea Release，
+#                格式与 GitHub 对齐：tag v1.1.<n>、正式版（非 prerelease）、
+#                产物 android-agent_v1.1.<n>.apk。
+# 注意：两边的 run_number 各自独立累加，Gitea 的号通常小于 GitHub（Gitea 只计入本工作流），
+#       所以 Gitea 构建仅用于内网自测/分发；客户端更新通道仍以 GitHub Release 为准。
+
 on:
   workflow_dispatch:
+    inputs:
+      publish_release:
+        description: '发布到 Gitea Release（填 false 只编译不发版）'
+        required: false
+        default: true
+        type: boolean
+
+env:
+  GITEA_URL: http://192.168.30.181:3000
 
 jobs:
   build:
     runs-on: ubuntu-latest
     container:
       image: android-build:latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Build Debug APK
-        run: ./gradlew assembleDebug --no-daemon --stacktrace
+      - name: 🔧 git safe.directory
+        run: git config --global --add safe.directory '*'
 
-      - name: Prepare Release
-        id: prepare
+      - name: 🇨🇳 切换 Gradle 发行包到腾讯镜像
         run: |
-          SHORT_SHA=$(git rev-parse --short HEAD)
-          DATE=$(date +%Y%m%d-%H%M%S)
-          SRC=$(ls app/build/outputs/apk/debug/*.apk | head -1)
-          DEST="android-agent-debug-${DATE}-${SHORT_SHA}.apk"
-          cp "$SRC" "$DEST"
-          echo "apk=$DEST" >> "$GITHUB_OUTPUT"
-          echo "tag=build-${DATE}-${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+          set -euo pipefail
+          # 原地址：https://services.gradle.org/distributions/gradle-9.7.1-bin.zip
+          sed -i "s#services.gradle.org/distributions/#mirrors.cloud.tencent.com/gradle/#g" gradle/wrapper/gradle-wrapper.properties
+          grep distributionUrl gradle/wrapper/gradle-wrapper.properties
 
-      - name: Publish Release APK
+      - name: 📝 写入版本号（正式版本号累加）
+        run: |
+          set -euo pipefail
+          VERSION="1.1.${GITHUB_RUN_NUMBER}"
+          {
+            echo "VERSION=${VERSION}"
+            echo "TAG=v${VERSION}"
+          } >> "$GITHUB_ENV"
+          echo "版本号: ${VERSION}（Gitea 运行号 ${GITHUB_RUN_NUMBER}）"
+
+      - name: 🏗️ 构建 Debug APK（阿里云 Maven 镜像）
+        run: ./gradlew clean assembleDebug --no-daemon --stacktrace --init-script .gitea/mirrors.init.gradle
+
+      - name: 📦 重命名 APK
+        run: |
+          set -euo pipefail
+          cd app/build/outputs/apk/debug
+          ls -l *.apk
+          mv app-debug.apk "android-agent_v${VERSION}.apk"
+
+      - name: 🚀 发布到 Gitea Release
+        if: ${{ github.event.inputs.publish_release != 'false' }}
         env:
           TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          API: http://192.168.30.181:3000/api/v1/repos/${{ github.repository }}/releases
         run: |
-          TAG="${{ steps.prepare.outputs.tag }}"
-          APK="${{ steps.prepare.outputs.apk }}"
-          # 删除同名旧 release（若有）
-          EXISTING=$(curl -s -H "Authorization: token $TOKEN" "$API/tags/$TAG")
-          if echo "$EXISTING" | grep -q '"id"'; then
-            EID=$(echo "$EXISTING" | grep -o '"id":[0-9]*' | head -1 | cut -d: -f2)
-            curl -s -X DELETE -H "Authorization: token $TOKEN" "$API/$EID"
+          set -euo pipefail
+          API="${GITEA_URL}/api/v1/repos/${{ github.repository }}/releases"
+          APK="app/build/outputs/apk/debug/android-agent_v${VERSION}.apk"
+          AUTH="Authorization: token ${TOKEN}"
+          test -f "$APK" || { echo "缺少 APK: $APK"; exit 1; }
+
+          # 幂等：同 tag 的旧 release（含 tag）先删掉，重跑不会因为 tag 冲突失败
+          OLD_ID=$( { curl -fsS -H "$AUTH" "$API/tags/${TAG}" || true; } | grep -o '"id":[0-9]*' | head -1 | cut -d: -f2 || true )
+          if [ -n "${OLD_ID:-}" ]; then
+            curl -fsS -X DELETE -H "$AUTH" "$API/${OLD_ID}" > /dev/null
+            echo "已删除同 tag 旧 release: ${TAG} (id=${OLD_ID})"
           fi
-          REL=$(curl -s -X POST -H "Authorization: token $TOKEN" -H "Content-Type: application/json" \
-            -d "{\"tag_name\":\"$TAG\",\"name\":\"Debug Build $TAG\",\"body\":\"Auto-built Debug APK. Commit ${{ github.sha }}\",\"prerelease\":true}" "$API")
-          REL_ID=$(echo "$REL" | grep -o '"id":[0-9]*' | head -1 | cut -d: -f2)
-          curl -s -X POST -H "Authorization: token $TOKEN" -H "Content-Type: application/octet-stream" \
-            --data-binary "@$APK" "$API/$REL_ID/assets?name=$APK"
-          echo "Release $REL_ID published with $APK"
+
+          # 发布说明：提交标题 + 正文（转义成 JSON 字符串，单引号/反引号/中文都不怕）
+          NOTES=$(git log -1 --pretty=format:'%s%n%n%b' | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g')
+          NOTES=$(printf '%s' "$NOTES" | awk 'BEGIN{ORS=""} {sub(/\r$/,""); printf "%s\\n", $0}')
+          printf '{"tag_name":"%s","target_commitish":"%s","name":"Android Agent %s","body":"%s\\n\\n---\\n- 版本: %s\\n- 构建号: %s\\n- 提交: %s\\n","draft":false,"prerelease":false}' \
+            "$TAG" "$GITHUB_SHA" "$TAG" "$NOTES" "$VERSION" "$GITHUB_RUN_NUMBER" "$GITHUB_SHA" > release.json
+
+          REL=$(curl -fsS -X POST -H "$AUTH" -H "Content-Type: application/json" --data-binary @release.json "$API")
+          REL_ID=$(printf '%s' "$REL" | grep -o '"id":[0-9]*' | head -1 | cut -d: -f2 || true)
+          [ -n "${REL_ID:-}" ] || { echo "创建 release 失败: ${REL}"; exit 1; }
+          echo "已创建 release: ${TAG} (id=${REL_ID})"
+
+          # 上传 APK 作为 release 附件
+          curl -fsS -X POST -H "$AUTH" -H "Content-Type: application/octet-stream" \
+            --data-binary "@$APK" "$API/${REL_ID}/assets?name=$(basename "$APK")" > /dev/null
+
+          # 回读校验：确认 APK 真的挂上去了（以前这里是静默失败的地方）
+          ASSETS=$(curl -fsS -H "$AUTH" "$API/${REL_ID}")
+          if ! printf '%s' "$ASSETS" | grep -q "$(basename "$APK")"; then
+            echo "❌ 资产上传校验失败，release=${REL_ID}"
+            printf '%s\n' "$ASSETS"
+            exit 1
+          fi
+          echo "✅ 已发布 ${TAG}，APK 已上传"
+          echo "   ${GITEA_URL}/${{ github.repository }}/releases/tag/${TAG}"

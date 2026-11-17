@@ -1,5 +1,10 @@
 name: Build Android Agent APK
 
+# 【GitHub 专用】官方源（services.gradle.org / google() / mavenCentral()），
+# 版本号 1.1.<GitHub run_number>，发布 GitHub Release，是客户端 AppUpdater 的更新通道。
+# Gitea（内网）用的是 .gitea/workflows/build.yml：国内镜像源、版本号与这里各自独立累加，
+# 两套工作流刻意分开，改一边不要顺手"对齐"另一边。
+
 on:
   workflow_dispatch:
     inputs:

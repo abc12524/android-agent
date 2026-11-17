@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- CI 拆分为两套互不干扰的工作流：GitHub（`.github/workflows/android-build.yml`，官方源，
+  `1.1.<GitHub run_number>`，发布 GitHub Release，仍是客户端更新通道）与
+  Gitea（`.gitea/workflows/build.yml`，腾讯 Gradle 发行包 + 阿里云 Maven 镜像，
+  `1.1.<Gitea run_number>`，发布 Gitea Release）
+- Gitea 发版对齐 GitHub 格式：tag `v1.1.<n>`、正式版（非 prerelease）、
+  产物 `android-agent_v1.1.<n>.apk`，发布说明取最近提交；API 调用改为失败即退出 +
+  上传后回读校验，不再静默失败
+
 - 聊天消息与工具结果支持媒体展示：Markdown 图片、`[image:路径]`、`[audio:路径]` 与音频链接；
   图片支持 http/data/file/应用沙盒路径，音频内联播放（点击才播放）
 - skill 注册取消扁平单文件布局：只识别文件夹式 `skills/<名>/skill.py`；`skills/<名>.py` 不再注册（runner、扫描、删除逻辑同步收紧）

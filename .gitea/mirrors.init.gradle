@@ -1,0 +1,28 @@
+// 【Gitea 专用】Gradle 初始化脚本：把插件仓库与依赖仓库切到阿里云镜像（国内加速）。
+// GitHub 工作流不加载本脚本，仍走官方 google() / mavenCentral() / gradlePluginPortal()。
+// 用法：./gradlew --init-script .gitea/mirrors.init.gradle <task>
+//
+// 顺序：阿里云镜像优先，官方仓库兜底（镜像缺包时才回落）。
+// 本项目不使用 jitpack（com.github.mwiede:jsch 走 Maven Central 镜像即可），故 Gitea 侧不再带 jitpack.io。
+
+def aliyunRepos = [
+    'https://maven.aliyun.com/repository/google',        // Google Maven 镜像：AGP / AndroidX / Compose
+    'https://maven.aliyun.com/repository/public',        // Maven Central 镜像：Kotlin / KSP / OkHttp / Room ...
+    'https://maven.aliyun.com/repository/gradle-plugin', // Gradle 插件门户镜像
+]
+
+settingsEvaluated { settings ->
+    def pluginRepos = settings.pluginManagement.repositories
+    pluginRepos.clear()
+    aliyunRepos.each { u -> pluginRepos.maven { url = u } }
+    pluginRepos.gradlePluginPortal()
+    pluginRepos.google()
+    pluginRepos.mavenCentral()
+
+    // settings.gradle.kts 里设了 RepositoriesMode.FAIL_ON_PROJECT_REPOS，只能在 settings 层调整
+    def depRepos = settings.dependencyResolutionManagement.repositories
+    depRepos.clear()
+    aliyunRepos.each { u -> depRepos.maven { url = u } }
+    depRepos.google()
+    depRepos.mavenCentral()
+}

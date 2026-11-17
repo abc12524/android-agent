@@ -179,7 +179,8 @@ JSON 顶层 key 与应用的设置项一一对应；**顶层值为对象的 key 
 - **AI API**: DeepSeek Chat Completion (Function Calling)
 - **SSH**: JSch
 - **对象存储**: `objstore` skill（Python，S3 兼容）
-- **CI**: GitHub Actions（自动构建 Debug APK 并发布 Release）
+- **CI**: GitHub Actions（官方源，`1.1.<GitHub run_number>`，发布 GitHub Release，客户端更新通道）+
+  Gitea Actions（内网，国内镜像源，`1.1.<Gitea run_number>`，发布 Gitea Release）
 
 ## License
 
